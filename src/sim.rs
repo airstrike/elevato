@@ -131,6 +131,7 @@ fn draw_world(frame: &mut canvas::Frame, world: &World, palette: theme::Palette)
             position: camera.point(8.0, top + 25.0),
             color: palette.text_secondary,
             size: camera.px(14.0).into(),
+            font: theme::MONO,
             align_y: alignment::Vertical::Center,
             ..canvas::Text::default()
         });
@@ -235,6 +236,7 @@ fn draw_elevator(
         position: camera.point(x + width / 2.0, top + 8.0),
         color: palette.elevator_text,
         size: camera.px(11.0).into(),
+        font: theme::MONO,
         align_x: text::Alignment::Center,
         align_y: alignment::Vertical::Center,
         ..canvas::Text::default()

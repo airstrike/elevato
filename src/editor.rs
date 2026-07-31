@@ -5,7 +5,7 @@
 //! (compile or runtime) is a read-only prop passed into [`State::view`].
 
 use iced::widget::{button, column, container, row, text, text_editor};
-use iced::{Element, Fill, Font};
+use iced::{Element, Fill};
 
 use crate::action::Action;
 use crate::highlight;
@@ -103,7 +103,7 @@ impl State {
         let editor = text_editor(&self.content)
             .height(Fill)
             .size(14)
-            .font(Font::MONOSPACE)
+            .font(theme::MONO)
             .on_action(Message::Edited)
             .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
             .style(theme::text_editor::code);

@@ -2,9 +2,8 @@
 //! public surface is [`load`] and [`save`]; each platform arm supplies
 //! its own implementation behind the `platform` module seam. Native
 //! stores two plain files under the platform config dir
-//! (`~/.config/elevato` or the OS equivalent). The wasm arm is Phase
-//! 8's localStorage work — until it lands, the browser build neither
-//! loads nor persists.
+//! (`~/.config/elevato` or the OS equivalent); wasm stores two
+//! localStorage entries, mirroring the original game's persistence.
 //!
 //! Saving happens on explicit Save and on successful Apply — a
 //! documented simplification of the original's debounced autosave.
@@ -121,18 +120,46 @@ mod platform {
 
 #[cfg(target_arch = "wasm32")]
 mod platform {
-    //! The wasm arm — Phase 8's localStorage seam. A stub for now so
-    //! the browser build compiles; it neither loads nor persists.
+    //! The wasm arm: the `elevato_code_v1` and `elevato_timescale`
+    //! localStorage entries, mirroring the native arm's two files.
+    //! Untestable natively, so it stays a thin transliteration of the
+    //! same (code, timescale) contract the native tests pin down.
 
     use std::io;
 
     use super::Saved;
 
+    const CODE_KEY: &str = "elevato_code_v1";
+    const TIMESCALE_KEY: &str = "elevato_timescale";
+
     pub fn load() -> Option<Saved> {
-        None
+        let storage = storage()?;
+        let code = storage.get_item(CODE_KEY).ok()??;
+        let timescale = storage
+            .get_item(TIMESCALE_KEY)
+            .ok()
+            .flatten()
+            .and_then(|contents| contents.trim().parse().ok());
+        Some(Saved { code, timescale })
     }
 
-    pub fn save(_code: &str, _timescale: usize) -> io::Result<()> {
-        Ok(())
+    pub fn save(code: &str, timescale: usize) -> io::Result<()> {
+        // No localStorage (disabled, sandboxed) means nowhere to save;
+        // the same best-effort miss as native's missing config dir.
+        let Some(storage) = storage() else {
+            return Ok(());
+        };
+        // A rejected write (quota, private mode) is a real failure.
+        let write = |key, value: &str| {
+            storage
+                .set_item(key, value)
+                .map_err(|_| io::Error::other(format!("localStorage rejected `{key}`")))
+        };
+        write(CODE_KEY, code)?;
+        write(TIMESCALE_KEY, &timescale.to_string())
+    }
+
+    fn storage() -> Option<web_sys::Storage> {
+        web_sys::window()?.local_storage().ok()?
     }
 }

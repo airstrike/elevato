@@ -17,6 +17,7 @@ iced = { workspace = true, features = ["webgl", "fira-sans"] }
 console_error_panic_hook = "0.1"
 console_log = "1"
 log = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Storage"] }
 
 [workspace]
 resolver = "3"
@@ -45,3 +46,39 @@ dirs = "6"
 # cargo resolves two incompatible cosmic-text sources.
 [patch.crates-io]
 cosmic-text = { path = "/Users/andy/projects/cosmic-text" }
+
+# ----------------------------------------------------------------------
+# Publish flip — clean-clone builds from the airstrike forks.
+#
+# Keep COMMENTED while developing against the local checkouts. To
+# activate (full checklist in PUBLISHING.md):
+#
+#   1. Push branch `web-clipboard` to https://github.com/airstrike/iced
+#      and the local cosmic-text `span-padding` state to
+#      https://github.com/airstrike/cosmic-text.
+#   2. Replace the `iced` entry in [workspace.dependencies] above with:
+#        iced = { version = "0.15.0-dev", features = ["canvas", "tokio", "advanced"] }
+#   3. Delete the live [patch.crates-io] block above, uncomment the one
+#      below, and run `cargo update`.
+#
+# Every iced sub-crate in Cargo.lock is patched from the same git source
+# (the armature shape). Entries nothing requests from crates.io make
+# cargo warn "was not used in the crate graph" — harmless; prune them if
+# the noise bothers you. Note: the fork's iced transitively pins
+# winit = { git = "airstrike/winit", branch = "unified-titlebar" } via
+# its own manifest; that branch must stay reachable too.
+#
+# [patch.crates-io]
+# iced = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_core = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_debug = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_futures = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_graphics = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_program = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_renderer = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_runtime = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_tiny_skia = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_wgpu = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_widget = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# iced_winit = { git = "https://github.com/airstrike/iced.git", branch = "web-clipboard" }
+# cosmic-text = { git = "https://github.com/airstrike/cosmic-text", branch = "span-padding" }

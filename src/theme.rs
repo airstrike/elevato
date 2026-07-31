@@ -3,7 +3,18 @@
 //! and the sim canvas reads its colors from [`palette`]. Solid colors
 //! only: gradients silently no-op on the wasm build.
 
-use iced::{Color, Theme, color};
+use iced::{Color, Font, Theme, color};
+
+/// The bundled monospace face for the editor and canvas labels: Fira
+/// Code (OFL — `assets/fonts/OFL.txt`), embedded so both targets render
+/// identically. The browser gives fontdb no system fonts, so wasm has
+/// no `Font::MONOSPACE` to fall back on.
+pub const MONO_BYTES: &[u8] = include_bytes!("../assets/fonts/FiraCode-Variable.ttf");
+
+/// The bundled face by family name; the variable font's default
+/// instance is Light, but the cosmic-text fork instances the `wght`
+/// axis at the requested weight, so this renders Regular.
+pub const MONO: Font = Font::new("Fira Code");
 
 /// Named semantic colors, resolved per theme brightness by [`palette`].
 #[derive(Debug, Clone, Copy)]

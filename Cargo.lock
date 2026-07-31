@@ -730,6 +730,7 @@ dependencies = [
  "log",
  "script",
  "syntect",
+ "web-sys",
 ]
 
 [[package]]

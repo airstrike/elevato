@@ -1,12 +1,79 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" content="text/html; charset=utf-8" />
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="elevato — Elevator Saga rewritten in Rust: program a bank of elevators in Rhai and watch the simulation clear the challenges. Runs in your browser via iced and WebAssembly." />
     <title>elevato</title>
     <base data-trunk-public-url />
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #f2f3f5;
+            --text: #22262e;
+            --muted: #5c6470;
+            --accent: #3b76c0;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1c1f26;
+                --text: #e6e9f0;
+                --muted: #9aa3b5;
+                --accent: #3f7fc4;
+            }
+        }
+        html, body { margin: 0; }
+        body { background: var(--bg); }
+        #intro {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.25rem;
+            padding: 2rem;
+            box-sizing: border-box;
+            font: 16px/1.6 system-ui, sans-serif;
+            color: var(--text);
+            text-align: center;
+        }
+        #intro h1 { margin: 0; font-size: 2.25rem; }
+        #intro p { max-width: 34rem; margin: 0; }
+        #intro .loading { color: var(--muted); font-style: italic; }
+        #intro footer { color: var(--muted); font-size: 0.85rem; }
+        #intro a { color: var(--accent); }
+    </style>
 </head>
 <body>
+<div id="intro">
+    <h1>elevato</h1>
+    <p>
+        A faithful rewrite of Elevator Saga in Rust: program a bank of
+        elevators in Rhai, watch the simulation, and clear the
+        challenges — same physics, same rules, deterministic runs. Built
+        with iced, running right here as WebAssembly.
+    </p>
+    <p class="loading">Loading the simulation…</p>
+    <footer>
+        Based on <a href="https://play.elevatorsaga.com">Elevator Saga</a>
+        by Magnus Wolffelt and contributors ·
+        <a href="https://github.com/airstrike/elevato">Source on GitHub</a>
+    </footer>
+</div>
+<script>
+    // iced appends its canvas to <body> once the wasm app starts; the
+    // landing card bows out then. (A MutationObserver rather than
+    // trunk's TrunkApplicationStarted event, which this trunk version
+    // predates.)
+    const observer = new MutationObserver(() => {
+        if (document.querySelector("body > canvas")) {
+            document.getElementById("intro")?.remove();
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, { childList: true });
+</script>
 <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="elevato" />
+<link data-trunk rel="copy-file" href="assets/fonts/OFL.txt" />
 </body>
 </html>
