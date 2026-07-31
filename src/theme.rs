@@ -1,0 +1,160 @@
+//! Semantic colors and widget styles. Every `.style()` call site in the
+//! app passes a named fn from this module — no inline style closures —
+//! and the sim canvas reads its colors from [`palette`]. Solid colors
+//! only: gradients silently no-op on the wasm build.
+
+use iced::{Color, Theme, color};
+
+/// Named semantic colors, resolved per theme brightness by [`palette`].
+#[derive(Debug, Clone, Copy)]
+pub struct Palette {
+    /// Headline and value text.
+    pub text_primary: Color,
+    /// Labels and captions.
+    pub text_secondary: Color,
+    /// The world canvas backdrop.
+    pub canvas_background: Color,
+    /// Toolbar, stats bar, and banner surfaces.
+    pub panel: Color,
+    /// Floor baselines and hairline borders.
+    pub floor_line: Color,
+    /// The elevator car body.
+    pub elevator_body: Color,
+    /// Text drawn on the elevator body.
+    pub elevator_text: Color,
+    /// A lit direction indicator or floor call button.
+    pub indicator_lit: Color,
+    /// An unlit indicator or call button.
+    pub indicator_unlit: Color,
+    /// A lit in-elevator destination button.
+    pub button_lit: Color,
+    /// Passenger figures.
+    pub passenger: Color,
+    /// Success green (banner text).
+    pub success: Color,
+    /// Failure red (banner text, script errors).
+    pub failure: Color,
+}
+
+/// Resolves the semantic palette for the current theme's brightness.
+pub fn palette(theme: &Theme) -> Palette {
+    if is_dark(theme) {
+        Palette {
+            text_primary: color!(0xe6e9f0),
+            text_secondary: color!(0x9aa3b5),
+            canvas_background: color!(0x1c1f26),
+            panel: color!(0x262a33),
+            floor_line: color!(0x3a4050),
+            elevator_body: color!(0x3f7fc4),
+            elevator_text: color!(0xffffff),
+            indicator_lit: color!(0x7ee081),
+            indicator_unlit: color!(0x4a5060),
+            button_lit: color!(0xffd75e),
+            passenger: color!(0xd8dce6),
+            success: color!(0x6fbf73),
+            failure: color!(0xe05a4e),
+        }
+    } else {
+        Palette {
+            text_primary: color!(0x22262e),
+            text_secondary: color!(0x5c6470),
+            canvas_background: color!(0xf2f3f5),
+            panel: color!(0xe6e8ec),
+            floor_line: color!(0xc9cdd6),
+            elevator_body: color!(0x3b76c0),
+            elevator_text: color!(0xffffff),
+            indicator_lit: color!(0x2e9e46),
+            indicator_unlit: color!(0xb9bfcc),
+            button_lit: color!(0xd9930d),
+            passenger: color!(0x3a4150),
+            success: color!(0x217a33),
+            failure: color!(0xc23a2c),
+        }
+    }
+}
+
+fn is_dark(theme: &Theme) -> bool {
+    let background = theme.palette().background.base.color;
+    0.299 * background.r + 0.587 * background.g + 0.114 * background.b < 0.5
+}
+
+pub mod text {
+    //! Text colors for `.style()` on `text` widgets.
+
+    use iced::Theme;
+    use iced::widget::text::Style;
+
+    use super::palette;
+
+    /// Headline and value text.
+    pub fn primary(theme: &Theme) -> Style {
+        Style {
+            color: Some(palette(theme).text_primary),
+        }
+    }
+
+    /// Labels and captions.
+    pub fn secondary(theme: &Theme) -> Style {
+        Style {
+            color: Some(palette(theme).text_secondary),
+        }
+    }
+
+    /// Script-error text.
+    pub fn failure(theme: &Theme) -> Style {
+        Style {
+            color: Some(palette(theme).failure),
+        }
+    }
+
+    /// Banner headline, green on success and red on failure.
+    pub fn outcome(success: bool) -> impl Fn(&Theme) -> Style {
+        move |theme| {
+            let palette = palette(theme);
+            Style {
+                color: Some(if success {
+                    palette.success
+                } else {
+                    palette.failure
+                }),
+            }
+        }
+    }
+}
+
+pub mod container {
+    //! Surface styles for `.style()` on `container` widgets.
+
+    use iced::widget::container::Style;
+    use iced::{Theme, border};
+
+    use super::palette;
+
+    /// The root backdrop behind everything.
+    pub fn root(theme: &Theme) -> Style {
+        let palette = palette(theme);
+        Style {
+            background: Some(palette.canvas_background.into()),
+            text_color: Some(palette.text_primary),
+            ..Style::default()
+        }
+    }
+
+    /// Toolbar and stats-bar strips.
+    pub fn panel(theme: &Theme) -> Style {
+        Style {
+            background: Some(palette(theme).panel.into()),
+            ..Style::default()
+        }
+    }
+
+    /// The end-of-challenge banner card floating over the canvas.
+    pub fn banner(theme: &Theme) -> Style {
+        let palette = palette(theme);
+        Style {
+            background: Some(palette.panel.into()),
+            border: border::rounded(8.0).color(palette.floor_line).width(1),
+            ..Style::default()
+        }
+    }
+}

@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 elevato-core = { workspace = true }
 iced = { workspace = true }
+script = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { workspace = true, features = ["webgl", "fira-sans"] }
@@ -24,6 +25,7 @@ edition = "2024"
 [workspace.dependencies]
 # Short directory `core/`, prefixed package (bare `core` collides with std).
 elevato-core = { path = "core" }
+script = { path = "script" }
 
 iced = { path = "/Users/andy/projects/iced", features = ["canvas", "tokio"] }
 rhai = "1"

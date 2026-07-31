@@ -2,5 +2,8 @@
 //! and watch the simulation clear (or fail) the challenges.
 
 pub mod app;
+pub mod playback;
+pub mod sim;
+pub mod theme;
 
 pub use elevato_core as core;

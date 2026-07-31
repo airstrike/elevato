@@ -135,8 +135,10 @@ impl Passenger {
         matches!(self.state, State::Exiting { .. })
     }
 
-    /// The slot occupied aboard an elevator, if any.
-    pub(crate) fn slot(&self) -> Option<usize> {
+    /// The elevator slot occupied while aboard (boarding or riding), if
+    /// any — read by the world's exit path and by renderers placing
+    /// riders in their slots.
+    pub fn slot(&self) -> Option<usize> {
         match self.state {
             State::Boarding { slot, .. } | State::Riding { slot, .. } => Some(slot),
             State::Waiting | State::Exiting { .. } => None,

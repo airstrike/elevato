@@ -8,6 +8,7 @@ pub fn main() -> iced::Result {
     }
 
     iced::application(app::boot, app::update, app::view)
+        .subscription(app::subscription)
         .title("elevato")
         .run()
 }
