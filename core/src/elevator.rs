@@ -111,6 +111,35 @@ impl Elevator {
         &self.destination_queue
     }
 
+    /// Replaces the destination queue wholesale — the scripting API's
+    /// `destinationQueue` reassignment idiom. Entries are clamped to the
+    /// building exactly like [`Self::go_to_floor`]; the queue is *not*
+    /// re-checked (callers follow with
+    /// [`crate::World::check_destination_queue`], as the original
+    /// documents).
+    pub fn set_destination_queue(&mut self, queue: Vec<f64>) {
+        let top = (self.floor_count - 1) as f64;
+        self.destination_queue = queue
+            .into_iter()
+            .map(|level| level.clamp(0.0, top))
+            .collect();
+    }
+
+    /// Direction of travel toward the current physical destination, or
+    /// `None` when the destination equals the current position — the
+    /// original's `destinationDirection()` returning `"stopped"`. In the
+    /// y-down pixel space a destination at *smaller* y is *higher* up
+    /// the building.
+    pub fn destination_direction(&self) -> Option<Direction> {
+        if self.destination_y == self.y {
+            None
+        } else if self.destination_y < self.y {
+            Some(Direction::Up)
+        } else {
+            Some(Direction::Down)
+        }
+    }
+
     /// Floor boundaries crossed so far (a 0→3 trip costs 3 moves).
     pub fn move_count(&self) -> usize {
         self.move_count
