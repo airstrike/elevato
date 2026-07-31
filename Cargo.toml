@@ -27,6 +27,7 @@ elevato-core = { path = "core" }
 
 iced = { path = "/Users/andy/projects/iced", features = ["canvas", "tokio"] }
 rhai = "1"
+thiserror = "2"
 
 # The iced checkout patches cosmic-text to a sibling path in its own
 # workspace; a path dependency on that iced must mirror the patch or
