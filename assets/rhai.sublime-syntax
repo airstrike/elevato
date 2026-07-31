@@ -1,0 +1,54 @@
+%YAML 1.2
+---
+# A minimal Rhai grammar for elevato's editor: keywords, comments,
+# strings, numbers, booleans, and operators (including closure pipes).
+# Good-enough tokenization for a game script pane, not a full port of
+# the language. Loaded by src/highlight.rs with lines_include_newline
+# set to false — the text editor hands lines over bare.
+name: Rhai
+file_extensions:
+  - rhai
+scope: source.rhai
+
+contexts:
+  main:
+    - match: '//.*'
+      scope: comment.line.double-slash.rhai
+    - match: '/\*'
+      scope: comment.block.rhai
+      push: block_comment
+    - match: '"'
+      scope: string.quoted.double.rhai
+      push: double_string
+    - match: '''(?:\\.|[^''\\])'''
+      scope: string.quoted.single.rhai
+    - match: '\b0x[0-9a-fA-F_]+'
+      scope: constant.numeric.hex.rhai
+    - match: '\b0o[0-7_]+'
+      scope: constant.numeric.octal.rhai
+    - match: '\b0b[01_]+'
+      scope: constant.numeric.binary.rhai
+    - match: '\b[0-9][0-9_]*(?:\.[0-9_]+)?(?:[eE][+-]?[0-9_]+)?'
+      scope: constant.numeric.rhai
+    - match: '\b(?:true|false)\b'
+      scope: constant.language.boolean.rhai
+    - match: '\b(?:fn|let|const|private|import|export|as|global)\b'
+      scope: keyword.declaration.rhai
+    - match: '\b(?:if|else|switch|for|in|while|loop|do|until|break|continue|return|throw|try|catch)\b'
+      scope: keyword.control.rhai
+    - match: '[+\-*/%=!<>&^~?.,;:|]+'
+      scope: keyword.operator.rhai
+
+  block_comment:
+    - meta_scope: comment.block.rhai
+    - match: '/\*'
+      push: block_comment
+    - match: '\*/'
+      pop: true
+
+  double_string:
+    - meta_scope: string.quoted.double.rhai
+    - match: '\\.'
+      scope: constant.character.escape.rhai
+    - match: '"'
+      pop: true

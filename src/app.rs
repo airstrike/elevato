@@ -1,19 +1,27 @@
-//! The single application screen: challenge toolbar, stats bar, and the
-//! sim canvas — a thin TEA shell over [`crate::playback::Playback`],
-//! which owns every rule about running, seeding, and timescale.
+//! The single application screen: challenge toolbar, stats bar, sim
+//! canvas, and the editor pane — a thin TEA shell over
+//! [`crate::playback::Playback`], which owns every rule about running,
+//! seeding, and timescale, composed with the [`crate::editor`] cell.
 
 use iced::time::{self, milliseconds};
 use iced::widget::{button, canvas, center, column, container, pick_list, row, space, stack, text};
-use iced::{Center, Element, Fill, Subscription, Task};
+use iced::{Center, Element, Fill, Length, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
+use crate::editor;
 use crate::playback::{self, Playback};
 use crate::sim;
+use crate::storage;
 use crate::theme;
 
 /// Top-level application state.
 pub struct App {
     playback: Playback,
+    editor: editor::State,
+    /// The last Apply's compile error, shown until the next Apply.
+    /// Runtime errors live on [`Playback`]; `view` shows whichever is
+    /// current.
+    apply_error: Option<script::Error>,
     /// Picker entries, one per roster challenge, built once at boot.
     choices: Vec<Choice>,
     /// Cached world geometry; cleared whenever the world changes.
@@ -46,14 +54,31 @@ pub enum Message {
     SpeedUp,
     /// The timescale − button was pressed.
     SlowDown,
+    /// An editor pane message.
+    Editor(editor::Message),
 }
 
-/// Builds the initial state and startup task: the built-in starter
-/// program on challenge 1, paused until Start is pressed (the
-/// original's flow).
+/// Builds the initial state and startup task: the last-saved code and
+/// timescale (else the built-in starter) on challenge 1, paused until
+/// Start is pressed (the original's flow).
 pub fn boot() -> (App, Task<Message>) {
-    let playback =
-        Playback::new(playback::STARTER).expect("invariant: the built-in starter compiles");
+    let (code, timescale) = match storage::load() {
+        Some(saved) => (saved.code, saved.timescale),
+        None => (playback::STARTER.to_string(), None),
+    };
+    // A saved program can be broken — Save persists raw text — so a
+    // failed compile boots the starter engine underneath while the
+    // editor keeps the saved text and shows its compile error.
+    let (mut playback, apply_error) = match Playback::new(&code) {
+        Ok(playback) => (playback, None),
+        Err(error) => (
+            Playback::new(playback::STARTER).expect("invariant: the built-in starter compiles"),
+            Some(error),
+        ),
+    };
+    if let Some(timescale) = timescale {
+        playback.set_timescale(timescale);
+    }
     let choices = playback
         .challenges()
         .iter()
@@ -70,6 +95,8 @@ pub fn boot() -> (App, Task<Message>) {
     (
         App {
             playback,
+            editor: editor::State::new(&code),
+            apply_error,
             choices,
             cache: canvas::Cache::default(),
         },
@@ -100,6 +127,28 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
         }
         Message::SpeedUp => app.playback.speed_up(),
         Message::SlowDown => app.playback.slow_down(),
+        Message::Editor(message) => {
+            let action = app.editor.update(message);
+            if let Some(instruction) = action.instruction {
+                match instruction {
+                    editor::Instruction::Apply(source) => {
+                        app.apply_error = app.playback.apply(&source).err();
+                        if app.apply_error.is_none() {
+                            // Persistence is best-effort; a failed
+                            // write just means nothing saved this time.
+                            let _ = storage::save(&source, app.playback.timescale());
+                            app.editor.mark_saved();
+                        }
+                        app.cache.clear();
+                    }
+                    editor::Instruction::Save(source) => {
+                        let _ = storage::save(&source, app.playback.timescale());
+                        app.editor.mark_saved();
+                    }
+                }
+            }
+            return action.task.map(Message::Editor);
+        }
     }
     Task::none()
 }
@@ -126,7 +175,19 @@ pub fn view(app: &App) -> Element<'_, Message> {
         world.into()
     };
 
-    container(column![toolbar(app), stats_bar(app), world])
+    // The editor panel shows whichever script error is current: the
+    // last Apply's compile error until the next Apply, else whatever
+    // stopped the running attempt (an `init` failure or runtime throw).
+    let error = app.apply_error.as_ref().or_else(|| app.playback.error());
+
+    let workspace = row![
+        container(world).width(Length::FillPortion(3)).height(Fill),
+        container(app.editor.view(error).map(Message::Editor))
+            .width(Length::FillPortion(2))
+            .height(Fill),
+    ];
+
+    container(column![toolbar(app), stats_bar(app), workspace])
         .width(Fill)
         .height(Fill)
         .style(theme::container::root)
@@ -175,7 +236,7 @@ fn toolbar(app: &App) -> Element<'_, Message> {
 
 fn stats_bar(app: &App) -> Element<'_, Message> {
     let stats = app.playback.stats();
-    let mut bar = row![
+    let bar = row![
         stat("Transported", stats.transported().to_string()),
         stat("Elapsed time", format!("{:.1}s", stats.elapsed())),
         stat(
@@ -189,10 +250,6 @@ fn stats_bar(app: &App) -> Element<'_, Message> {
     ]
     .spacing(24)
     .align_y(Center);
-
-    if let Some(error) = app.playback.error() {
-        bar = bar.push(text(error.to_string()).size(12).style(theme::text::failure));
-    }
 
     container(bar)
         .width(Fill)

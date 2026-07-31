@@ -34,6 +34,18 @@ pub struct Palette {
     pub success: Color,
     /// Failure red (banner text, script errors).
     pub failure: Color,
+    /// Editor tokens: comments.
+    pub syntax_comment: Color,
+    /// Editor tokens: string literals.
+    pub syntax_string: Color,
+    /// Editor tokens: numeric literals.
+    pub syntax_number: Color,
+    /// Editor tokens: `true`/`false`.
+    pub syntax_constant: Color,
+    /// Editor tokens: operators and closure pipes.
+    pub syntax_operator: Color,
+    /// Editor tokens: keywords.
+    pub syntax_keyword: Color,
 }
 
 /// Resolves the semantic palette for the current theme's brightness.
@@ -53,6 +65,12 @@ pub fn palette(theme: &Theme) -> Palette {
             passenger: color!(0xd8dce6),
             success: color!(0x6fbf73),
             failure: color!(0xe05a4e),
+            syntax_comment: color!(0x6a7385),
+            syntax_string: color!(0x98c379),
+            syntax_number: color!(0xd19a66),
+            syntax_constant: color!(0x56b6c2),
+            syntax_operator: color!(0xa8b3c9),
+            syntax_keyword: color!(0xc792ea),
         }
     } else {
         Palette {
@@ -69,6 +87,12 @@ pub fn palette(theme: &Theme) -> Palette {
             passenger: color!(0x3a4150),
             success: color!(0x217a33),
             failure: color!(0xc23a2c),
+            syntax_comment: color!(0x8a919e),
+            syntax_string: color!(0x50a14f),
+            syntax_number: color!(0x986801),
+            syntax_constant: color!(0x0184bc),
+            syntax_operator: color!(0x5c6470),
+            syntax_keyword: color!(0xa626a4),
         }
     }
 }
@@ -155,6 +179,48 @@ pub mod container {
             background: Some(palette.panel.into()),
             border: border::rounded(8.0).color(palette.floor_line).width(1),
             ..Style::default()
+        }
+    }
+
+    /// The script-error strip under the editor.
+    pub fn error_panel(theme: &Theme) -> Style {
+        let palette = palette(theme);
+        Style {
+            background: Some(palette.panel.into()),
+            border: border::rounded(4.0).color(palette.failure).width(1),
+            ..Style::default()
+        }
+    }
+}
+
+pub mod text_editor {
+    //! Styles for `.style()` on `text_editor` widgets.
+
+    use iced::widget::text_editor::{Status, Style};
+    use iced::{Border, Color, Theme};
+
+    use super::palette;
+
+    /// The Rhai code editor.
+    pub fn code(theme: &Theme, status: Status) -> Style {
+        let palette = palette(theme);
+        let border_color = match status {
+            Status::Focused { .. } => palette.elevator_body,
+            Status::Active | Status::Hovered | Status::Disabled => palette.floor_line,
+        };
+        Style {
+            background: palette.canvas_background.into(),
+            border: Border {
+                color: border_color,
+                width: 1.0,
+                radius: 4.0.into(),
+            },
+            placeholder: palette.text_secondary,
+            value: palette.text_primary,
+            selection: Color {
+                a: 0.35,
+                ..palette.elevator_body
+            },
         }
     }
 }

@@ -174,6 +174,33 @@ impl Playback {
         }
     }
 
+    /// Compiles `source` and, on success, replaces the program and
+    /// starts a fresh attempt on the **current** challenge with the
+    /// next seed, auto-started (the original's Apply flow — nothing
+    /// survives but editor text and timescale). On a compile error the
+    /// running attempt is left untouched but paused, and the error is
+    /// returned for the caller to surface.
+    pub fn apply(&mut self, source: &str) -> Result<(), script::Error> {
+        match Program::compile(source) {
+            Ok(program) => {
+                self.program = program;
+                self.seed += 1;
+                self.rebuild();
+                self.running = self.runtime.is_some();
+                Ok(())
+            }
+            Err(error) => {
+                self.running = false;
+                Err(error)
+            }
+        }
+    }
+
+    /// Restores a persisted timescale, clamped to the ladder's bounds.
+    pub fn set_timescale(&mut self, timescale: usize) {
+        self.timescale = timescale.clamp(TIMESCALE_MIN, TIMESCALE_MAX);
+    }
+
     /// Steps the timescale up the golden-ratio ladder.
     pub fn speed_up(&mut self) {
         self.timescale = step(self.timescale, TIMESCALE_RATIO);
@@ -289,6 +316,57 @@ mod tests {
         playback.select_challenge(3);
         assert_eq!(playback.seed(), 3);
         assert_eq!(playback.challenge_index(), 3);
+    }
+
+    #[test]
+    fn a_successful_apply_rebuilds_the_same_challenge_with_the_next_seed_and_autostarts() {
+        let mut playback = Playback::new(STARTER).unwrap();
+        playback.select_challenge(2);
+        playback.toggle();
+        playback.tick();
+        assert!(playback.stats().elapsed() > 0.0);
+
+        playback.apply("fn init(elevators, floors) {}").unwrap();
+        assert_eq!(playback.challenge_index(), 2);
+        assert_eq!(playback.seed(), 3);
+        assert!(playback.is_running(), "apply auto-starts the new attempt");
+        assert_eq!(playback.stats().elapsed(), 0.0, "the world is fresh");
+        assert!(playback.error().is_none());
+    }
+
+    #[test]
+    fn a_compile_error_apply_pauses_but_preserves_the_current_attempt() {
+        let mut playback = Playback::new(STARTER).unwrap();
+        playback.toggle();
+        playback.tick();
+        let elapsed = playback.stats().elapsed();
+        assert!(elapsed > 0.0);
+
+        let error = playback.apply("fn init(").unwrap_err();
+        assert!(matches!(error, script::Error::Compile(_)));
+        assert!(!playback.is_running(), "a failed apply pauses playback");
+        assert!(
+            playback.error().is_none(),
+            "the compile error belongs to the caller, not the attempt"
+        );
+        assert_eq!(playback.seed(), 1, "the attempt was not rebuilt");
+        assert_eq!(playback.stats().elapsed(), elapsed);
+
+        // The old attempt is still alive: resume and it keeps running.
+        playback.toggle();
+        playback.tick();
+        assert!(playback.stats().elapsed() > elapsed);
+    }
+
+    #[test]
+    fn a_restored_timescale_is_clamped_to_the_ladder_bounds() {
+        let mut playback = Playback::new(STARTER).unwrap();
+        playback.set_timescale(500);
+        assert_eq!(playback.timescale(), TIMESCALE_MAX);
+        playback.set_timescale(0);
+        assert_eq!(playback.timescale(), TIMESCALE_MIN);
+        playback.set_timescale(7);
+        assert_eq!(playback.timescale(), 7);
     }
 
     #[test]

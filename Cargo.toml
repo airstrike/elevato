@@ -7,6 +7,10 @@ edition.workspace = true
 elevato-core = { workspace = true }
 iced = { workspace = true }
 script = { workspace = true }
+syntect = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+dirs = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { workspace = true, features = ["webgl", "fira-sans"] }
@@ -27,9 +31,14 @@ edition = "2024"
 elevato-core = { path = "core" }
 script = { path = "script" }
 
-iced = { path = "/Users/andy/projects/iced", features = ["canvas", "tokio"] }
+iced = { path = "/Users/andy/projects/iced", features = ["canvas", "tokio", "advanced"] }
 rhai = "1"
 thiserror = "2"
+
+# Highlighting: parsing only (the app maps scopes to theme colors
+# itself); fancy-regex backend — wasm-clean, never onig.
+syntect = { version = "5", default-features = false, features = ["parsing", "yaml-load", "regex-fancy"] }
+dirs = "6"
 
 # The iced checkout patches cosmic-text to a sibling path in its own
 # workspace; a path dependency on that iced must mirror the patch or
