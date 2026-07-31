@@ -38,4 +38,11 @@ pub enum Event {
     /// A destination button inside the elevator went from unlit to lit.
     /// Pressing an already-lit button emits nothing.
     FloorButtonPressed { elevator: usize, floor: usize },
+    /// A floor's up call button went from unlit to lit — a passenger
+    /// spawned wanting to go up, or an overflow passenger re-pressed after
+    /// an arrival cleared the state. Pressing a lit button emits nothing.
+    UpButtonPressed { floor: usize },
+    /// A floor's down call button went from unlit to lit; the down twin of
+    /// [`Event::UpButtonPressed`].
+    DownButtonPressed { floor: usize },
 }

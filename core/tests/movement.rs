@@ -3,10 +3,18 @@
 //! runtime and headless runner will own in later phases.
 
 use elevato_core::World;
+use elevato_core::challenge::{Challenge, Condition};
 use elevato_core::elevator::{ACCELERATION, DECELERATION, MAXSPEED};
 use elevato_core::event::{Direction, Event};
 use elevato_core::floor;
 use elevato_core::world::DT_MAX;
+
+/// A spawnless world (spawn rate 0, perpetual condition) so trajectories
+/// stay free of passenger noise.
+fn quiet_world(floors: usize, elevators: usize) -> World {
+    let challenge = Challenge::new(floors, elevators, vec![4], 0.0, Condition::Demo).unwrap();
+    World::new(&challenge, 0)
+}
 
 /// One driver iteration: step, drain, process arrivals, drain again.
 /// Returns all events with the game time at which they were drained.
@@ -49,7 +57,7 @@ fn drive_until_arrival(
 
 #[test]
 fn a_zero_to_three_trip_matches_analytic_kinematics_with_three_moves_and_a_one_second_dwell() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
     world.go_to_floor(0, 3.0, false);
     let start_y = world.elevators()[0].y();
     assert_eq!(start_y, 150.0);
@@ -138,7 +146,7 @@ fn a_zero_to_three_trip_matches_analytic_kinematics_with_three_moves_and_a_one_s
 
 #[test]
 fn passing_floor_fires_for_intermediate_floors_only() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
     world.go_to_floor(0, 3.0, false);
 
     let (events, _) = drive_until_arrival(&mut world, 6 * 60);
@@ -150,7 +158,9 @@ fn passing_floor_fires_for_intermediate_floors_only() {
             } => Some((*floor, *direction)),
             Event::Idle { .. }
             | Event::StoppedAtFloor { .. }
-            | Event::FloorButtonPressed { .. } => None,
+            | Event::FloorButtonPressed { .. }
+            | Event::UpButtonPressed { .. }
+            | Event::DownButtonPressed { .. } => None,
         })
         .collect();
     assert_eq!(passings, vec![(1, Direction::Up), (2, Direction::Up)]);
@@ -158,7 +168,7 @@ fn passing_floor_fires_for_intermediate_floors_only() {
 
 #[test]
 fn go_to_floor_issued_while_draining_idle_takes_effect_in_the_same_iteration() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
 
     // The driver fires the initial queue check (world.init in the original).
     world.check_destination_queue(0);
@@ -184,7 +194,7 @@ fn go_to_floor_issued_while_draining_idle_takes_effect_in_the_same_iteration() {
 
 #[test]
 fn stop_mid_flight_halts_between_floors_with_no_arrival_events_and_no_dwell() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
     world.go_to_floor(0, 3.0, false);
 
     // Reach cruising speed, then stop.
@@ -219,7 +229,7 @@ fn stop_mid_flight_halts_between_floors_with_no_arrival_events_and_no_dwell() {
 
 #[test]
 fn duplicate_suppression_checks_only_the_adjacent_queue_element() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
 
     world.go_to_floor(0, 2.0, false);
     world.go_to_floor(0, 2.0, false);
@@ -241,7 +251,7 @@ fn duplicate_suppression_checks_only_the_adjacent_queue_element() {
 
 #[test]
 fn idle_fires_one_second_after_the_last_arrival() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
     world.go_to_floor(0, 1.0, false);
 
     let (_, samples) = drive_until_arrival(&mut world, 6 * 60);
@@ -265,7 +275,7 @@ fn idle_fires_one_second_after_the_last_arrival() {
 
 #[test]
 fn stop_during_a_dwell_only_clears_the_queue() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
     world.go_to_floor(0, 1.0, false);
     let (_, samples) = drive_until_arrival(&mut world, 6 * 60);
     let (t_arrival, _, _) = *samples.last().unwrap();
@@ -295,7 +305,7 @@ fn stop_during_a_dwell_only_clears_the_queue() {
 
 #[test]
 fn a_forced_go_to_floor_at_the_current_floor_causes_a_re_arrival() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
 
     // Standing at floor 0; the world's Phase 3 re-arrival rule issues
     // exactly this command when a call button is pressed beside a parked
@@ -315,7 +325,7 @@ fn a_forced_go_to_floor_at_the_current_floor_causes_a_re_arrival() {
 
 #[test]
 fn pressing_an_in_elevator_button_emits_once_and_arrival_clears_it() {
-    let mut world = World::new(4, 1).unwrap();
+    let mut world = quiet_world(4, 1);
 
     world.press_floor_button(0, 2);
     world.press_floor_button(0, 2);

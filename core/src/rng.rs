@@ -6,11 +6,13 @@
 //! the reference C implementation — hand-rolled rather than a crate
 //! dependency, per the conservative-deps rule.
 //!
-//! RNG call order per spawn (research §6), fixed here so replays stay
-//! stable once the consumers arrive in Phase 3:
+//! RNG call order per spawn (research §6), load-bearing for replay
+//! stability — the world consumes randomness in exactly this order:
 //! weight → display type → spawn floor → destination → slot offset
-//! (`userEntering`) → rotation offset (`handleButtonRepressing`) →
-//! exit walk duration.
+//! (`userEntering`, drawn per suitable boarding attempt even when the
+//! elevator turns out to be full) → rotation offset
+//! (`handleButtonRepressing`, drawn once per call-button event fire) →
+//! exit walk duration ([`Pcg32::random_f64`]).
 
 /// A PCG-XSH-RR 64/32 generator on a fixed stream, minted from a seed.
 #[derive(Debug, Clone)]
@@ -62,6 +64,13 @@ impl Pcg32 {
         let span = u64::from(upper - lower) + 1;
         let scaled = (u64::from(self.next_u32()) * span) >> 32;
         lower + scaled as u32
+    }
+
+    /// Uniform float in `[0, 1)`, mirroring JS `Math.random()` (the
+    /// original's exit-walk duration draw). One raw 32-bit draw scaled by
+    /// 2⁻³² — 32 bits of granularity is plenty for a walk timer.
+    pub fn random_f64(&mut self) -> f64 {
+        f64::from(self.next_u32()) / (f64::from(u32::MAX) + 1.0)
     }
 }
 
@@ -116,6 +125,15 @@ mod tests {
                 forward.random_inclusive(2, 8),
                 reversed.random_inclusive(8, 2)
             );
+        }
+    }
+
+    #[test]
+    fn random_f64_stays_in_the_half_open_unit_interval() {
+        let mut rng = Pcg32::new(11);
+        for _ in 0..1000 {
+            let x = rng.random_f64();
+            assert!((0.0..1.0).contains(&x));
         }
     }
 

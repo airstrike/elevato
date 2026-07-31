@@ -55,12 +55,16 @@ pub struct Elevator {
     going_up_indicator: bool,
     going_down_indicator: bool,
     pressed_floors: Vec<bool>,
+    /// Passenger slots; an occupied slot holds its occupant's weight.
+    /// Capacity is the slot count — weight never blocks boarding, it only
+    /// feeds [`Self::load_factor`].
+    slots: Vec<Option<u32>>,
 }
 
 impl Elevator {
     /// A new elevator standing at floor 0, both indicators on, no lit
-    /// buttons — the original's starting state.
-    pub(crate) fn new(id: usize, floor_count: usize) -> Self {
+    /// buttons, every slot free — the original's starting state.
+    pub(crate) fn new(id: usize, floor_count: usize, capacity: usize) -> Self {
         let y = floor::y_of_level(0.0, floor_count);
         Self {
             id,
@@ -77,6 +81,7 @@ impl Elevator {
             going_up_indicator: true,
             going_down_indicator: true,
             pressed_floors: vec![false; floor_count],
+            slots: vec![None; capacity],
         }
     }
 
@@ -140,6 +145,43 @@ impl Elevator {
     /// Sets the going-down indicator.
     pub fn set_going_down_indicator(&mut self, on: bool) {
         self.going_down_indicator = on;
+    }
+
+    /// Passenger capacity, in slots (the original's `maxPassengerCount`).
+    pub fn capacity(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// Whether every slot is occupied. Slot count is the only boarding
+    /// limit — weight never blocks.
+    pub fn is_full(&self) -> bool {
+        self.slots.iter().all(Option::is_some)
+    }
+
+    /// Sum of rider weights over `capacity × 100`: 0 = empty, 1 ≈ full
+    /// (inexact because weights vary over 55–100).
+    pub fn load_factor(&self) -> f64 {
+        let load: u32 = self.slots.iter().flatten().sum();
+        f64::from(load) / (self.capacity() as f64 * 100.0)
+    }
+
+    /// Whether a passenger traveling `from → to` may board: going up needs
+    /// the up indicator, going down the down indicator, the same floor is
+    /// always suitable (original `isSuitableForTravelBetween`).
+    pub fn is_suitable_for_travel_between(&self, from: usize, to: usize) -> bool {
+        if from < to {
+            self.going_up_indicator
+        } else if from > to {
+            self.going_down_indicator
+        } else {
+            true
+        }
+    }
+
+    /// Whether the elevator sits exactly (within epsilon) on a floor.
+    pub fn is_on_a_floor(&self) -> bool {
+        let exact = self.exact_floor();
+        epsilon_equals(exact, exact.round())
     }
 
     /// Floors whose in-elevator destination buttons are lit, ascending.
@@ -214,6 +256,33 @@ impl Elevator {
                 floor,
             });
         }
+    }
+
+    /// Occupies a free slot for a boarder of the given weight, probing
+    /// linearly (with wraparound) from `offset` — the original's
+    /// `userEntering`, whose random starting offset the world draws.
+    /// Returns the occupied slot index, or `None` when full (the boarder
+    /// stays behind and re-presses the floor call button).
+    pub(crate) fn enter_slot(&mut self, weight: u32, offset: usize) -> Option<usize> {
+        let capacity = self.slots.len();
+        for probe in 0..capacity {
+            let slot = (offset + probe) % capacity;
+            if self.slots[slot].is_none() {
+                self.slots[slot] = Some(weight);
+                return Some(slot);
+            }
+        }
+        None
+    }
+
+    /// Frees the slot an exiting rider occupied — before boarding runs, so
+    /// leavers make room for boarders within the same arrival.
+    pub(crate) fn free_slot(&mut self, slot: usize) {
+        self.slots
+            .get_mut(slot)
+            .expect("invariant: slot index within capacity")
+            .take()
+            .expect("invariant: freed slot was occupied");
     }
 
     /// Advances the dwell timer (the original's movable task update, run
@@ -378,11 +447,6 @@ impl Elevator {
         floor::level_of_y(self.y - sign(self.velocity_y) * stopping, self.floor_count)
     }
 
-    fn is_on_a_floor(&self) -> bool {
-        let exact = self.exact_floor();
-        epsilon_equals(exact, exact.round())
-    }
-
     fn is_approaching(&self, level: f64) -> bool {
         let to_floor = floor::y_of_level(level, self.floor_count) - self.y;
         self.velocity_y != 0.0 && sign(self.velocity_y) == sign(to_floor)
@@ -451,8 +515,24 @@ mod tests {
     }
 
     #[test]
+    fn slot_probing_wraps_around_and_reports_full() {
+        let mut elevator = Elevator::new(0, 4, 3);
+        // Offset 2, then 2 again: the probe wraps to slot 0.
+        assert_eq!(elevator.enter_slot(60, 2), Some(2));
+        assert_eq!(elevator.enter_slot(70, 2), Some(0));
+        assert_eq!(elevator.enter_slot(80, 1), Some(1));
+        assert!(elevator.is_full());
+        assert_eq!(elevator.enter_slot(90, 0), None);
+        // Weights 60 + 70 + 80 over 3 × 100.
+        assert_eq!(elevator.load_factor(), 0.7);
+        elevator.free_slot(1);
+        assert!(!elevator.is_full());
+        assert_eq!(elevator.enter_slot(90, 0), Some(1));
+    }
+
+    #[test]
     fn future_floor_projection_extends_forward_along_travel() {
-        let mut elevator = Elevator::new(0, 4);
+        let mut elevator = Elevator::new(0, 4, 4);
         // Standing still: the projection is the current position.
         assert_eq!(elevator.exact_future_floor_if_stopped(), 0.0);
         // Moving up (negative velocity) at top speed from floor 0: the stop
