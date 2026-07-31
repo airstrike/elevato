@@ -1,0 +1,35 @@
+[package]
+name = "elevato"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+elevato-core = { workspace = true }
+iced = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { workspace = true, features = ["webgl", "fira-sans"] }
+console_error_panic_hook = "0.1"
+console_log = "1"
+log = "0.4"
+
+[workspace]
+resolver = "3"
+members = ["core", "script"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+# Short directory `core/`, prefixed package (bare `core` collides with std).
+elevato-core = { path = "core" }
+
+iced = { path = "/Users/andy/projects/iced", features = ["canvas", "tokio"] }
+rhai = "1"
+
+# The iced checkout patches cosmic-text to a sibling path in its own
+# workspace; a path dependency on that iced must mirror the patch or
+# cargo resolves two incompatible cosmic-text sources.
+[patch.crates-io]
+cosmic-text = { path = "/Users/andy/projects/cosmic-text" }

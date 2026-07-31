@@ -1,0 +1,10 @@
+[package]
+name = "script"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rhai = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rhai = { workspace = true, features = ["wasm-bindgen"] }
