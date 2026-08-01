@@ -1,0 +1,18 @@
+# Icon set for elevato. Keep in sync with call sites in src/app.rs and
+# src/editor.rs so the subsetted font stays small.
+
+module = "icon"
+
+[icons]
+play = "play"
+pause = "pause"
+rotate_ccw = "rotate-ccw"
+skip_forward = "skip-forward"
+check = "check"
+save = "save"
+eraser = "eraser"
+undo_2 = "undo-2"
+minus = "minus"
+plus = "plus"
+sun = "sun"
+moon = "moon"

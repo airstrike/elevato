@@ -9,21 +9,27 @@
     <style>
         :root {
             color-scheme: light dark;
-            --bg: #f2f3f5;
-            --text: #22262e;
-            --muted: #5c6470;
-            --accent: #3b76c0;
+            --bg: #f2efe9;
+            --text: #2b2a27;
+            --muted: #6f6c64;
+            --accent: #2e8c5f;
         }
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #1c1f26;
-                --text: #e6e9f0;
-                --muted: #9aa3b5;
-                --accent: #3f7fc4;
+                --bg: #191816;
+                --text: #ece7db;
+                --muted: #98948a;
+                --accent: #50b481;
             }
         }
         html, body { margin: 0; }
         body { background: var(--bg); }
+        /* winit-web inserts a hidden input for IME; when the canvas
+           takes keyboard focus (e.g. the code editor), browsers draw
+           its focus ring as a rogue line at the page edge. Nothing on
+           this page needs a native focus ring — the app draws its own
+           focus affordances on canvas. */
+        body :focus, body :focus-visible { outline: none; }
         #intro {
             min-height: 100vh;
             display: flex;

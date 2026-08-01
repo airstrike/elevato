@@ -9,6 +9,7 @@ use iced::{Center, Element, Fill, Length, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
 use crate::editor;
+use crate::icon;
 use crate::playback::{self, Playback};
 use crate::sim;
 use crate::storage;
@@ -26,6 +27,13 @@ pub struct App {
     choices: Vec<Choice>,
     /// Cached world geometry; cleared whenever the world changes.
     cache: canvas::Cache,
+    /// Light or dark chrome.
+    mode: theme::Mode,
+}
+
+/// Resolves the active iced theme from the app's mode.
+pub fn theme(app: &App) -> iced::Theme {
+    app.mode.to_theme()
 }
 
 /// One challenge-picker entry: the roster index and its display label.
@@ -54,6 +62,8 @@ pub enum Message {
     SpeedUp,
     /// The timescale − button was pressed.
     SlowDown,
+    /// The light/dark toggle was pressed.
+    ToggleMode,
     /// An editor pane message.
     Editor(editor::Message),
 }
@@ -99,6 +109,7 @@ pub fn boot() -> (App, Task<Message>) {
             apply_error,
             choices,
             cache: canvas::Cache::default(),
+            mode: theme::Mode::from_env(),
         },
         Task::none(),
     )
@@ -127,6 +138,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
         }
         Message::SpeedUp => app.playback.speed_up(),
         Message::SlowDown => app.playback.slow_down(),
+        Message::ToggleMode => app.mode = app.mode.toggle(),
         Message::Editor(message) => {
             let action = app.editor.update(message);
             if let Some(instruction) = action.instruction {
@@ -180,11 +192,13 @@ pub fn view(app: &App) -> Element<'_, Message> {
     // stopped the running attempt (an `init` failure or runtime throw).
     let error = app.apply_error.as_ref().or_else(|| app.playback.error());
 
+    // Code on the left, world on the right — the reading order of the
+    // game loop: write, then watch.
     let workspace = row![
-        container(world).width(Length::FillPortion(3)).height(Fill),
         container(app.editor.view(error).map(Message::Editor))
             .width(Length::FillPortion(2))
             .height(Fill),
+        container(world).width(Length::FillPortion(3)).height(Fill),
     ];
 
     container(column![toolbar(app), stats_bar(app), workspace])
@@ -206,21 +220,43 @@ fn toolbar(app: &App) -> Element<'_, Message> {
     .text_size(13);
 
     let toggle = if app.playback.is_running() {
-        "Pause"
+        row![icon::pause().size(13), text("Pause").size(13)]
     } else {
-        "Start"
+        row![icon::play().size(13), text("Start").size(13)]
+    }
+    .spacing(6)
+    .align_y(Center);
+
+    let mode = match app.mode {
+        theme::Mode::Dark => icon::sun(),
+        theme::Mode::Light => icon::moon(),
     };
 
     let bar = row![
         picker,
-        button(text(toggle).size(13)).on_press(Message::Toggle),
-        button(text("Restart").size(13)).on_press(Message::Restart),
+        button(toggle)
+            .on_press(Message::Toggle)
+            .style(theme::button::primary),
+        button(
+            row![icon::rotate_ccw().size(13), text("Restart").size(13)]
+                .spacing(6)
+                .align_y(Center)
+        )
+        .on_press(Message::Restart)
+        .style(theme::button::outline),
         space::horizontal(),
-        button(text("−").size(13)).on_press(Message::SlowDown),
+        button(icon::minus().size(13))
+            .on_press(Message::SlowDown)
+            .style(theme::button::ghost),
         text(format!("{}×", app.playback.timescale()))
             .size(14)
             .style(theme::text::primary),
-        button(text("+").size(13)).on_press(Message::SpeedUp),
+        button(icon::plus().size(13))
+            .on_press(Message::SpeedUp)
+            .style(theme::button::ghost),
+        button(mode.size(13))
+            .on_press(Message::ToggleMode)
+            .style(theme::button::ghost),
     ]
     .spacing(8)
     .align_y(Center);
@@ -276,8 +312,18 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
     if success {
         content = content.push(text("Success!").size(24).style(theme::text::outcome(true)));
         if playback.challenge_index() + 1 < playback.challenges().len() {
-            content = content
-                .push(button(text("Next challenge").size(14)).on_press(Message::NextChallenge));
+            content = content.push(
+                button(
+                    row![
+                        icon::skip_forward().size(14),
+                        text("Next challenge").size(14)
+                    ]
+                    .spacing(6)
+                    .align_y(Center),
+                )
+                .on_press(Message::NextChallenge)
+                .style(theme::button::primary),
+            );
         }
     } else {
         content = content.push(
@@ -285,7 +331,15 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
                 .size(18)
                 .style(theme::text::outcome(false)),
         );
-        content = content.push(button(text("Restart").size(14)).on_press(Message::Restart));
+        content = content.push(
+            button(
+                row![icon::rotate_ccw().size(14), text("Restart").size(14)]
+                    .spacing(6)
+                    .align_y(Center),
+            )
+            .on_press(Message::Restart)
+            .style(theme::button::outline),
+        );
     }
 
     container(content)

@@ -65,6 +65,39 @@ impl<Message> canvas::Program<Message> for View<'_> {
     }
 }
 
+/// A cacheless sibling of [`View`] that borrows a bare [`World`] —
+/// previews and tests render frozen worlds without a `Playback` or a
+/// long-lived cache (a fresh frame per draw is fine for still frames).
+pub struct Still<'a> {
+    world: &'a World,
+}
+
+impl<'a> Still<'a> {
+    /// Wraps a world to draw as-is.
+    pub fn new(world: &'a World) -> Self {
+        Self { world }
+    }
+}
+
+impl<Message> canvas::Program<Message> for Still<'_> {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &Renderer,
+        theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<canvas::Geometry> {
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
+        let palette = theme::palette(theme);
+        frame.fill_rectangle(Point::ORIGIN, frame.size(), palette.canvas_background);
+        draw_world(&mut frame, self.world, palette);
+        vec![frame.into_geometry()]
+    }
+}
+
 /// Maps world coordinates (y-down px, floor 0 at the largest y — i.e.
 /// at the *bottom* of the screen) into the canvas: a uniform shrink-only
 /// scale plus a centering offset.
@@ -202,10 +235,30 @@ fn draw_elevator(
     let width = elevator.capacity() as f64 * SLOT_WIDTH;
     let top = elevator.y();
 
+    // The hoist cable, from the cab's roof up out of view.
+    frame.fill_rectangle(
+        camera.point(x + width / 2.0 - 0.5, 0.0),
+        camera.size(1.0, (top + 1.0).max(0.0)),
+        palette.floor_line,
+    );
+
+    // Cab shell, then the darker header band the lamps sit on.
     frame.fill_rectangle(
         camera.point(x, top + 1.0),
         camera.size(width, floor::HEIGHT - 2.0),
         palette.elevator_body,
+    );
+    frame.fill_rectangle(
+        camera.point(x, top + 1.0),
+        camera.size(width, 12.0),
+        palette.elevator_band,
+    );
+
+    // The door seam splitting the cab face below the band.
+    frame.fill_rectangle(
+        camera.point(x + width / 2.0 - 0.5, top + 13.0),
+        camera.size(1.0, floor::HEIGHT - 15.0),
+        palette.elevator_band,
     );
 
     let lit = |on: bool| {
@@ -218,36 +271,36 @@ fn draw_elevator(
     triangle(
         frame,
         Direction::Up,
-        camera.point(x + 5.0, top + 8.0),
-        camera.px(3.5),
+        camera.point(x + 6.0, top + 7.0),
+        camera.px(3.0),
         lit(elevator.going_up_indicator()),
     );
     triangle(
         frame,
         Direction::Down,
-        camera.point(x + width - 5.0, top + 8.0),
-        camera.px(3.5),
+        camera.point(x + width - 6.0, top + 7.0),
+        camera.px(3.0),
         lit(elevator.going_down_indicator()),
     );
 
-    // The floor-position readout, centered between the indicators.
+    // The floor-position readout, centered between the lamps.
     frame.fill_text(canvas::Text {
         content: elevator.current_floor().to_string(),
-        position: camera.point(x + width / 2.0, top + 8.0),
+        position: camera.point(x + width / 2.0, top + 7.0),
         color: palette.elevator_text,
-        size: camera.px(11.0).into(),
+        size: camera.px(9.0).into(),
         font: theme::MONO,
         align_x: text::Alignment::Center,
         align_y: alignment::Vertical::Center,
         ..canvas::Text::default()
     });
 
-    // Lit destination buttons, as many as fit across the car.
+    // Lit destination buttons just under the band, above the riders.
     let dots = ((width - 4.0) / 5.0) as usize;
     for (index, _) in elevator.pressed_floors().into_iter().take(dots).enumerate() {
         let dot = canvas::Path::circle(
-            camera.point(x + 4.0 + index as f64 * 5.0, top + 16.0),
-            camera.px(1.8),
+            camera.point(x + 4.0 + index as f64 * 5.0, top + 16.5),
+            camera.px(1.6),
         );
         frame.fill(&dot, palette.button_lit);
     }
@@ -294,4 +347,63 @@ fn person(frame: &mut canvas::Frame, camera: &Camera, x: f64, y: f64, color: Col
 
 fn faded(color: Color) -> Color {
     color.scale_alpha(0.4)
+}
+
+/// Granita previews — native-only dev tooling (plain module `#[cfg]`;
+/// the walker cannot see through `cfg_attr`).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod previews {
+    use iced::widget::canvas;
+    use iced::{Element, Fill};
+
+    use crate::core::challenge;
+    use crate::core::controller::Controller;
+    use crate::core::event::Event;
+    use crate::core::{World, headless};
+
+    /// A frozen mid-game world: challenge 4 (8 floors, 2 elevators)
+    /// driven ~35 sim-seconds by the naive strategy, so the canvas
+    /// preview shows real traffic — riders, queues, lit buttons —
+    /// instead of an empty lobby. Migrated across reloads.
+    pub struct MidGame {
+        world: World,
+    }
+
+    impl Default for MidGame {
+        fn default() -> Self {
+            let mut world = World::new(&challenge::roster()[3], 7);
+            headless::run(&mut world, &mut Naive, 35 * 60, 1);
+            Self { world }
+        }
+    }
+
+    /// Research §5.1: every elevator serves its own buttons, idles to
+    /// the ground floor, and every call button dispatches elevator 0.
+    struct Naive;
+
+    impl Controller for Naive {
+        fn init(&mut self, _world: &mut World) {}
+
+        fn on_event(&mut self, world: &mut World, event: Event) {
+            match event {
+                Event::Idle { elevator } => world.go_to_floor(elevator, 0.0, false),
+                Event::FloorButtonPressed { elevator, floor } => {
+                    world.go_to_floor(elevator, floor as f64, false);
+                }
+                Event::UpButtonPressed { floor } | Event::DownButtonPressed { floor } => {
+                    world.go_to_floor(0, floor as f64, false);
+                }
+                Event::PassingFloor { .. } | Event::StoppedAtFloor { .. } => {}
+            }
+        }
+    }
+
+    /// Preview: the sim canvas over a busy mid-game world.
+    #[granita::preview]
+    pub fn mid_game(state: &MidGame) -> Element<'_, crate::app::Message> {
+        canvas(super::Still::new(&state.world))
+            .width(Fill)
+            .height(Fill)
+            .into()
+    }
 }

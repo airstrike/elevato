@@ -8,6 +8,7 @@ pub mod action;
 pub mod app;
 pub mod editor;
 pub mod highlight;
+pub mod icon;
 pub mod playback;
 pub mod sim;
 pub mod storage;

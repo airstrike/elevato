@@ -48,7 +48,7 @@ dirs = "6"
 # workspace; a path dependency on that iced must mirror the patch or
 # cargo resolves two incompatible cosmic-text sources.
 [patch.crates-io]
-cosmic-text = { path = "/Users/andy/projects/cosmic-text" }
+cosmic-text = { git = "https://github.com/airstrike/cosmic-text", branch = "span-padding" }
 # granita's own iced deps resolve from crates.io; these path patches unify
 # them with the app's direct path dep (same canonical path → one instance),
 # so granita and elevato share the fork's types (incl. its cosmic-text API).
@@ -64,6 +64,7 @@ crate-type = ["lib", "dylib"]
 
 [build-dependencies]
 granita-build = { path = "/Users/andy/projects/granita/crates/granita-build" }
+iced_lucide = { git = "https://github.com/airstrike/iced_lucide" }
 
 [profile.dev]
 # rpath lives in .cargo/config.toml as a native-target-scoped `-C rpath`

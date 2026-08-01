@@ -13,7 +13,10 @@ pub fn main() -> iced::Result {
 
     iced::application(app::boot, app::update, app::view)
         .subscription(app::subscription)
+        .theme(app::theme)
         .font(theme::MONO_BYTES)
+        .font(elevato::icon::FONT)
+        .default_font(theme::MONO)
         .title("elevato")
         .run()
 }

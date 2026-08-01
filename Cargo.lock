@@ -647,6 +647,7 @@ dependencies = [
 [[package]]
 name = "cosmic-text"
 version = "0.19.0"
+source = "git+https://github.com/airstrike/cosmic-text?branch=span-padding#e450b9c118c43db6d9d1929746d461fc4d46a48d"
 dependencies = [
  "bitflags 2.13.1",
  "fontdb",
@@ -835,6 +836,7 @@ dependencies = [
  "granita",
  "granita-build",
  "iced",
+ "iced_lucide 0.1.0 (git+https://github.com/airstrike/iced_lucide)",
  "log",
  "script",
  "syntect",
@@ -1339,7 +1341,7 @@ dependencies = [
  "iced_core",
  "iced_futures",
  "iced_graphics",
- "iced_lucide",
+ "iced_lucide 0.1.0",
  "iced_renderer",
  "iced_runtime",
  "libloading 0.9.0",
@@ -1543,6 +1545,18 @@ dependencies = [
 [[package]]
 name = "iced_lucide"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "sha2",
+ "subsetter",
+ "toml",
+ "ttf-parser",
+]
+
+[[package]]
+name = "iced_lucide"
+version = "0.1.0"
+source = "git+https://github.com/airstrike/iced_lucide#1ba91f6834a4d522e6e396a7bb86c54c640306ce"
 dependencies = [
  "serde",
  "sha2",

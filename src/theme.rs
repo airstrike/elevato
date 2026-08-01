@@ -3,18 +3,79 @@
 //! and the sim canvas reads its colors from [`palette`]. Solid colors
 //! only: gradients silently no-op on the wasm build.
 
+use iced::theme::palette::Seed;
 use iced::{Color, Font, Theme, color};
 
-/// The bundled monospace face for the editor and canvas labels: Fira
-/// Code (OFL — `assets/fonts/OFL.txt`), embedded so both targets render
-/// identically. The browser gives fontdb no system fonts, so wasm has
-/// no `Font::MONOSPACE` to fall back on.
-pub const MONO_BYTES: &[u8] = include_bytes!("../assets/fonts/FiraCode-Variable.ttf");
+/// Light or dark, the app-level choice driving [`Mode::to_theme`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    Light,
+    #[default]
+    Dark,
+}
 
-/// The bundled face by family name; the variable font's default
-/// instance is Light, but the cosmic-text fork instances the `wght`
-/// axis at the requested weight, so this renders Regular.
-pub const MONO: Font = Font::new("Fira Code");
+impl Mode {
+    /// Reads `ELEVATO_THEME` (native only; wasm follows the default).
+    pub fn from_env() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Ok(value) = std::env::var("ELEVATO_THEME") {
+            if value.eq_ignore_ascii_case("light") {
+                return Self::Light;
+            }
+        }
+        Self::default()
+    }
+
+    /// The other mode.
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Dark => Self::Light,
+            Self::Light => Self::Dark,
+        }
+    }
+
+    /// Builds the iced theme from elevato's seed colors, so stock
+    /// widget defaults (pick_list, sliders, text ladders) inherit the
+    /// design instead of iced's stock palette. Surface colors beyond
+    /// the seed are hand-picked in [`palette`].
+    pub fn to_theme(self) -> Theme {
+        let (name, seed) = match self {
+            Self::Light => (
+                "elevato",
+                Seed {
+                    background: color!(0xf2efe9),
+                    text: color!(0x2b2a27),
+                    primary: color!(0x2e8c5f),
+                    success: color!(0x2e7d43),
+                    warning: color!(0xb08a2e),
+                    danger: color!(0xc0473a),
+                },
+            ),
+            Self::Dark => (
+                "elevato dark",
+                Seed {
+                    background: color!(0x191816),
+                    text: color!(0xece7db),
+                    primary: color!(0x50b481),
+                    success: color!(0x5fbf77),
+                    warning: color!(0xd9c26a),
+                    danger: color!(0xd95f4e),
+                },
+            ),
+        };
+        Theme::custom(name.to_string(), seed)
+    }
+}
+
+/// The one bundled face — Geist Mono (OFL, `assets/fonts/OFL.txt`) —
+/// voicing the editor, chrome, and canvas labels alike. Embedded so
+/// both targets render identically; the browser gives fontdb no system
+/// fonts, so wasm has nothing to fall back on. The cosmic-text fork
+/// instances the variable `wght` axis at the requested weight.
+pub const MONO_BYTES: &[u8] = include_bytes!("../assets/fonts/GeistMono-Variable.ttf");
+
+/// The bundled face by family name.
+pub const MONO: Font = Font::new("Geist Mono");
 
 /// Named semantic colors, resolved per theme brightness by [`palette`].
 #[derive(Debug, Clone, Copy)]
@@ -31,6 +92,8 @@ pub struct Palette {
     pub floor_line: Color,
     /// The elevator car body.
     pub elevator_body: Color,
+    /// The cab's header band (lamps + floor readout live on it).
+    pub elevator_band: Color,
     /// Text drawn on the elevator body.
     pub elevator_text: Color,
     /// A lit direction indicator or floor call button.
@@ -62,48 +125,53 @@ pub struct Palette {
 /// Resolves the semantic palette for the current theme's brightness.
 pub fn palette(theme: &Theme) -> Palette {
     if is_dark(theme) {
+        // Machine room at night: warm graphite (no blue cast), ivory
+        // text, verdigris lamp-green accents — old elevator-hall lamps.
         Palette {
-            text_primary: color!(0xe6e9f0),
-            text_secondary: color!(0x9aa3b5),
-            canvas_background: color!(0x1c1f26),
-            panel: color!(0x262a33),
-            floor_line: color!(0x3a4050),
-            elevator_body: color!(0x3f7fc4),
-            elevator_text: color!(0xffffff),
-            indicator_lit: color!(0x7ee081),
-            indicator_unlit: color!(0x4a5060),
-            button_lit: color!(0xffd75e),
-            passenger: color!(0xd8dce6),
-            success: color!(0x6fbf73),
-            failure: color!(0xe05a4e),
-            syntax_comment: color!(0x6a7385),
-            syntax_string: color!(0x98c379),
-            syntax_number: color!(0xd19a66),
-            syntax_constant: color!(0x56b6c2),
-            syntax_operator: color!(0xa8b3c9),
-            syntax_keyword: color!(0xc792ea),
+            text_primary: color!(0xece7db),
+            text_secondary: color!(0x98948a),
+            canvas_background: color!(0x191816),
+            panel: color!(0x22211e),
+            floor_line: color!(0x35332e),
+            elevator_body: color!(0x3b3a36),
+            elevator_band: color!(0x2e2d2a),
+            elevator_text: color!(0xf0ecdf),
+            indicator_lit: color!(0x6fd692),
+            indicator_unlit: color!(0x413f3a),
+            button_lit: color!(0xf2eecf),
+            passenger: color!(0xd4cfc2),
+            success: color!(0x5fbf77),
+            failure: color!(0xd95f4e),
+            syntax_comment: color!(0x8a867c),
+            syntax_string: color!(0x9ec978),
+            syntax_number: color!(0xc9a45c),
+            syntax_constant: color!(0x62c1c9),
+            syntax_operator: color!(0xaaa69b),
+            syntax_keyword: color!(0x50b481),
         }
     } else {
+        // Daylight lobby: warm paper, ink text, the same lamp-green.
         Palette {
-            text_primary: color!(0x22262e),
-            text_secondary: color!(0x5c6470),
-            canvas_background: color!(0xf2f3f5),
-            panel: color!(0xe6e8ec),
-            floor_line: color!(0xc9cdd6),
-            elevator_body: color!(0x3b76c0),
-            elevator_text: color!(0xffffff),
-            indicator_lit: color!(0x2e9e46),
-            indicator_unlit: color!(0xb9bfcc),
-            button_lit: color!(0xd9930d),
-            passenger: color!(0x3a4150),
-            success: color!(0x217a33),
-            failure: color!(0xc23a2c),
-            syntax_comment: color!(0x8a919e),
-            syntax_string: color!(0x50a14f),
-            syntax_number: color!(0x986801),
-            syntax_constant: color!(0x0184bc),
-            syntax_operator: color!(0x5c6470),
-            syntax_keyword: color!(0xa626a4),
+            text_primary: color!(0x2b2a27),
+            text_secondary: color!(0x6f6c64),
+            canvas_background: color!(0xf2efe9),
+            panel: color!(0xe8e4da),
+            floor_line: color!(0xcfcabd),
+            elevator_body: color!(0x45443f),
+            elevator_band: color!(0x393833),
+            elevator_text: color!(0xf4f1e8),
+            indicator_lit: color!(0x2e8c5f),
+            indicator_unlit: color!(0xbfbaab),
+            button_lit: color!(0x8a6d1f),
+            passenger: color!(0x3f3d37),
+            success: color!(0x2e7d43),
+            failure: color!(0xc0473a),
+            syntax_comment: color!(0x928d80),
+            syntax_string: color!(0x4e8d3e),
+            syntax_number: color!(0xa07617),
+            syntax_constant: color!(0x137e8a),
+            syntax_operator: color!(0x6f6c64),
+            syntax_keyword: color!(0x2e8c5f),
         }
     }
 }
@@ -236,60 +304,159 @@ pub mod text_editor {
     }
 }
 
-/// Preview: every semantic palette color as a labeled swatch, resolved
-/// against the viewer's active theme at draw time.
-#[cfg_attr(not(target_arch = "wasm32"), granita::preview)]
+/// Granita previews — native-only dev tooling. A plain module `#[cfg]`
+/// (not `cfg_attr` on the fn) because granita's source walker matches
+/// the literal `#[granita::preview]` attribute path and cannot see
+/// through `cfg_attr`.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn palette_swatches() -> iced::Element<'static, crate::app::Message> {
-    use iced::widget::{column, container, row, space, text};
+pub mod previews {
+    use super::*;
 
-    let entries: [(&str, fn(&Palette) -> Color); 19] = [
-        ("text_primary", |p| p.text_primary),
-        ("text_secondary", |p| p.text_secondary),
-        ("canvas_background", |p| p.canvas_background),
-        ("panel", |p| p.panel),
-        ("floor_line", |p| p.floor_line),
-        ("elevator_body", |p| p.elevator_body),
-        ("elevator_text", |p| p.elevator_text),
-        ("indicator_lit", |p| p.indicator_lit),
-        ("indicator_unlit", |p| p.indicator_unlit),
-        ("button_lit", |p| p.button_lit),
-        ("passenger", |p| p.passenger),
-        ("success", |p| p.success),
-        ("failure", |p| p.failure),
-        ("syntax_comment", |p| p.syntax_comment),
-        ("syntax_string", |p| p.syntax_string),
-        ("syntax_number", |p| p.syntax_number),
-        ("syntax_constant", |p| p.syntax_constant),
-        ("syntax_operator", |p| p.syntax_operator),
-        ("syntax_keyword", |p| p.syntax_keyword),
-    ];
+    /// Preview: every semantic palette color as a labeled swatch,
+    /// resolved against the viewer's active theme at draw time.
+    #[granita::preview]
+    pub fn palette_swatches() -> iced::Element<'static, crate::app::Message> {
+        use iced::widget::{column, container, row, space, text};
 
-    container(
-        column(entries.into_iter().map(|(name, pick)| {
-            row![
-                container(space::horizontal().width(56).height(22)).style(swatch(pick)),
-                text(name).font(MONO).size(13),
-            ]
-            .spacing(12)
-            .align_y(iced::Center)
-            .into()
-        }))
-        .spacing(6),
-    )
-    .padding(16)
-    .into()
+        let entries: [(&str, fn(&Palette) -> Color); 20] = [
+            ("text_primary", |p| p.text_primary),
+            ("text_secondary", |p| p.text_secondary),
+            ("canvas_background", |p| p.canvas_background),
+            ("panel", |p| p.panel),
+            ("floor_line", |p| p.floor_line),
+            ("elevator_body", |p| p.elevator_body),
+            ("elevator_band", |p| p.elevator_band),
+            ("elevator_text", |p| p.elevator_text),
+            ("indicator_lit", |p| p.indicator_lit),
+            ("indicator_unlit", |p| p.indicator_unlit),
+            ("button_lit", |p| p.button_lit),
+            ("passenger", |p| p.passenger),
+            ("success", |p| p.success),
+            ("failure", |p| p.failure),
+            ("syntax_comment", |p| p.syntax_comment),
+            ("syntax_string", |p| p.syntax_string),
+            ("syntax_number", |p| p.syntax_number),
+            ("syntax_constant", |p| p.syntax_constant),
+            ("syntax_operator", |p| p.syntax_operator),
+            ("syntax_keyword", |p| p.syntax_keyword),
+        ];
+
+        container(
+            column(entries.into_iter().map(|(name, pick)| {
+                row![
+                    container(space::horizontal().width(56).height(22)).style(swatch(pick)),
+                    text(name).font(MONO).size(13),
+                ]
+                .spacing(12)
+                .align_y(iced::Center)
+                .into()
+            }))
+            .spacing(6),
+        )
+        .padding(16)
+        .into()
+    }
+
+    /// A swatch chip filled with one palette color, theme-resolved at draw.
+    fn swatch(pick: fn(&Palette) -> Color) -> impl Fn(&Theme) -> iced::widget::container::Style {
+        move |theme| iced::widget::container::Style {
+            background: Some(pick(&palette(theme)).into()),
+            border: iced::Border {
+                radius: 4.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
 }
 
-/// A swatch chip filled with one palette color, theme-resolved at draw.
-#[cfg(not(target_arch = "wasm32"))]
-fn swatch(pick: fn(&Palette) -> Color) -> impl Fn(&Theme) -> iced::widget::container::Style {
-    move |theme| iced::widget::container::Style {
-        background: Some(pick(&palette(theme)).into()),
-        border: iced::Border {
-            radius: 4.0.into(),
-            ..Default::default()
-        },
-        ..Default::default()
+pub mod button {
+    //! Button styles for `.style()` on `button` widgets: a deliberate
+    //! hierarchy — one filled `primary` per surface, `outline` for
+    //! secondary actions (shadcn-style), `ghost` for tertiary ones.
+
+    use iced::widget::button::{Status, Style};
+    use iced::{Border, Theme, border};
+
+    use super::palette;
+
+    /// Filled accent — the surface's main action (Start, Apply).
+    pub fn primary(theme: &Theme, status: Status) -> Style {
+        let ladder = theme.palette();
+        let base = Style {
+            background: Some(ladder.primary.base.color.into()),
+            text_color: ladder.primary.base.text,
+            border: border::rounded(6),
+            ..Style::default()
+        };
+        match status {
+            Status::Active | Status::Pressed => base,
+            Status::Hovered => Style {
+                background: Some(ladder.primary.strong.color.into()),
+                ..base
+            },
+            Status::Disabled => faded(base),
+        }
+    }
+
+    /// Outlined, quiet — secondary actions (Restart, Save).
+    pub fn outline(theme: &Theme, status: Status) -> Style {
+        let palette = palette(theme);
+        let base = Style {
+            background: None,
+            text_color: palette.text_primary,
+            border: Border {
+                color: palette.floor_line,
+                width: 1.0,
+                radius: 6.0.into(),
+            },
+            ..Style::default()
+        };
+        match status {
+            Status::Active | Status::Pressed => base,
+            Status::Hovered => Style {
+                background: Some(palette.panel.into()),
+                border: Border {
+                    color: palette.text_secondary,
+                    ..base.border
+                },
+                ..base
+            },
+            Status::Disabled => faded(base),
+        }
+    }
+
+    /// Bare — tertiary actions (speed steps, resets, mode toggle).
+    pub fn ghost(theme: &Theme, status: Status) -> Style {
+        let palette = palette(theme);
+        let base = Style {
+            background: None,
+            text_color: palette.text_secondary,
+            border: border::rounded(6),
+            ..Style::default()
+        };
+        match status {
+            Status::Active | Status::Pressed => base,
+            Status::Hovered => Style {
+                background: Some(palette.panel.into()),
+                text_color: palette.text_primary,
+                ..base
+            },
+            Status::Disabled => faded(base),
+        }
+    }
+
+    fn faded(base: Style) -> Style {
+        Style {
+            text_color: base.text_color.scale_alpha(0.4),
+            background: base
+                .background
+                .map(|background| background.scale_alpha(0.4)),
+            border: Border {
+                color: base.border.color.scale_alpha(0.4),
+                ..base.border
+            },
+            ..base
+        }
     }
 }

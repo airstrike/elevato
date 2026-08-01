@@ -4,11 +4,12 @@
 //! is told about it via [`Instruction`]; the current script error
 //! (compile or runtime) is a read-only prop passed into [`State::view`].
 
-use iced::widget::{button, column, container, row, text, text_editor};
+use iced::widget::{button, column, container, row, space, text, text_editor};
 use iced::{Element, Fill};
 
 use crate::action::Action;
 use crate::highlight;
+use crate::icon;
 use crate::playback;
 use crate::theme;
 
@@ -109,11 +110,35 @@ impl State {
             .style(theme::text_editor::code);
 
         let buttons = row![
-            button(text("Apply").size(13)).on_press(Message::Apply),
-            button(text("Save").size(13)).on_press_maybe(self.dirty.then_some(Message::Save)),
-            button(text("Reset").size(13)).on_press(Message::Reset),
-            button(text("Undo reset").size(13))
-                .on_press_maybe(self.backup.is_some().then_some(Message::UndoReset)),
+            button(
+                row![icon::check().size(13), text("Apply").size(13)]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            )
+            .on_press(Message::Apply)
+            .style(theme::button::primary),
+            button(
+                row![icon::save().size(13), text("Save").size(13)]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            )
+            .on_press_maybe(self.dirty.then_some(Message::Save))
+            .style(theme::button::outline),
+            space::horizontal(),
+            button(
+                row![icon::eraser().size(13), text("Reset").size(13)]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            )
+            .on_press(Message::Reset)
+            .style(theme::button::ghost),
+            button(
+                row![icon::undo_2().size(13), text("Undo reset").size(13)]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            )
+            .on_press_maybe(self.backup.is_some().then_some(Message::UndoReset))
+            .style(theme::button::ghost),
         ]
         .spacing(8);
 
