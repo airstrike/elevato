@@ -35,7 +35,7 @@ edition = "2024"
 elevato-core = { path = "core" }
 script = { path = "script" }
 
-iced = { path = "/Users/andy/projects/iced-web-clipboard", features = ["canvas", "tokio", "advanced"] }
+iced = { path = "/Users/andy/projects/iced-web-clipboard", features = ["canvas", "tokio", "advanced", "selector"] }
 rhai = "1"
 thiserror = "2"
 
