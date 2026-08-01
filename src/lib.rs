@@ -13,5 +13,6 @@ pub mod playback;
 pub mod sim;
 pub mod storage;
 pub mod theme;
+pub mod widget;
 
 pub use elevato_core as core;

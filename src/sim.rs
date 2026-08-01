@@ -55,8 +55,9 @@ impl<Message> canvas::Program<Message> for View<'_> {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let geometry = self.cache.draw(renderer, bounds.size(), |frame| {
+            // No background fill: the workspace card underneath paints
+            // the (rounded) surface both panes share.
             let palette = theme::palette(theme);
-            frame.fill_rectangle(Point::ORIGIN, frame.size(), palette.canvas_background);
             if let Some(world) = self.playback.world() {
                 draw_world(frame, &world, palette);
             }
@@ -92,7 +93,6 @@ impl<Message> canvas::Program<Message> for Still<'_> {
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let palette = theme::palette(theme);
-        frame.fill_rectangle(Point::ORIGIN, frame.size(), palette.canvas_background);
         draw_world(&mut frame, self.world, palette);
         vec![frame.into_geometry()]
     }

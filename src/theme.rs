@@ -233,12 +233,25 @@ pub mod container {
 
     use super::palette;
 
-    /// The root backdrop behind everything.
+    /// The root backdrop behind everything: the panel shade, so the
+    /// workspace cards (drawn in the canvas shade) read as raised
+    /// surfaces against it.
     pub fn root(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {
-            background: Some(palette.canvas_background.into()),
+            background: Some(palette.panel.into()),
             text_color: Some(palette.text_primary),
+            ..Style::default()
+        }
+    }
+
+    /// A workspace card — the editor and the world get the *same*
+    /// rounded surface, so the two halves of the split are twins.
+    pub fn pane(theme: &Theme) -> Style {
+        let palette = palette(theme);
+        Style {
+            background: Some(palette.canvas_background.into()),
+            border: border::rounded(8.0).color(palette.floor_line).width(1),
             ..Style::default()
         }
     }
@@ -280,20 +293,15 @@ pub mod text_editor {
 
     use super::palette;
 
-    /// The Rhai code editor.
+    /// The Rhai code editor: chromeless — its card (the workspace pane
+    /// it sits in) provides the surface and border, so the editor and
+    /// the world canvas dress identically.
     pub fn code(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
-        let border_color = match status {
-            Status::Focused { .. } => palette.elevator_body,
-            Status::Active | Status::Hovered | Status::Disabled => palette.floor_line,
-        };
+        let _ = status;
         Style {
-            background: palette.canvas_background.into(),
-            border: Border {
-                color: border_color,
-                width: 1.0,
-                radius: 4.0.into(),
-            },
+            background: Color::TRANSPARENT.into(),
+            border: Border::default(),
             placeholder: palette.text_secondary,
             value: palette.text_primary,
             selection: Color {
@@ -457,6 +465,33 @@ pub mod button {
                 ..base.border
             },
             ..base
+        }
+    }
+}
+
+pub mod split {
+    //! Divider styling for the workspace [`Split`](crate::widget::split).
+
+    use iced::Background;
+    use iced::Theme;
+
+    use crate::widget::split::{Status, Style};
+
+    use super::palette;
+
+    /// A hairline divider that warms to the accent while grabbed.
+    pub fn divider(theme: &Theme, status: Status) -> Style {
+        let palette = palette(theme);
+        let base = Style {
+            divider_background: Background::Color(palette.floor_line),
+            ..Style::default()
+        };
+        match status {
+            Status::Active | Status::Disabled => base,
+            Status::Hovered | Status::Dragging => Style {
+                divider_background: Background::Color(theme.palette().primary.base.color),
+                ..base
+            },
         }
     }
 }

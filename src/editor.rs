@@ -230,18 +230,13 @@ impl State {
         ]
         .spacing(8);
 
+        // The parent's workspace card provides the surface, border, and
+        // padding — this pane is chromeless content.
         let mut pane = column![editor].spacing(8);
         if let Some(error) = error {
             pane = pane.push(error_panel(error));
         }
-        pane = pane.push(buttons);
-
-        container(pane)
-            .width(Fill)
-            .height(Fill)
-            .padding(8)
-            .style(theme::container::panel)
-            .into()
+        pane.push(buttons).into()
     }
 }
 

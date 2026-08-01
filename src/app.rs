@@ -5,9 +5,7 @@
 
 use iced::keyboard::{self, key::Named};
 use iced::time::{self, milliseconds};
-use iced::widget::{
-    button, canvas, center, column, container, pane_grid, pick_list, row, space, stack, text,
-};
+use iced::widget::{button, canvas, center, column, container, pick_list, row, space, stack, text};
 use iced::{Center, Element, Fill, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
@@ -17,6 +15,7 @@ use crate::playback::{self, Playback};
 use crate::sim;
 use crate::storage;
 use crate::theme;
+use crate::widget::split::{Axis, Split};
 
 /// Top-level application state.
 pub struct App {
@@ -32,15 +31,9 @@ pub struct App {
     cache: canvas::Cache,
     /// Light or dark chrome.
     mode: theme::Mode,
-    /// The editor/world split, draggable at the divider.
-    panes: pane_grid::State<Pane>,
-}
-
-/// What each side of the workspace split holds.
-#[derive(Debug, Clone, Copy)]
-enum Pane {
-    Editor,
-    World,
+    /// The divider position of the workspace split, in pixels from the
+    /// left; `None` splits in half.
+    divider: Option<iced::Pixels>,
 }
 
 /// Resolves the active iced theme from the app's mode.
@@ -79,7 +72,7 @@ pub enum Message {
     /// Cmd+Page Up: step back one challenge.
     PreviousChallenge,
     /// The editor/world divider was dragged.
-    PaneResized(pane_grid::ResizeEvent),
+    SplitResized(iced::Pixels),
     /// An editor pane message.
     Editor(editor::Message),
 }
@@ -126,12 +119,7 @@ pub fn boot() -> (App, Task<Message>) {
             choices,
             cache: canvas::Cache::default(),
             mode: theme::Mode::from_env(),
-            panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
-                axis: pane_grid::Axis::Vertical,
-                ratio: 0.4,
-                a: Box::new(pane_grid::Configuration::Pane(Pane::Editor)),
-                b: Box::new(pane_grid::Configuration::Pane(Pane::World)),
-            }),
+            divider: None,
         },
         Task::none(),
     )
@@ -169,7 +157,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             app.playback.previous_challenge();
             app.cache.clear();
         }
-        Message::PaneResized(event) => app.panes.resize(event.split, event.ratio),
+        Message::SplitResized(position) => app.divider = Some(position),
         Message::Editor(message) => {
             let action = app.editor.update(message);
             if let Some(instruction) = action.instruction {
@@ -221,22 +209,39 @@ pub fn subscription(app: &App) -> Subscription<Message> {
 /// Renders the screen.
 pub fn view(app: &App) -> Element<'_, Message> {
     // Code on the left, world on the right — the reading order of the
-    // game loop: write, then watch — split by a draggable divider, both
-    // sides inset identically so their edges line up.
-    let workspace = pane_grid(&app.panes, |_id, pane, _maximized| {
-        pane_grid::Content::new(match pane {
-            Pane::Editor => container(editor_pane(app)).padding(8).height(Fill),
-            Pane::World => container(world_pane(app)).padding(8).height(Fill),
-        })
-    })
-    .on_resize(8, Message::PaneResized)
+    // game loop: write, then watch — twin rounded cards around a
+    // draggable hairline divider.
+    let workspace = container(
+        Split::new(
+            card(editor_pane(app)),
+            card(world_pane(app)),
+            app.divider,
+            Axis::Vertical,
+        )
+        .on_resize(Message::SplitResized)
+        .min_size_first(260)
+        .min_size_second(320)
+        .style(theme::split::divider),
+    )
     .width(Fill)
-    .height(Fill);
+    .height(Fill)
+    .padding(8);
 
     container(column![toolbar(app), stats_bar(app), workspace])
         .width(Fill)
         .height(Fill)
         .style(theme::container::root)
+        .into()
+}
+
+/// One workspace card: the identical rounded surface both sides of
+/// the split live on.
+fn card(content: Element<'_, Message>) -> Element<'_, Message> {
+    container(content)
+        .width(Fill)
+        .height(Fill)
+        .padding(8)
+        .style(theme::container::pane)
         .into()
 }
 
