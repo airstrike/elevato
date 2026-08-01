@@ -11,6 +11,9 @@ syntect = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dirs = { workspace = true }
+# Native-only: granita is hot-reload dev tooling; its stack (tokio, mio,
+# notify) does not build on wasm32, and previews are a desktop workflow.
+granita = { path = "/Users/andy/projects/granita/crates/granita", features = ["mcp"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { workspace = true, features = ["webgl", "fira-sans"] }
@@ -46,6 +49,30 @@ dirs = "6"
 # cargo resolves two incompatible cosmic-text sources.
 [patch.crates-io]
 cosmic-text = { path = "/Users/andy/projects/cosmic-text" }
+# granita's own iced deps resolve from crates.io; these path patches unify
+# them with the app's direct path dep (same canonical path → one instance),
+# so granita and elevato share the fork's types (incl. its cosmic-text API).
+iced = { path = "/Users/andy/projects/iced-web-clipboard" }
+iced_core = { path = "/Users/andy/projects/iced-web-clipboard/core" }
+iced_futures = { path = "/Users/andy/projects/iced-web-clipboard/futures" }
+iced_graphics = { path = "/Users/andy/projects/iced-web-clipboard/graphics" }
+iced_renderer = { path = "/Users/andy/projects/iced-web-clipboard/renderer" }
+iced_runtime = { path = "/Users/andy/projects/iced-web-clipboard/runtime" }
+
+[lib]
+crate-type = ["lib", "dylib"]
+
+[build-dependencies]
+granita-build = { path = "/Users/andy/projects/granita/crates/granita-build" }
+
+[profile.dev]
+# rpath lives in .cargo/config.toml as a native-target-scoped `-C rpath`
+# rustflag: the profile form would inject `-Wl,-rpath` into the wasm32
+# link, which rust-lld rejects.
+opt-level = 0
+
+[profile.dev.package."*"]
+opt-level = 3
 
 # ----------------------------------------------------------------------
 # Publish flip — clean-clone builds from the airstrike forks.

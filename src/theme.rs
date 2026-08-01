@@ -235,3 +235,61 @@ pub mod text_editor {
         }
     }
 }
+
+/// Preview: every semantic palette color as a labeled swatch, resolved
+/// against the viewer's active theme at draw time.
+#[cfg_attr(not(target_arch = "wasm32"), granita::preview)]
+#[cfg(not(target_arch = "wasm32"))]
+pub fn palette_swatches() -> iced::Element<'static, crate::app::Message> {
+    use iced::widget::{column, container, row, space, text};
+
+    let entries: [(&str, fn(&Palette) -> Color); 19] = [
+        ("text_primary", |p| p.text_primary),
+        ("text_secondary", |p| p.text_secondary),
+        ("canvas_background", |p| p.canvas_background),
+        ("panel", |p| p.panel),
+        ("floor_line", |p| p.floor_line),
+        ("elevator_body", |p| p.elevator_body),
+        ("elevator_text", |p| p.elevator_text),
+        ("indicator_lit", |p| p.indicator_lit),
+        ("indicator_unlit", |p| p.indicator_unlit),
+        ("button_lit", |p| p.button_lit),
+        ("passenger", |p| p.passenger),
+        ("success", |p| p.success),
+        ("failure", |p| p.failure),
+        ("syntax_comment", |p| p.syntax_comment),
+        ("syntax_string", |p| p.syntax_string),
+        ("syntax_number", |p| p.syntax_number),
+        ("syntax_constant", |p| p.syntax_constant),
+        ("syntax_operator", |p| p.syntax_operator),
+        ("syntax_keyword", |p| p.syntax_keyword),
+    ];
+
+    container(
+        column(entries.into_iter().map(|(name, pick)| {
+            row![
+                container(space::horizontal().width(56).height(22)).style(swatch(pick)),
+                text(name).font(MONO).size(13),
+            ]
+            .spacing(12)
+            .align_y(iced::Center)
+            .into()
+        }))
+        .spacing(6),
+    )
+    .padding(16)
+    .into()
+}
+
+/// A swatch chip filled with one palette color, theme-resolved at draw.
+#[cfg(not(target_arch = "wasm32"))]
+fn swatch(pick: fn(&Palette) -> Color) -> impl Fn(&Theme) -> iced::widget::container::Style {
+    move |theme| iced::widget::container::Style {
+        background: Some(pick(&palette(theme)).into()),
+        border: iced::Border {
+            radius: 4.0.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}

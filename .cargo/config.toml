@@ -1,0 +1,5 @@
+# granita's hot-reload cascade needs dynamically-linked dylibs on native
+# builds; wasm32 has no dylibs, so the flag is scoped off it (it breaks
+# the rust-lld link outright if applied there).
+[target.'cfg(not(target_arch = "wasm32"))']
+rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
