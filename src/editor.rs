@@ -22,6 +22,38 @@ pub struct State {
     /// The text Reset replaced, kept for Undo reset. `Content` is not
     /// `Clone`, so backups travel as text snapshots.
     backup: Option<String>,
+    /// Undo history: text snapshots taken *before* each edit burst
+    /// (consecutive typing coalesces into one entry). Restoring puts
+    /// the cursor at the buffer start — a v1 simplification.
+    undo: Vec<String>,
+    /// Redone-able snapshots; cleared by any fresh edit.
+    redo: Vec<String>,
+    /// The kind of the previous edit, for coalescing.
+    last_edit: Option<Edit>,
+}
+
+/// How an edit action groups for undo purposes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Edit {
+    /// A plain character insertion — bursts coalesce.
+    Typing,
+    /// Anything else (newline, delete, paste) — snapshots individually.
+    Other,
+}
+
+/// Undo history depth; older snapshots fall off the far end.
+const UNDO_DEPTH: usize = 200;
+
+/// Classifies an edit action for undo grouping.
+fn edit_kind(action: &text_editor::Action) -> Edit {
+    match action {
+        text_editor::Action::Edit(text_editor::Edit::Insert(character))
+            if !character.is_whitespace() =>
+        {
+            Edit::Typing
+        }
+        _ => Edit::Other,
+    }
 }
 
 /// Editor pane messages.
@@ -38,6 +70,10 @@ pub enum Message {
     Reset,
     /// Undo reset was pressed: restore the backed-up text.
     UndoReset,
+    /// Cmd/Ctrl+Z.
+    Undo,
+    /// Cmd/Ctrl+Shift+Z.
+    Redo,
 }
 
 /// What the parent must do on the editor's behalf.
@@ -56,6 +92,9 @@ impl State {
             content: text_editor::Content::with_text(code),
             dirty: false,
             backup: None,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            last_edit: None,
         }
     }
 
@@ -74,13 +113,17 @@ impl State {
     pub fn update(&mut self, message: Message) -> Action<Instruction, Message> {
         match message {
             Message::Edited(action) => {
-                self.dirty = self.dirty || action.is_edit();
+                if action.is_edit() {
+                    self.record(edit_kind(&action));
+                    self.dirty = true;
+                }
                 self.content.perform(action);
                 Action::none()
             }
             Message::Apply => Action::instruction(Instruction::Apply(self.text())),
             Message::Save => Action::instruction(Instruction::Save(self.text())),
             Message::Reset => {
+                self.record(Edit::Other);
                 self.backup = Some(self.text());
                 self.content = text_editor::Content::with_text(playback::STARTER);
                 self.dirty = true;
@@ -88,12 +131,45 @@ impl State {
             }
             Message::UndoReset => {
                 if let Some(backup) = self.backup.take() {
+                    self.record(Edit::Other);
                     self.content = text_editor::Content::with_text(&backup);
                     self.dirty = true;
                 }
                 Action::none()
             }
+            Message::Undo => {
+                if let Some(snapshot) = self.undo.pop() {
+                    self.redo.push(self.text());
+                    self.content = text_editor::Content::with_text(&snapshot);
+                    self.dirty = true;
+                    self.last_edit = None;
+                }
+                Action::none()
+            }
+            Message::Redo => {
+                if let Some(snapshot) = self.redo.pop() {
+                    self.undo.push(self.text());
+                    self.content = text_editor::Content::with_text(&snapshot);
+                    self.dirty = true;
+                    self.last_edit = None;
+                }
+                Action::none()
+            }
         }
+    }
+
+    /// Books the pre-edit text into the undo history. Consecutive
+    /// typing coalesces into the burst's first snapshot; anything else
+    /// snapshots individually. Any fresh edit invalidates redo.
+    fn record(&mut self, kind: Edit) {
+        self.redo.clear();
+        if kind == Edit::Other || self.last_edit != Some(Edit::Typing) {
+            self.undo.push(self.text());
+            if self.undo.len() > UNDO_DEPTH {
+                self.undo.remove(0);
+            }
+        }
+        self.last_edit = Some(kind);
     }
 
     /// The pane: editor, error panel (when `error` is present), and
@@ -106,6 +182,18 @@ impl State {
             .size(14)
             .font(theme::MONO)
             .on_action(Message::Edited)
+            .key_binding(|press| {
+                let z = matches!(press.key.as_ref(), iced::keyboard::Key::Character("z"));
+                if z && press.modifiers.command() {
+                    Some(text_editor::Binding::Custom(if press.modifiers.shift() {
+                        Message::Redo
+                    } else {
+                        Message::Undo
+                    }))
+                } else {
+                    text_editor::Binding::from_key_press(press)
+                }
+            })
             .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
             .style(theme::text_editor::code);
 
@@ -223,5 +311,39 @@ mod tests {
         assert!(!state.dirty);
         insert(&mut state, 'y');
         assert!(state.dirty);
+    }
+
+    #[test]
+    fn undo_restores_the_text_before_a_typing_burst() {
+        let mut state = State::new("fn init(e, f) {}");
+        insert(&mut state, 'a');
+        insert(&mut state, 'b');
+        insert(&mut state, 'c');
+        let _ = state.update(Message::Undo);
+        assert_eq!(state.text().trim_end(), "fn init(e, f) {}");
+    }
+
+    #[test]
+    fn redo_reapplies_an_undone_burst_and_dies_on_fresh_edits() {
+        let mut state = State::new("fn init(e, f) {}");
+        insert(&mut state, 'x');
+        let _ = state.update(Message::Undo);
+        let _ = state.update(Message::Redo);
+        assert!(state.text().starts_with('x'));
+        let _ = state.update(Message::Undo);
+        insert(&mut state, 'y');
+        let _ = state.update(Message::Redo);
+        assert!(
+            state.text().starts_with('y'),
+            "redo must die after a fresh edit"
+        );
+    }
+
+    #[test]
+    fn a_reset_is_undoable_like_any_other_edit() {
+        let mut state = State::new("fn init(e, f) {}");
+        let _ = state.update(Message::Reset);
+        let _ = state.update(Message::Undo);
+        assert_eq!(state.text().trim_end(), "fn init(e, f) {}");
     }
 }

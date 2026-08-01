@@ -166,11 +166,19 @@ impl Playback {
         self.running = false;
     }
 
-    /// Advances to the next challenge (the success banner's button); a
-    /// no-op on the last one.
+    /// Advances to the next challenge (the success banner's button and
+    /// the Cmd+Page Down hotkey); a no-op on the last one.
     pub fn next_challenge(&mut self) {
         if self.challenge + 1 < self.roster.len() {
             self.select_challenge(self.challenge + 1);
+        }
+    }
+
+    /// Steps back to the previous challenge (Cmd+Page Up); a no-op on
+    /// the first one.
+    pub fn previous_challenge(&mut self) {
+        if let Some(previous) = self.challenge.checked_sub(1) {
+            self.select_challenge(previous);
         }
     }
 

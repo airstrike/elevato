@@ -3,9 +3,12 @@
 //! [`crate::playback::Playback`], which owns every rule about running,
 //! seeding, and timescale, composed with the [`crate::editor`] cell.
 
+use iced::keyboard::{self, key::Named};
 use iced::time::{self, milliseconds};
-use iced::widget::{button, canvas, center, column, container, pick_list, row, space, stack, text};
-use iced::{Center, Element, Fill, Length, Subscription, Task};
+use iced::widget::{
+    button, canvas, center, column, container, pane_grid, pick_list, row, space, stack, text,
+};
+use iced::{Center, Element, Fill, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
 use crate::editor;
@@ -29,6 +32,15 @@ pub struct App {
     cache: canvas::Cache,
     /// Light or dark chrome.
     mode: theme::Mode,
+    /// The editor/world split, draggable at the divider.
+    panes: pane_grid::State<Pane>,
+}
+
+/// What each side of the workspace split holds.
+#[derive(Debug, Clone, Copy)]
+enum Pane {
+    Editor,
+    World,
 }
 
 /// Resolves the active iced theme from the app's mode.
@@ -64,6 +76,10 @@ pub enum Message {
     SlowDown,
     /// The light/dark toggle was pressed.
     ToggleMode,
+    /// Cmd+Page Up: step back one challenge.
+    PreviousChallenge,
+    /// The editor/world divider was dragged.
+    PaneResized(pane_grid::ResizeEvent),
     /// An editor pane message.
     Editor(editor::Message),
 }
@@ -110,6 +126,12 @@ pub fn boot() -> (App, Task<Message>) {
             choices,
             cache: canvas::Cache::default(),
             mode: theme::Mode::from_env(),
+            panes: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
+                axis: pane_grid::Axis::Vertical,
+                ratio: 0.4,
+                a: Box::new(pane_grid::Configuration::Pane(Pane::Editor)),
+                b: Box::new(pane_grid::Configuration::Pane(Pane::World)),
+            }),
         },
         Task::none(),
     )
@@ -138,7 +160,16 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
         }
         Message::SpeedUp => app.playback.speed_up(),
         Message::SlowDown => app.playback.slow_down(),
-        Message::ToggleMode => app.mode = app.mode.toggle(),
+        Message::ToggleMode => {
+            app.mode = app.mode.toggle();
+            // Cached geometry bakes the old palette in; force a redraw.
+            app.cache.clear();
+        }
+        Message::PreviousChallenge => {
+            app.playback.previous_challenge();
+            app.cache.clear();
+        }
+        Message::PaneResized(event) => app.panes.resize(event.split, event.ratio),
         Message::Editor(message) => {
             let action = app.editor.update(message);
             if let Some(instruction) = action.instruction {
@@ -165,47 +196,69 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
     Task::none()
 }
 
-/// Ticks every 16 ms while playback runs; silent while paused, so a
-/// paused app costs nothing.
+/// Ticks every 16 ms while playback runs (silent while paused, so a
+/// paused app costs nothing), plus the challenge hotkeys:
+/// Cmd+Page Down / Cmd+Page Up step through the roster.
 pub fn subscription(app: &App) -> Subscription<Message> {
-    if app.playback.is_running() {
+    let tick = if app.playback.is_running() {
         time::every(milliseconds(16)).map(|_| Message::Tick)
     } else {
         Subscription::none()
-    }
+    };
+    let hotkeys = keyboard::listen().filter_map(|event| match event {
+        keyboard::Event::KeyPressed { key, modifiers, .. } if modifiers.command() => {
+            match key.as_ref() {
+                keyboard::Key::Named(Named::PageDown) => Some(Message::NextChallenge),
+                keyboard::Key::Named(Named::PageUp) => Some(Message::PreviousChallenge),
+                _ => None,
+            }
+        }
+        _ => None,
+    });
+    Subscription::batch([tick, hotkeys])
 }
 
 /// Renders the screen.
 pub fn view(app: &App) -> Element<'_, Message> {
-    let world = canvas(sim::View::new(&app.playback, &app.cache))
-        .width(Fill)
-        .height(Fill);
-
-    let world: Element<'_, Message> = if app.playback.ended() {
-        stack![world, center(banner(&app.playback))].into()
-    } else {
-        world.into()
-    };
-
-    // The editor panel shows whichever script error is current: the
-    // last Apply's compile error until the next Apply, else whatever
-    // stopped the running attempt (an `init` failure or runtime throw).
-    let error = app.apply_error.as_ref().or_else(|| app.playback.error());
-
     // Code on the left, world on the right — the reading order of the
-    // game loop: write, then watch.
-    let workspace = row![
-        container(app.editor.view(error).map(Message::Editor))
-            .width(Length::FillPortion(2))
-            .height(Fill),
-        container(world).width(Length::FillPortion(3)).height(Fill),
-    ];
+    // game loop: write, then watch — split by a draggable divider, both
+    // sides inset identically so their edges line up.
+    let workspace = pane_grid(&app.panes, |_id, pane, _maximized| {
+        pane_grid::Content::new(match pane {
+            Pane::Editor => container(editor_pane(app)).padding(8).height(Fill),
+            Pane::World => container(world_pane(app)).padding(8).height(Fill),
+        })
+    })
+    .on_resize(8, Message::PaneResized)
+    .width(Fill)
+    .height(Fill);
 
     container(column![toolbar(app), stats_bar(app), workspace])
         .width(Fill)
         .height(Fill)
         .style(theme::container::root)
         .into()
+}
+
+/// The world side of the split: the sim canvas, with the end-of-run
+/// banner stacked over it once the challenge decides.
+fn world_pane(app: &App) -> Element<'_, Message> {
+    let world = canvas(sim::View::new(&app.playback, &app.cache))
+        .width(Fill)
+        .height(Fill);
+    if app.playback.ended() {
+        stack![world, center(banner(&app.playback))].into()
+    } else {
+        world.into()
+    }
+}
+
+/// The editor side of the split, fed whichever script error is current:
+/// the last Apply's compile error until the next Apply, else whatever
+/// stopped the running attempt (an `init` failure or runtime throw).
+fn editor_pane(app: &App) -> Element<'_, Message> {
+    let error = app.apply_error.as_ref().or_else(|| app.playback.error());
+    app.editor.view(error).map(Message::Editor)
 }
 
 // -------------------------------------------------------------- toolbar
@@ -232,18 +285,9 @@ fn toolbar(app: &App) -> Element<'_, Message> {
         theme::Mode::Light => icon::moon(),
     };
 
+    // The main action anchors the row's end: …, Restart, then Start.
     let bar = row![
         picker,
-        button(toggle)
-            .on_press(Message::Toggle)
-            .style(theme::button::primary),
-        button(
-            row![icon::rotate_ccw().size(13), text("Restart").size(13)]
-                .spacing(6)
-                .align_y(Center)
-        )
-        .on_press(Message::Restart)
-        .style(theme::button::outline),
         space::horizontal(),
         button(icon::minus().size(13))
             .on_press(Message::SlowDown)
@@ -257,6 +301,16 @@ fn toolbar(app: &App) -> Element<'_, Message> {
         button(mode.size(13))
             .on_press(Message::ToggleMode)
             .style(theme::button::ghost),
+        button(
+            row![icon::rotate_ccw().size(13), text("Restart").size(13)]
+                .spacing(6)
+                .align_y(Center)
+        )
+        .on_press(Message::Restart)
+        .style(theme::button::outline),
+        button(toggle)
+            .on_press(Message::Toggle)
+            .style(theme::button::primary),
     ]
     .spacing(8)
     .align_y(Center);
