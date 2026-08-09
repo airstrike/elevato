@@ -4,12 +4,14 @@
 //! [`crate::playback::Playback`] composed with the [`crate::editor`]
 //! cell.
 
+use iced::event::{self, Event};
 use iced::keyboard::{self, key::Named};
 use iced::time::{self, milliseconds};
 use iced::widget::{
     Id, button, canvas, center, column, container, pick_list, row, selector, space, stack, text,
     text_editor,
 };
+use iced::window;
 use iced::{Center, Element, Fill, Pixels, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
@@ -63,13 +65,22 @@ struct Game {
     /// Live keyboard modifiers, tracked so clicks can tell whether the
     /// command key is down (cmd+click = jump to documentation).
     modifiers: keyboard::Modifiers,
+    /// The latest known viewport width, deciding wide vs narrow layout.
+    viewport_width: f32,
 }
 
-/// The right card's faces.
+/// Below this viewport width the split gives way to the single-card
+/// narrow layout (its two panes need 260 + 320 px just to exist).
+const NARROW: f32 = 700.0;
+
+/// The card faces: two on the wide layout's right card, three on the
+/// narrow layout's single card (where the editor is a tab too).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     /// The running world.
     Player,
+    /// The code editor (narrow layout only).
+    Code,
     /// The API reference.
     Api,
 }
@@ -121,6 +132,8 @@ pub enum Message {
     Docs(docs::Message),
     /// The keyboard modifier state changed.
     ModifiersChanged(keyboard::Modifiers),
+    /// The window was resized.
+    Resized(f32),
     /// An editor pane message.
     Editor(editor::Message),
 }
@@ -148,11 +161,11 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             // Half the measured viewport seeds the divider so the twin
             // cards come up even; an unmeasurable splash (shouldn't
             // happen) falls back to the split's own halving.
-            let divider = target
+            let width = target
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
-                .map(|bounds| Pixels(bounds.width / 2.0));
-            app.screen = Screen::Game(Box::new(Game::new(divider)));
+                .map(|bounds| bounds.width);
+            app.screen = Screen::Game(Box::new(Game::new(width)));
         }
         Message::ToggleMode => {
             app.mode = app.mode.toggle();
@@ -194,7 +207,11 @@ pub fn subscription(app: &App) -> Subscription<Message> {
         keyboard::Event::ModifiersChanged(modifiers) => Some(Message::ModifiersChanged(modifiers)),
         _ => None,
     });
-    Subscription::batch([tick, hotkeys])
+    let resizes = event::listen_with(|event, _status, _window| match event {
+        Event::Window(window::Event::Resized(size)) => Some(Message::Resized(size.width)),
+        _ => None,
+    });
+    Subscription::batch([tick, hotkeys, resizes])
 }
 
 /// Renders whichever screen is up.
@@ -243,7 +260,7 @@ impl Game {
     /// built-in starter) on challenge 1, paused until Start is pressed
     /// (the original's flow), with the divider seeded from the measured
     /// viewport.
-    fn new(divider: Option<Pixels>) -> Self {
+    fn new(viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
@@ -280,10 +297,11 @@ impl Game {
             apply_error,
             choices,
             cache: canvas::Cache::default(),
-            divider,
+            divider: viewport_width.map(|width| Pixels(width / 2.0)),
             tab: Tab::Player,
             docs: docs::State::new(),
             modifiers: keyboard::Modifiers::default(),
+            viewport_width: viewport_width.unwrap_or(1280.0),
         }
     }
 
@@ -316,6 +334,7 @@ impl Game {
             Message::SplitResized(position) => self.divider = Some(position),
             Message::Tab(tab) => self.tab = tab,
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
+            Message::Resized(width) => self.viewport_width = width,
             Message::Docs(message) => {
                 // A cmd+click in the reference keeps browsing: resolve
                 // the identifier the click landed on and jump to it.
@@ -384,8 +403,12 @@ impl Game {
         Task::none()
     }
 
-    /// Renders the game screen.
+    /// Renders the game screen: the split workspace on wide
+    /// viewports, the single tabbed card on narrow ones (phones).
     fn view(&self, mode: theme::Mode) -> Element<'_, Message> {
+        if self.viewport_width < NARROW {
+            return self.narrow_view(mode);
+        }
         // Code on the left, world on the right — the reading order of
         // the game loop: write, then watch — twin rounded cards around
         // a draggable hairline divider.
@@ -423,20 +446,137 @@ impl Game {
         .spacing(4);
 
         let face: Element<'_, Message> = match self.tab {
-            Tab::Player => {
-                let world = canvas(sim::View::new(&self.playback, &self.cache))
-                    .width(Fill)
-                    .height(Fill);
-                if self.playback.ended() {
-                    stack![world, center(banner(&self.playback))].into()
-                } else {
-                    world.into()
-                }
-            }
+            // Code is a narrow-layout face; wide has the editor card.
+            Tab::Player | Tab::Code => self.player_face(),
             Tab::Api => self.docs.view().map(Message::Docs),
         };
 
         column![tabs, face].spacing(8).into()
+    }
+
+    /// The running world: the sim canvas with the end-of-run banner
+    /// stacked over it once the challenge decides.
+    fn player_face(&self) -> Element<'_, Message> {
+        let world = canvas(sim::View::new(&self.playback, &self.cache))
+            .width(Fill)
+            .height(Fill);
+        if self.playback.ended() {
+            stack![world, center(banner(&self.playback))].into()
+        } else {
+            world.into()
+        }
+    }
+
+    /// The narrow (phone) layout: compact toolbar and stats over one
+    /// card where the world, the editor, and the reference are tabs.
+    fn narrow_view(&self, mode: theme::Mode) -> Element<'_, Message> {
+        let tabs = row![
+            tab_button("Player", Tab::Player, self.tab),
+            tab_button("Code", Tab::Code, self.tab),
+            tab_button("API", Tab::Api, self.tab),
+        ]
+        .spacing(4);
+
+        let face: Element<'_, Message> = match self.tab {
+            Tab::Player => self.player_face(),
+            Tab::Code => self.editor_pane(),
+            Tab::Api => self.docs.view().map(Message::Docs),
+        };
+
+        let workspace = container(card(column![tabs, face].spacing(8).into()))
+            .width(Fill)
+            .height(Fill)
+            .padding(8);
+
+        container(column![
+            self.compact_toolbar(mode),
+            self.compact_stats(),
+            workspace
+        ])
+        .width(Fill)
+        .height(Fill)
+        .style(theme::container::root)
+        .into()
+    }
+
+    /// The narrow toolbar: the picker on its own line, icon-only
+    /// controls beneath it.
+    fn compact_toolbar(&self, mode: theme::Mode) -> Element<'_, Message> {
+        let picker = pick_list(
+            self.choices.get(self.playback.challenge_index()).cloned(),
+            self.choices.as_slice(),
+            |choice: &Choice| choice.label.clone(),
+        )
+        .on_select(Message::ChallengePicked)
+        .text_size(13)
+        .width(Fill);
+
+        let toggle = if self.playback.is_running() {
+            icon::pause()
+        } else {
+            icon::play()
+        };
+        let mode = match mode {
+            theme::Mode::Dark => icon::sun(),
+            theme::Mode::Light => icon::moon(),
+        };
+
+        let controls = row![
+            button(icon::minus().size(13))
+                .on_press(Message::SlowDown)
+                .style(theme::button::ghost),
+            text(format!("{}×", self.playback.timescale()))
+                .size(14)
+                .style(theme::text::primary),
+            button(icon::plus().size(13))
+                .on_press(Message::SpeedUp)
+                .style(theme::button::ghost),
+            space::horizontal(),
+            button(mode.size(13))
+                .on_press(Message::ToggleMode)
+                .style(theme::button::ghost),
+            button(icon::rotate_ccw().size(13))
+                .on_press(Message::Restart)
+                .style(theme::button::outline),
+            button(toggle.size(13))
+                .on_press(Message::Toggle)
+                .style(theme::button::primary),
+        ]
+        .spacing(8)
+        .align_y(Center);
+
+        container(column![picker, controls].spacing(8))
+            .width(Fill)
+            .padding([8, 12])
+            .style(theme::container::panel)
+            .into()
+    }
+
+    /// The narrow stats bar: the seven readouts in two rows.
+    fn compact_stats(&self) -> Element<'_, Message> {
+        let stats = self.playback.stats();
+        let top = row![
+            stat("Transported", stats.transported().to_string()),
+            stat("Elapsed", format!("{:.1}s", stats.elapsed())),
+            stat("Moves", stats.move_count().to_string()),
+            stat("Seed", self.playback.seed().to_string()),
+        ]
+        .spacing(16);
+        let bottom = row![
+            stat(
+                "Transported/s",
+                format!("{:.2}", stats.transported_per_sec())
+            ),
+            stat("Avg wait", format!("{:.1}s", stats.avg_wait_time())),
+            stat("Max wait", format!("{:.1}s", stats.max_wait_time())),
+        ]
+        .spacing(16);
+
+        container(column![top, bottom].spacing(6))
+            .width(Fill)
+            .padding([6, 12])
+            .style(theme::container::panel)
+            .into()
     }
 
     /// The editor side of the split, fed whichever script error is
