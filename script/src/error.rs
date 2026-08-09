@@ -18,6 +18,19 @@ pub enum Error {
     #[error("`fn update` must take (dt, elevators, floors), found {0} parameter(s)")]
     UpdateArity(usize),
 
+    /// A TEA program (`fn model`) without the update that must consume
+    /// its messages.
+    #[error("a program with `fn model` must define `fn update(message, elevators, floors)`")]
+    MissingUpdate,
+
+    /// `fn model` exists, but with a parameter count it cannot have.
+    #[error("`fn model` takes no parameters, or (elevators, floors); found {0}")]
+    ModelArity(usize),
+
+    /// Both dialects' boot functions in one program.
+    #[error("define `fn init` (callbacks) or `fn model` (messages), not both")]
+    AmbiguousMode,
+
     /// A throw or failure inside `init`, `update`, or an event handler.
     /// The inner error's display includes the source position.
     #[error("{0}")]

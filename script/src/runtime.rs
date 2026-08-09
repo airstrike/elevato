@@ -20,10 +20,10 @@ use elevato_core::challenge::{Challenge, Outcome};
 use elevato_core::event::{Direction, Event};
 use elevato_core::stats::Stats;
 use elevato_core::world::DT_MAX;
-use rhai::{AST, Array, CallFnOptions, Dynamic, Engine, FnPtr, Scope};
+use rhai::{AST, Array, CallFnOptions, Dynamic, Engine, FnPtr, Map, Scope};
 
 use crate::api::{self, Binding, Hook, elevator, floor};
-use crate::{Error, Program};
+use crate::{Error, Mode, Program};
 
 /// Hard cap on drain rounds per dispatch point, mirroring
 /// [`elevato_core::headless`]: a handler cascade past this many rounds
@@ -45,7 +45,10 @@ pub struct Runtime {
     /// The handle arrays passed to `init` and `update`.
     elevators: Array,
     floors: Array,
-    has_update: bool,
+    mode: Mode,
+    /// The TEA dialect's state, `this`-bound into every `update` call;
+    /// [`Dynamic::UNIT`] in classic mode.
+    model: Dynamic,
     /// Declared parameter counts per script function name (several
     /// entries when a name is overloaded by arity). Closure params
     /// include their captures, which arrive curried at call time —
@@ -58,7 +61,7 @@ impl std::fmt::Debug for Runtime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Runtime")
             .field("world", &self.world)
-            .field("has_update", &self.has_update)
+            .field("mode", &self.mode)
             .finish_non_exhaustive()
     }
 }
@@ -79,7 +82,7 @@ impl Runtime {
     /// the initial idle round exactly like the original's `world.init()`
     /// (and [`elevato_core::headless::run`]).
     pub fn new(program: Program, challenge: &Challenge, seed: u64) -> Result<Self, Error> {
-        let Program { ast, has_update } = program;
+        let Program { ast, mode } = program;
 
         let mut arities: HashMap<String, Vec<usize>> = HashMap::new();
         for function in ast.iter_functions() {
@@ -104,6 +107,10 @@ impl Runtime {
             .map(|index| Dynamic::from(floor::Handle::new(world.clone(), registry.clone(), index)))
             .collect();
 
+        if matches!(mode, Mode::Tea { .. }) {
+            registry.borrow_mut().tea = true;
+        }
+
         let mut runtime = Self {
             engine: api::engine(),
             ast,
@@ -112,20 +119,45 @@ impl Runtime {
             registry,
             elevators,
             floors,
-            has_update,
+            mode,
+            model: Dynamic::UNIT,
             arities,
         };
 
-        // Top-level statements run exactly once, here, before init —
-        // eval_ast(false) everywhere later keeps them from re-running.
+        // Top-level statements run exactly once, here, before the boot
+        // function — eval_ast(false) everywhere later keeps them from
+        // re-running.
         let options = CallFnOptions::new().eval_ast(true).rewind_scope(false);
-        let _: Dynamic = runtime.engine.call_fn_with_options(
-            options,
-            &mut runtime.scope,
-            &runtime.ast,
-            "init",
-            (runtime.elevators.clone(), runtime.floors.clone()),
-        )?;
+        match mode {
+            Mode::Classic { .. } => {
+                let _: Dynamic = runtime.engine.call_fn_with_options(
+                    options,
+                    &mut runtime.scope,
+                    &runtime.ast,
+                    "init",
+                    (runtime.elevators.clone(), runtime.floors.clone()),
+                )?;
+            }
+            Mode::Tea { model_takes_world } => {
+                runtime.model = if model_takes_world {
+                    runtime.engine.call_fn_with_options(
+                        options,
+                        &mut runtime.scope,
+                        &runtime.ast,
+                        "model",
+                        (runtime.elevators.clone(), runtime.floors.clone()),
+                    )?
+                } else {
+                    runtime.engine.call_fn_with_options(
+                        options,
+                        &mut runtime.scope,
+                        &runtime.ast,
+                        "model",
+                        (),
+                    )?
+                };
+            }
+        }
 
         {
             let mut world = runtime.world.borrow_mut();
@@ -147,16 +179,26 @@ impl Runtime {
         if self.world.borrow().ended() {
             return Ok(());
         }
-        if self.has_update {
-            let dt = substeps as f64 * DT_MAX;
-            let options = CallFnOptions::new().eval_ast(false);
-            let _: Dynamic = self.engine.call_fn_with_options(
-                options,
-                &mut self.scope,
-                &self.ast,
-                "update",
-                (dt, self.elevators.clone(), self.floors.clone()),
-            )?;
+        let dt = substeps as f64 * DT_MAX;
+        match self.mode {
+            Mode::Classic { has_update: true } => {
+                let options = CallFnOptions::new().eval_ast(false);
+                let _: Dynamic = self.engine.call_fn_with_options(
+                    options,
+                    &mut self.scope,
+                    &self.ast,
+                    "update",
+                    (dt, self.elevators.clone(), self.floors.clone()),
+                )?;
+            }
+            Mode::Classic { has_update: false } => {}
+            Mode::Tea { .. } => {
+                // Time is a message like any other.
+                let mut message = Map::new();
+                message.insert("kind".into(), "tick".into());
+                message.insert("dt".into(), dt.into());
+                self.deliver(message)?;
+            }
         }
         for _ in 0..substeps {
             if self.world.borrow().ended() {
@@ -194,7 +236,7 @@ impl Runtime {
     /// Drains the event queue to the bound handlers until quiescent
     /// (capped at [`DISPATCH_ROUNDS`]). Never holds a world or registry
     /// borrow while script code runs.
-    fn dispatch(&self) -> Result<(), Error> {
+    fn dispatch(&mut self) -> Result<(), Error> {
         for _ in 0..DISPATCH_ROUNDS {
             let events = self.world.borrow_mut().drain_events();
             if events.is_empty() {
@@ -207,9 +249,100 @@ impl Runtime {
         Ok(())
     }
 
+    /// Routes one world event: classic mode invokes the bound handlers,
+    /// TEA mode folds a message into the model through `update`.
+    fn dispatch_event(&mut self, event: Event) -> Result<(), Error> {
+        if matches!(self.mode, Mode::Tea { .. }) {
+            let message = self.message(event);
+            return self.deliver(message);
+        }
+        self.dispatch_bindings(event)
+    }
+
+    /// The message map for a world event: `kind` (the `Event` name in
+    /// snake_case) plus that event's fields — handles for elevators and
+    /// floors, plain values for the rest.
+    fn message(&self, event: Event) -> Map {
+        let mut message = Map::new();
+        let mut put = |key: &str, value: Dynamic| {
+            message.insert(key.into(), value);
+        };
+        match event {
+            Event::Idle { elevator } => {
+                put("kind", "idle".into());
+                put("elevator", self.elevators[elevator].clone());
+            }
+            Event::FloorButtonPressed { elevator, floor } => {
+                put("kind", "floor_button_pressed".into());
+                put("elevator", self.elevators[elevator].clone());
+                put("floor", (floor as i64).into());
+            }
+            Event::PassingFloor {
+                elevator,
+                floor,
+                direction,
+            } => {
+                put("kind", "passing_floor".into());
+                put("elevator", self.elevators[elevator].clone());
+                put("floor", (floor as i64).into());
+                put(
+                    "direction",
+                    match direction {
+                        Direction::Up => "up".into(),
+                        Direction::Down => "down".into(),
+                    },
+                );
+            }
+            Event::StoppedAtFloor { elevator, floor } => {
+                put("kind", "stopped_at_floor".into());
+                put("elevator", self.elevators[elevator].clone());
+                put("floor", (floor as i64).into());
+            }
+            Event::UpButtonPressed { floor } => {
+                put("kind", "up_button_pressed".into());
+                put("floor", self.floors[floor].clone());
+            }
+            Event::DownButtonPressed { floor } => {
+                put("kind", "down_button_pressed".into());
+                put("floor", self.floors[floor].clone());
+            }
+        }
+        message
+    }
+
+    /// Folds one message into the model: `update` runs with the model
+    /// bound as `this`, so mutations persist across calls.
+    fn deliver(&mut self, message: Map) -> Result<(), Error> {
+        let mut full: Vec<Dynamic> = vec![
+            Dynamic::from(message),
+            Dynamic::from(self.elevators.clone()),
+            Dynamic::from(self.floors.clone()),
+        ];
+        if let Some(arity) = self
+            .arities
+            .get("update")
+            .and_then(|declared| declared.iter().copied().max())
+        {
+            full.truncate(arity);
+            while full.len() < arity {
+                full.push(Dynamic::UNIT);
+            }
+        }
+        let mut model = std::mem::take(&mut self.model);
+        let options = CallFnOptions::new()
+            .eval_ast(false)
+            .bind_this_ptr(&mut model);
+        let result: Result<Dynamic, _> =
+            self.engine
+                .call_fn_with_options(options, &mut self.scope, &self.ast, "update", full);
+        self.model = model;
+        let _: Dynamic = result?;
+        Ok(())
+    }
+
     /// Invokes every handler bound to `event`, in registration order,
     /// with the arguments the original passed (research §2).
-    fn dispatch_event(&self, event: Event) -> Result<(), Error> {
+    fn dispatch_bindings(&self, event: Event) -> Result<(), Error> {
         let (hook, args): (Hook, Vec<Dynamic>) = match event {
             // The original's idle handlers receive nothing — closures
             // capture their elevator.

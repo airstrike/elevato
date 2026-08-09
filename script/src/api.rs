@@ -78,6 +78,9 @@ pub(crate) struct Binding {
 #[derive(Debug, Default)]
 pub(crate) struct Registry {
     bindings: HashMap<Hook, Vec<Binding>>,
+    /// Set for TEA programs: `on(...)` refuses to bind, since events
+    /// arrive through `fn update(message, …)` instead.
+    pub(crate) tea: bool,
 }
 
 impl Registry {

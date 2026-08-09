@@ -163,6 +163,13 @@ impl Handle {
     /// bind-time error rather than the original's silent never-firing
     /// listener (documented deviation).
     fn on(&self, events: &str, handler: FnPtr) -> Result<(), Box<EvalAltResult>> {
+        if self.registry.borrow().tea {
+            return Err(api::runtime_error(
+                "this program defines `fn model`: events arrive through \
+                 `fn update(message, elevators, floors)`, not `on(...)`"
+                    .to_string(),
+            ));
+        }
         let names: Vec<&str> = events.split_whitespace().collect();
         let multi = names.len() > 1;
         for name in names {

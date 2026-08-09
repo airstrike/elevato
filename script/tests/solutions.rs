@@ -269,3 +269,79 @@ fn init(elevators, floors) {
         "the commanded trip must be visible through move_count"
     );
 }
+
+const NAIVE_TEA: &str = include_str!("solutions/naive_tea.rhai");
+
+#[test]
+fn the_tea_naive_solution_matches_its_classic_twin_byte_for_byte() {
+    let classic = run(NAIVE, 0, SEED, 3700);
+    let tea = run(NAIVE_TEA, 0, SEED, 3700);
+    assert_eq!(
+        classic.stats(),
+        tea.stats(),
+        "identical strategy, identical world"
+    );
+    assert_eq!(classic.outcome(), tea.outcome());
+}
+
+#[test]
+fn the_tea_naive_solution_passes_challenge_one_and_fails_challenge_five() {
+    assert_eq!(run(NAIVE_TEA, 0, SEED, 3700).outcome(), Outcome::Succeeded);
+    assert_eq!(run(NAIVE_TEA, 4, SEED, 4200).outcome(), Outcome::Failed);
+}
+
+#[test]
+fn tea_model_state_persists_across_update_calls() {
+    let source = r#"
+fn model() {
+    #{ launched: false }
+}
+
+fn update(message, elevators, floors) {
+    if message.kind == "tick" && !this.launched {
+        this.launched = true;
+        elevators[0].go_to_floor(2);
+    }
+}
+"#;
+    let runtime = run(source, 0, SEED, 600);
+    let world = runtime.world();
+    assert_eq!(world.elevators()[0].current_floor(), 2);
+    assert_eq!(
+        world.elevators()[0].move_count(),
+        2,
+        "exactly one trip: the launched flag must persist"
+    );
+}
+
+#[test]
+fn binding_on_in_a_tea_program_is_a_runtime_error() {
+    let source = r#"
+fn model() {
+    #{}
+}
+
+fn update(message, elevators, floors) {
+    if message.kind == "idle" {
+        message.elevator.on("idle", || {});
+    }
+}
+"#;
+    let program = Program::compile(source).unwrap();
+    let error = Runtime::new(program, &challenge::roster()[0], SEED)
+        .err()
+        .expect("the initial idle round must surface the on() refusal");
+    assert!(error.to_string().contains("fn model"));
+}
+
+#[test]
+fn tea_programs_without_update_or_with_both_boots_fail_to_compile() {
+    assert!(matches!(
+        Program::compile("fn model() { #{} }"),
+        Err(Error::MissingUpdate)
+    ));
+    assert!(matches!(
+        Program::compile("fn init(e, f) {}\nfn model() { #{} }\nfn update(m, e, f) {}"),
+        Err(Error::AmbiguousMode)
+    ));
+}
