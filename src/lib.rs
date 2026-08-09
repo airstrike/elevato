@@ -6,6 +6,7 @@ granita::previews!();
 
 pub mod action;
 pub mod app;
+pub mod docs;
 pub mod editor;
 pub mod highlight;
 pub mod icon;

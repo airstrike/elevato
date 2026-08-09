@@ -8,6 +8,7 @@ use iced::widget::{button, column, container, row, space, text, text_editor};
 use iced::{Element, Fill};
 
 use crate::action::Action;
+use crate::docs;
 use crate::highlight;
 use crate::icon;
 use crate::playback;
@@ -107,6 +108,13 @@ impl State {
     /// button disables until the next edit.
     pub fn mark_saved(&mut self) {
         self.dirty = false;
+    }
+
+    /// The identifier under the cursor (just set by a click), for the
+    /// parent's cmd+click documentation jumps.
+    pub fn identifier_at_cursor(&self) -> Option<String> {
+        let position = self.content.cursor().position;
+        docs::identifier_in(&self.content.line(position.line)?.text, position.column)
     }
 
     /// Applies an editor message.

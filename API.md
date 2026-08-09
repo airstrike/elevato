@@ -47,6 +47,11 @@ original's "There is a problem with your code").
 | `checkDestinationQueue()` | `check_destination_queue()` | Non-empty queue: start moving to its front. Empty queue (and not mid-dwell): fire `idle`. |
 | `getPressedFloors()` | `pressed_floors` *(get)* | Lit in-elevator buttons, ascending array of ints. |
 | `on(events, handler)` | `on(events, handler)` | See [Events](#events). |
+| — | `is_full` *(get)* | **[new]** `true` when every slot is taken. Capacity is slot-count; `load_factor` is weight-based and cannot answer this. |
+| — | `move_count` *(get)* | **[new]** Floor boundaries this elevator has crossed (what challenges 6 and 7 score). |
+| — | `is_busy` *(get)* | **[new]** `true` during the 1 s door dwell — the elevator cannot be commanded to move. |
+| — | `is_moving` *(get)* | **[new]** `true` while under way toward a destination. |
+| — | `is_on_a_floor` *(get)* | **[new]** `true` when resting exactly on a floor (false after a mid-flight `stop()`). |
 
 ### The destination-queue idiom
 

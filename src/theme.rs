@@ -454,6 +454,38 @@ pub mod button {
         }
     }
 
+    /// A face selector on the right card's tab bar: quiet when
+    /// inactive, raised on the panel shade when active.
+    pub fn tab(active: bool) -> impl Fn(&Theme, Status) -> Style {
+        move |theme, status| {
+            let palette = palette(theme);
+            let base = if active {
+                Style {
+                    background: Some(palette.panel.into()),
+                    text_color: palette.text_primary,
+                    border: border::rounded(6),
+                    ..Style::default()
+                }
+            } else {
+                Style {
+                    background: None,
+                    text_color: palette.text_secondary,
+                    border: border::rounded(6),
+                    ..Style::default()
+                }
+            };
+            match status {
+                Status::Active | Status::Pressed => base,
+                Status::Hovered => Style {
+                    text_color: palette.text_primary,
+                    background: Some(palette.panel.into()),
+                    ..base
+                },
+                Status::Disabled => faded(base),
+            }
+        }
+    }
+
     fn faded(base: Style) -> Style {
         Style {
             text_color: base.text_color.scale_alpha(0.4),

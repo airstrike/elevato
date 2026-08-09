@@ -8,10 +8,12 @@ use iced::keyboard::{self, key::Named};
 use iced::time::{self, milliseconds};
 use iced::widget::{
     Id, button, canvas, center, column, container, pick_list, row, selector, space, stack, text,
+    text_editor,
 };
 use iced::{Center, Element, Fill, Pixels, Subscription, Task};
 
 use crate::core::challenge::{Condition, Outcome};
+use crate::docs;
 use crate::editor;
 use crate::icon;
 use crate::playback::{self, Playback};
@@ -54,6 +56,22 @@ struct Game {
     /// The divider position of the workspace split, in pixels from the
     /// left; seeded from the measured viewport, `None` splits in half.
     divider: Option<Pixels>,
+    /// Which face the right card shows: the world or the reference.
+    tab: Tab,
+    /// The API reference pane.
+    docs: docs::State,
+    /// Live keyboard modifiers, tracked so clicks can tell whether the
+    /// command key is down (cmd+click = jump to documentation).
+    modifiers: keyboard::Modifiers,
+}
+
+/// The right card's faces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    /// The running world.
+    Player,
+    /// The API reference.
+    Api,
 }
 
 /// Resolves the active iced theme from the app's mode.
@@ -97,6 +115,12 @@ pub enum Message {
     PreviousChallenge,
     /// The editor/world divider was dragged.
     SplitResized(Pixels),
+    /// A tab of the right card was selected.
+    Tab(Tab),
+    /// An API-reference pane message.
+    Docs(docs::Message),
+    /// The keyboard modifier state changed.
+    ModifiersChanged(keyboard::Modifiers),
     /// An editor pane message.
     Editor(editor::Message),
 }
@@ -167,6 +191,7 @@ pub fn subscription(app: &App) -> Subscription<Message> {
                 _ => None,
             }
         }
+        keyboard::Event::ModifiersChanged(modifiers) => Some(Message::ModifiersChanged(modifiers)),
         _ => None,
     });
     Subscription::batch([tick, hotkeys])
@@ -256,6 +281,9 @@ impl Game {
             choices,
             cache: canvas::Cache::default(),
             divider,
+            tab: Tab::Player,
+            docs: docs::State::new(),
+            modifiers: keyboard::Modifiers::default(),
         }
     }
 
@@ -286,8 +314,49 @@ impl Game {
                 self.cache.clear();
             }
             Message::SplitResized(position) => self.divider = Some(position),
+            Message::Tab(tab) => self.tab = tab,
+            Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
+            Message::Docs(message) => {
+                // A cmd+click in the reference keeps browsing: resolve
+                // the identifier the click landed on and jump to it.
+                let jump = self.modifiers.command()
+                    && matches!(
+                        &message,
+                        docs::Message::Viewed(text_editor::Action::Click(_))
+                    );
+                let action = self.docs.update(message);
+                if jump {
+                    if let Some(line) = self
+                        .docs
+                        .identifier_at_cursor()
+                        .as_deref()
+                        .and_then(docs::lookup)
+                    {
+                        self.docs.jump_to(line);
+                    }
+                }
+                return action.task.map(Message::Docs);
+            }
             Message::Editor(message) => {
+                // A cmd+click in the editor opens the clicked name's
+                // documentation on the API tab.
+                let jump = self.modifiers.command()
+                    && matches!(
+                        &message,
+                        editor::Message::Edited(text_editor::Action::Click(_))
+                    );
                 let action = self.editor.update(message);
+                if jump {
+                    if let Some(line) = self
+                        .editor
+                        .identifier_at_cursor()
+                        .as_deref()
+                        .and_then(docs::lookup)
+                    {
+                        self.docs.jump_to(line);
+                        self.tab = Tab::Api;
+                    }
+                }
                 if let Some(instruction) = action.instruction {
                     match instruction {
                         editor::Instruction::Apply(source) => {
@@ -343,17 +412,31 @@ impl Game {
             .into()
     }
 
-    /// The world side of the split: the sim canvas, with the end-of-run
-    /// banner stacked over it once the challenge decides.
+    /// The right side of the split: a Player/API tab bar over either
+    /// the sim canvas (with the end-of-run banner stacked once the
+    /// challenge decides) or the API reference.
     fn world_pane(&self) -> Element<'_, Message> {
-        let world = canvas(sim::View::new(&self.playback, &self.cache))
-            .width(Fill)
-            .height(Fill);
-        if self.playback.ended() {
-            stack![world, center(banner(&self.playback))].into()
-        } else {
-            world.into()
-        }
+        let tabs = row![
+            tab_button("Player", Tab::Player, self.tab),
+            tab_button("API", Tab::Api, self.tab),
+        ]
+        .spacing(4);
+
+        let face: Element<'_, Message> = match self.tab {
+            Tab::Player => {
+                let world = canvas(sim::View::new(&self.playback, &self.cache))
+                    .width(Fill)
+                    .height(Fill);
+                if self.playback.ended() {
+                    stack![world, center(banner(&self.playback))].into()
+                } else {
+                    world.into()
+                }
+            }
+            Tab::Api => self.docs.view().map(Message::Docs),
+        };
+
+        column![tabs, face].spacing(8).into()
     }
 
     /// The editor side of the split, fed whichever script error is
@@ -448,6 +531,14 @@ impl Game {
             .style(theme::container::panel)
             .into()
     }
+}
+
+/// One face selector of the right card's tab bar.
+fn tab_button(label: &str, tab: Tab, active: Tab) -> Element<'_, Message> {
+    button(text(label).size(13))
+        .on_press(Message::Tab(tab))
+        .style(theme::button::tab(tab == active))
+        .into()
 }
 
 /// One workspace card: the identical rounded surface both sides of

@@ -243,3 +243,29 @@ fn init(elevators, floors) {
         "unexpected error: {error}"
     );
 }
+
+#[test]
+fn the_tier_one_introspection_properties_are_readable_from_scripts() {
+    let source = r#"
+fn init(elevators, floors) {
+    let e = elevators[0];
+    if e.is_full { throw "empty elevator claims to be full"; }
+    if e.is_busy { throw "parked elevator claims to be dwelling"; }
+    if e.is_moving { throw "parked elevator claims to be moving"; }
+    if !e.is_on_a_floor { throw "parked elevator floats between floors"; }
+    if e.move_count != 0 { throw "fresh elevator has moves"; }
+    e.go_to_floor(2);
+}
+"#;
+    let program = script::Program::compile(source).unwrap();
+    let challenge = &elevato_core::challenge::roster()[0];
+    let mut runtime = script::Runtime::new(program, challenge, 1).unwrap();
+    for _ in 0..600 {
+        runtime.frame(1).unwrap();
+    }
+    let world = runtime.world();
+    assert!(
+        world.elevators()[0].move_count() >= 2,
+        "the commanded trip must be visible through move_count"
+    );
+}

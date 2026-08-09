@@ -115,6 +115,26 @@ impl Handle {
         Ok(())
     }
 
+    fn is_full(&self) -> bool {
+        self.world.borrow().elevators()[self.index].is_full()
+    }
+
+    fn move_count(&self) -> i64 {
+        self.world.borrow().elevators()[self.index].move_count() as i64
+    }
+
+    fn is_busy(&self) -> bool {
+        self.world.borrow().elevators()[self.index].is_busy()
+    }
+
+    fn is_moving(&self) -> bool {
+        self.world.borrow().elevators()[self.index].is_moving()
+    }
+
+    fn is_on_a_floor(&self) -> bool {
+        self.world.borrow().elevators()[self.index].is_on_a_floor()
+    }
+
     fn going_up_indicator(&self) -> bool {
         self.world.borrow().elevators()[self.index].going_up_indicator()
     }
@@ -216,6 +236,13 @@ pub(crate) fn register(engine: &mut Engine) {
         .register_get("load_factor", |handle: &mut Handle| handle.load_factor())
         .register_get("destination_direction", |handle: &mut Handle| {
             handle.destination_direction()
+        })
+        .register_get("is_full", |handle: &mut Handle| handle.is_full())
+        .register_get("move_count", |handle: &mut Handle| handle.move_count())
+        .register_get("is_busy", |handle: &mut Handle| handle.is_busy())
+        .register_get("is_moving", |handle: &mut Handle| handle.is_moving())
+        .register_get("is_on_a_floor", |handle: &mut Handle| {
+            handle.is_on_a_floor()
         })
         .register_get("pressed_floors", |handle: &mut Handle| {
             handle.pressed_floors()
