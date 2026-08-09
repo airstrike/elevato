@@ -228,12 +228,15 @@ pub fn subscription(app: &App) -> Subscription<Message> {
         Subscription::none()
     };
     let hotkeys = keyboard::listen().filter_map(|event| match event {
-        keyboard::Event::KeyPressed { key, modifiers, .. } if modifiers.command() => {
+        keyboard::Event::KeyPressed { key, modifiers, .. }
+            if modifiers.command() || modifiers.control() =>
+        {
             match key.as_ref() {
                 keyboard::Key::Named(Named::PageDown) => Some(Message::NextChallenge),
                 keyboard::Key::Named(Named::PageUp) => Some(Message::PreviousChallenge),
-                // Editor-navigation dialects: vim's C-o/C-i and the
-                // JetBrains/Xcode bracket pair.
+                // Editor-navigation dialects: vim's ctrl+O/ctrl+I
+                // (accepted with cmd too) and the JetBrains/Xcode
+                // bracket pair.
                 keyboard::Key::Character("o") | keyboard::Key::Character("[") => {
                     Some(Message::DocsBack)
                 }
