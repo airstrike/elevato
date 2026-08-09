@@ -11,6 +11,7 @@ syntect = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dirs = { workspace = true }
+open = "5"
 # Native-only: granita is hot-reload dev tooling; its stack (tokio, mio,
 # notify) does not build on wasm32, and previews are a desktop workflow.
 granita = { path = "/Users/andy/projects/granita/crates/granita", features = ["mcp"] }
@@ -20,7 +21,7 @@ iced = { workspace = true, features = ["webgl", "fira-sans"] }
 console_error_panic_hook = "0.1"
 console_log = "1"
 log = "0.4"
-web-sys = { version = "0.3", features = ["Window", "Storage"] }
+web-sys = { version = "0.3", features = ["Window", "Storage", "MediaQueryList"] }
 
 [workspace]
 resolver = "3"

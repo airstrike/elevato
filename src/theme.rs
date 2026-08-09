@@ -15,11 +15,21 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// Reads `ELEVATO_THEME` (native only; wasm follows the default).
+    /// Reads `ELEVATO_THEME` natively; on the web, the browser's
+    /// `prefers-color-scheme`, so the app agrees with the landing card.
     pub fn from_env() -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         if let Ok(value) = std::env::var("ELEVATO_THEME") {
             if value.eq_ignore_ascii_case("light") {
+                return Self::Light;
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let Some(query) = web_sys::window()
+            .and_then(|window| window.match_media("(prefers-color-scheme: light)").ok())
+            .flatten()
+        {
+            if query.matches() {
                 return Self::Light;
             }
         }
@@ -448,6 +458,26 @@ pub mod button {
             Status::Hovered => Style {
                 background: Some(palette.panel.into()),
                 text_color: palette.text_primary,
+                ..base
+            },
+            Status::Disabled => faded(base),
+        }
+    }
+
+    /// A text link: bare accent text that brightens on hover — the
+    /// splash's homage to the original.
+    pub fn link(theme: &Theme, status: Status) -> Style {
+        let ladder = theme.palette();
+        let base = Style {
+            background: None,
+            text_color: ladder.primary.base.color,
+            border: border::rounded(6),
+            ..Style::default()
+        };
+        match status {
+            Status::Active | Status::Pressed => base,
+            Status::Hovered => Style {
+                text_color: ladder.primary.strong.color,
                 ..base
             },
             Status::Disabled => faded(base),

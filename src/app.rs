@@ -115,6 +115,8 @@ pub struct Choice {
 pub enum Message {
     /// The splash's Continue button was pressed.
     Continue,
+    /// The splash's homage link: open the original game in a new tab.
+    OpenOriginal,
     /// The splash measurement came back; build the game with it.
     Measured(Option<selector::Target>),
     /// One playback frame is due. Deliberately a unit variant: the tick
@@ -169,6 +171,15 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
     match message {
         Message::Continue => {
             return selector::find(SPLASH).map(Message::Measured);
+        }
+        Message::OpenOriginal => {
+            const ORIGINAL: &str = "https://play.elevatorsaga.com";
+            #[cfg(target_arch = "wasm32")]
+            if let Some(window) = web_sys::window() {
+                let _ = window.open_with_url_and_target(ORIGINAL, "_blank");
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            let _ = open::that(ORIGINAL);
         }
         Message::Measured(target) => {
             // Half the measured viewport seeds the divider so the twin
@@ -251,9 +262,16 @@ fn splash() -> Element<'static, Message> {
         )
         .on_press(Message::Continue)
         .style(theme::button::primary),
-        text("Based on Elevator Saga by Magnus Wolffelt")
-            .size(12)
-            .style(theme::text::secondary),
+        button(
+            row![
+                text("Based on Elevator Saga by Magnus Wolffelt — play the original").size(12),
+                icon::arrow_up_right().size(12),
+            ]
+            .spacing(4)
+            .align_y(Center),
+        )
+        .on_press(Message::OpenOriginal)
+        .style(theme::button::link),
     ]
     .spacing(20)
     .align_x(Center);
@@ -411,7 +429,10 @@ impl Game {
                 return action.task.map(Message::Editor);
             }
             // Handled at the app level before routing here.
-            Message::Continue | Message::Measured(_) | Message::ToggleMode => {}
+            Message::Continue
+            | Message::Measured(_)
+            | Message::ToggleMode
+            | Message::OpenOriginal => {}
         }
         Task::none()
     }

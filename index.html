@@ -15,19 +15,31 @@
     <meta name="twitter:card" content="summary_large_image" />
     <base data-trunk-public-url />
     <style>
+        /* The landing card wears exactly the iced splash's clothes —
+           panel-shade surface, Geist Mono, the theme's ink and accent —
+           so the wasm handoff reads as one screen coming alive. Colors
+           mirror src/theme.rs; the app reads prefers-color-scheme too,
+           so both stages always agree. */
+        @font-face {
+            font-family: "Geist Mono";
+            src: url("GeistMono-Variable.ttf") format("truetype-variations");
+            font-weight: 100 900;
+        }
         :root {
             color-scheme: light dark;
-            --bg: #f2efe9;
+            --bg: #e8e4da;
             --text: #2b2a27;
-            --muted: #6f6c64;
+            --track: #cfcabd;
             --accent: #2e8c5f;
+            --failure: #c0473a;
         }
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #191816;
+                --bg: #22211e;
                 --text: #ece7db;
-                --muted: #98948a;
+                --track: #35332e;
                 --accent: #50b481;
+                --failure: #d95f4e;
             }
         }
         /* The app canvas is styled `width:100%; height:100%` by the
@@ -50,35 +62,44 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 1.25rem;
-            padding: 2rem;
+            gap: 20px;
             box-sizing: border-box;
-            font: 16px/1.6 system-ui, sans-serif;
+            font-family: "Geist Mono", ui-monospace, monospace;
             color: var(--text);
             text-align: center;
         }
-        #intro h1 { margin: 0; font-size: 2.25rem; }
-        #intro p { max-width: 34rem; margin: 0; }
-        #intro .loading { color: var(--muted); font-style: italic; }
-        #intro footer { color: var(--muted); font-size: 0.85rem; }
-        #intro a { color: var(--accent); }
+        /* The iced splash draws its title at size 56, regular weight. */
+        #intro h1 { margin: 0; font-size: 56px; font-weight: 400; }
+        #intro .loading {
+            width: 180px;
+            height: 2px;
+            background: var(--track);
+            position: relative;
+            overflow: hidden;
+        }
+        #intro .loading::after {
+            content: "";
+            position: absolute;
+            width: 56px;
+            height: 100%;
+            background: var(--accent);
+            animation: sweep 1.1s ease-in-out infinite alternate;
+        }
+        @keyframes sweep {
+            from { left: 0; }
+            to { left: 124px; }
+        }
+        #intro .failure {
+            font-size: 14px;
+            color: var(--failure);
+            max-width: 34rem;
+        }
     </style>
 </head>
 <body>
 <div id="intro">
     <h1>elevato.rs</h1>
-    <p>
-        A faithful rewrite of Elevator Saga in Rust: program a bank of
-        elevators in Rhai, watch the simulation, and clear the
-        challenges — same physics, same rules, deterministic runs. Built
-        with iced, running right here as WebAssembly.
-    </p>
-    <p class="loading">Loading the simulation…</p>
-    <footer>
-        Based on <a href="https://play.elevatorsaga.com">Elevator Saga</a>
-        by Magnus Wolffelt and contributors ·
-        <a href="https://github.com/airstrike/elevato">Source on GitHub</a>
-    </footer>
+    <div class="loading" role="progressbar" aria-label="Loading"></div>
 </div>
 <script>
     // iced appends its canvas to <body> once the wasm app starts; the
@@ -98,9 +119,10 @@
     function bootFailure(detail) {
         const loading = document.querySelector("#intro .loading");
         if (!loading || document.querySelector("body > canvas")) return;
-        loading.style.fontStyle = "normal";
-        loading.style.color = "#d95f4e";
-        loading.textContent = "Boot failed: " + detail;
+        const failure = document.createElement("p");
+        failure.className = "failure";
+        failure.textContent = "Boot failed: " + detail;
+        loading.replaceWith(failure);
     }
     addEventListener("error", (e) => bootFailure(e.message || String(e.error)));
     addEventListener("unhandledrejection", (e) => bootFailure(String(e.reason)));
@@ -108,5 +130,6 @@
 <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="elevato" />
 <link data-trunk rel="copy-file" href="assets/fonts/OFL.txt" />
 <link data-trunk rel="copy-file" href="assets/og.png" />
+<link data-trunk rel="copy-file" href="assets/fonts/GeistMono-Variable.ttf" />
 </body>
 </html>
