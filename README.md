@@ -1,4 +1,4 @@
-# elevato
+# elevato.rs
 
 A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) —
 Magnus Wolffelt's elevator programming game — in Rust: program a bank of

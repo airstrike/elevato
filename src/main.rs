@@ -27,6 +27,6 @@ pub fn main() -> iced::Result {
         .font(theme::MONO_BYTES)
         .font(elevato::icon::FONT)
         .default_font(theme::MONO)
-        .title("elevato")
+        .title("elevato.rs")
         .run()
 }

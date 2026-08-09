@@ -1,60 +1,145 @@
-//! The API reference pane: `assets/api.rhai` rendered read-only in a
-//! text editor with the same Rhai highlighting as the code pane, plus
-//! the jump registry behind cmd+click — every definition line in the
-//! document is a navigation target, from here or from the editor.
+//! The API reference: three Rust-voiced pages (`lib.rs`,
+//! `elevator.rs`, `floor.rs`) rendered read-only through the same
+//! highlighter as the code pane, plus the jump registry behind
+//! cmd+click — struct fields, methods, enum variants (and their
+//! snake_case event names), and entry points all navigate, from the
+//! reference or from the editor.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use iced::widget::text_editor;
+use iced::widget::{column, container, text, text_editor};
 use iced::{Element, Fill};
 
 use crate::action::Action;
 use crate::highlight;
 use crate::theme;
 
-/// The reference document itself — the single source of truth for both
-/// the rendered pane and the jump registry.
-pub const SOURCE: &str = include_str!("../assets/api.rhai");
+/// One page of the reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Page {
+    /// Program shape: `init`, `update`, gotchas, determinism.
+    Lib,
+    /// The `Elevator` struct, impl, and events.
+    Elevator,
+    /// The `Floor` struct, impl, and events.
+    Floor,
+}
 
-/// Name → zero-based line of its definition in [`SOURCE`]. A definition
-/// is a non-comment line: leading `fn` / `let` / `event` / `type`
-/// keywords and `elevator.` / `floor.` receivers are stripped, and the
-/// leading identifier of what remains is the name. First sighting wins,
-/// so overloads (`go_to_floor`) share one entry.
-static REGISTRY: LazyLock<HashMap<String, usize>> = LazyLock::new(|| {
-    let mut registry = HashMap::new();
-    for (line, text) in SOURCE.lines().enumerate() {
-        let Some(name) = definition_name(text) else {
-            continue;
-        };
-        registry.entry(name.to_string()).or_insert(line);
+impl Page {
+    /// Every page, in resolution-preference order for editor clicks.
+    pub const ALL: &[Self] = &[Self::Elevator, Self::Floor, Self::Lib];
+
+    /// The page's source text.
+    pub fn source(self) -> &'static str {
+        match self {
+            Self::Lib => include_str!("../assets/api/lib.rs"),
+            Self::Elevator => include_str!("../assets/api/elevator.rs"),
+            Self::Floor => include_str!("../assets/api/floor.rs"),
+        }
+    }
+
+    /// The file name shown above the pane.
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::Lib => "lib.rs",
+            Self::Elevator => "elevator.rs",
+            Self::Floor => "floor.rs",
+        }
+    }
+}
+
+/// Name → every definition site carrying it. `Event` and `on` exist on
+/// two pages; [`resolve`] picks by preference.
+static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|| {
+    let mut registry: HashMap<String, Vec<(Page, usize)>> = HashMap::new();
+    let mut insert = |name: String, page, line| {
+        let sites = registry.entry(name).or_default();
+        // First sighting per page wins (overloads share an entry).
+        if !sites.iter().any(|&(p, _)| p == page) {
+            sites.push((page, line));
+        }
+    };
+    for &page in Page::ALL {
+        for (line, text) in page.source().lines().enumerate() {
+            let Some(name) = definition_name(text) else {
+                continue;
+            };
+            insert(name.to_string(), page, line);
+            // Enum variants are CamelCase; scripts name the same event
+            // in snake_case inside `on("…")` — register both.
+            if name.starts_with(|c: char| c.is_ascii_uppercase()) {
+                insert(snake_case(name), page, line);
+            }
+        }
+    }
+    // Entry-point parameters read like globals in scripts; point them
+    // at their declaring signature.
+    for (alias, target) in [("dt", "update"), ("elevators", "init"), ("floors", "init")] {
+        if let Some(&(page, line)) = registry.get(target).and_then(|sites| sites.first()) {
+            registry
+                .entry(alias.to_string())
+                .or_default()
+                .push((page, line));
+        }
     }
     registry
 });
 
-/// The line where `name` is defined, if the reference documents it.
-pub fn lookup(name: &str) -> Option<usize> {
-    REGISTRY.get(name).copied()
+/// The definition site for `name`, preferring `preferred`'s page (so a
+/// click on `Event` inside `floor.rs` stays on `floor.rs`), then the
+/// [`Page::ALL`] order.
+pub fn resolve(name: &str, preferred: Option<Page>) -> Option<(Page, usize)> {
+    let sites = REGISTRY.get(name)?;
+    preferred
+        .and_then(|page| sites.iter().find(|&&(p, _)| p == page))
+        .or_else(|| sites.first())
+        .copied()
 }
 
-/// Extracts the defined name from one line of [`SOURCE`], per the
-/// registry's convention.
+/// Extracts the defined name from one line of a page: `pub struct X`,
+/// `pub enum X`, `pub x: T`, `pub fn x(…)`, `fn x(…)`, or a bare
+/// CamelCase enum-variant line.
 fn definition_name(line: &str) -> Option<&str> {
-    let mut rest = line.trim_start();
-    if rest.is_empty() || rest.starts_with("//") {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() || trimmed.starts_with("//") {
         return None;
     }
-    for keyword in ["fn ", "let ", "event ", "type "] {
-        rest = rest.strip_prefix(keyword).unwrap_or(rest).trim_start();
-    }
-    for receiver in ["elevator.", "floor."] {
-        rest = rest.strip_prefix(receiver).unwrap_or(rest);
+    let mut rest = trimmed;
+    for keyword in ["pub ", "struct ", "enum ", "fn "] {
+        rest = rest.strip_prefix(keyword).unwrap_or(rest);
     }
     let end = rest
         .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
         .unwrap_or(rest.len());
-    (end > 0).then(|| &rest[..end])
+    if end == 0 {
+        return None;
+    }
+    let name = &rest[..end];
+    if rest == trimmed {
+        // No keyword was stripped: only bare CamelCase variant lines
+        // count as definitions (`Idle,`, `PassingFloor { … }`).
+        return name
+            .starts_with(|c: char| c.is_ascii_uppercase())
+            .then_some(name);
+    }
+    Some(name)
+}
+
+/// `FloorButtonPressed` → `floor_button_pressed`.
+fn snake_case(name: &str) -> String {
+    let mut snake = String::with_capacity(name.len() + 4);
+    for (index, c) in name.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if index > 0 {
+                snake.push('_');
+            }
+            snake.push(c.to_ascii_lowercase());
+        } else {
+            snake.push(c);
+        }
+    }
+    snake
 }
 
 /// The identifier under `column` in `line`, if any. Shared by the docs
@@ -82,6 +167,7 @@ pub fn identifier_in(line: &str, column: usize) -> Option<String> {
 
 /// The docs pane's state.
 pub struct State {
+    page: Page,
     content: text_editor::Content,
 }
 
@@ -93,11 +179,17 @@ pub enum Message {
 }
 
 impl State {
-    /// A viewer over [`SOURCE`], scrolled to the top.
+    /// A viewer opened on `lib.rs`, at the top.
     pub fn new() -> Self {
         Self {
-            content: text_editor::Content::with_text(SOURCE),
+            page: Page::Lib,
+            content: text_editor::Content::with_text(Page::Lib.source()),
         }
+    }
+
+    /// The page currently shown.
+    pub fn page(&self) -> Page {
+        self.page
     }
 
     /// Applies a viewer message. Edits are silently dropped — the
@@ -121,11 +213,14 @@ impl State {
         identifier_in(&self.content.line(position.line)?.text, position.column)
     }
 
-    /// Moves the cursor to `line` and selects it, scrolling it into
-    /// view. Rebuilt from the top so repeated jumps stay cheap and
-    /// deterministic.
-    pub fn jump_to(&mut self, line: usize) {
+    /// Opens `page` (switching files if needed), moves the cursor to
+    /// `line`, and selects it, scrolling it into view.
+    pub fn open(&mut self, page: Page, line: usize) {
         use text_editor::{Action, Motion};
+        if page != self.page {
+            self.page = page;
+            self.content = text_editor::Content::with_text(page.source());
+        }
         self.content.perform(Action::Move(Motion::DocumentStart));
         for _ in 0..line {
             self.content.perform(Action::Move(Motion::Down));
@@ -133,17 +228,26 @@ impl State {
         self.content.perform(Action::Select(Motion::End));
     }
 
-    /// The pane: the reference under the same highlighter and style as
-    /// the code editor.
+    /// The pane: the current file's name over its source, rendered
+    /// under the same highlighter and style as the code editor.
     pub fn view(&self) -> Element<'_, Message> {
-        text_editor(&self.content)
+        let header = container(
+            text(self.page.file_name())
+                .size(11)
+                .font(theme::MONO)
+                .style(theme::text::secondary),
+        )
+        .padding([2, 4]);
+
+        let source = text_editor(&self.content)
             .height(Fill)
             .size(13)
             .font(theme::MONO)
             .on_action(Message::Viewed)
             .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
-            .style(theme::text_editor::code)
-            .into()
+            .style(theme::text_editor::code);
+
+        column![header, source].spacing(4).into()
     }
 }
 
@@ -157,85 +261,96 @@ impl Default for State {
 mod tests {
     use super::*;
 
-    /// The API contract: every name a script can touch. If a rename or
-    /// addition in `script/` forgets the reference, this list fails.
-    const CONTRACT: &[&str] = &[
-        "init",
-        "update",
-        "dt",
-        "elevators",
-        "floors",
-        "Elevator",
-        "Floor",
-        "go_to_floor",
-        "stop",
-        "check_destination_queue",
-        "destination_queue",
-        "set_destination_queue",
-        "current_floor",
-        "max_passenger_count",
-        "load_factor",
-        "is_full",
-        "destination_direction",
-        "pressed_floors",
-        "move_count",
-        "is_busy",
-        "is_moving",
-        "is_on_a_floor",
-        "going_up_indicator",
-        "going_down_indicator",
-        "on",
-        "floor_num",
-        "level",
-        "up_pressed",
-        "down_pressed",
-        "idle",
-        "floor_button_pressed",
-        "passing_floor",
-        "stopped_at_floor",
-        "up_button_pressed",
-        "down_button_pressed",
+    /// The API contract: every name a script can touch, and the page
+    /// its documentation lives on. A rename or addition in `script/`
+    /// that forgets the reference fails here.
+    const CONTRACT: &[(&str, Page)] = &[
+        ("init", Page::Lib),
+        ("update", Page::Lib),
+        ("dt", Page::Lib),
+        ("elevators", Page::Lib),
+        ("floors", Page::Lib),
+        ("Elevator", Page::Elevator),
+        ("go_to_floor", Page::Elevator),
+        ("stop", Page::Elevator),
+        ("check_destination_queue", Page::Elevator),
+        ("destination_queue", Page::Elevator),
+        ("set_destination_queue", Page::Elevator),
+        ("current_floor", Page::Elevator),
+        ("max_passenger_count", Page::Elevator),
+        ("load_factor", Page::Elevator),
+        ("is_full", Page::Elevator),
+        ("destination_direction", Page::Elevator),
+        ("pressed_floors", Page::Elevator),
+        ("move_count", Page::Elevator),
+        ("is_busy", Page::Elevator),
+        ("is_moving", Page::Elevator),
+        ("is_on_a_floor", Page::Elevator),
+        ("going_up_indicator", Page::Elevator),
+        ("going_down_indicator", Page::Elevator),
+        ("on", Page::Elevator),
+        ("idle", Page::Elevator),
+        ("floor_button_pressed", Page::Elevator),
+        ("passing_floor", Page::Elevator),
+        ("stopped_at_floor", Page::Elevator),
+        ("Floor", Page::Floor),
+        ("floor_num", Page::Floor),
+        ("level", Page::Floor),
+        ("up_pressed", Page::Floor),
+        ("down_pressed", Page::Floor),
+        ("up_button_pressed", Page::Floor),
+        ("down_button_pressed", Page::Floor),
     ];
 
     #[test]
-    fn every_name_in_the_api_contract_has_a_documented_definition() {
-        let missing: Vec<&str> = CONTRACT
+    fn every_name_in_the_api_contract_resolves_to_its_page() {
+        let misplaced: Vec<_> = CONTRACT
             .iter()
-            .copied()
-            .filter(|name| lookup(name).is_none())
+            .filter(|&&(name, page)| resolve(name, None).map(|(p, _)| p) != Some(page))
             .collect();
-        assert!(missing.is_empty(), "undocumented API names: {missing:?}");
+        assert!(misplaced.is_empty(), "wrong or missing: {misplaced:?}");
+    }
+
+    #[test]
+    fn ambiguous_names_prefer_the_page_they_were_clicked_on() {
+        let (page, _) = resolve("Event", Some(Page::Floor)).unwrap();
+        assert_eq!(page, Page::Floor);
+        let (page, _) = resolve("Event", Some(Page::Elevator)).unwrap();
+        assert_eq!(page, Page::Elevator);
+        let (page, _) = resolve("on", None).unwrap();
+        assert_eq!(page, Page::Elevator, "default preference order");
+    }
+
+    #[test]
+    fn camel_case_variants_register_their_snake_case_event_names() {
+        let (page, camel) = resolve("StoppedAtFloor", None).unwrap();
+        let (_, snake) = resolve("stopped_at_floor", None).unwrap();
+        assert_eq!(page, Page::Elevator);
+        assert_eq!(camel, snake, "both spellings share the variant line");
     }
 
     #[test]
     fn definitions_resolve_to_their_own_lines() {
-        let line = lookup("load_factor").expect("load_factor is documented");
-        let text = SOURCE.lines().nth(line).unwrap();
+        let (page, line) = resolve("load_factor", None).unwrap();
+        let text = page.source().lines().nth(line).unwrap();
         assert!(text.contains("load_factor"));
         assert!(!text.trim_start().starts_with("//"));
     }
 
     #[test]
     fn identifiers_resolve_under_and_just_after_the_word() {
-        let line = "    elevator.go_to_floor(n, force);";
-        assert_eq!(identifier_in(line, 15).as_deref(), Some("go_to_floor"));
-        assert_eq!(identifier_in(line, 24).as_deref(), Some("go_to_floor"));
-        assert_eq!(identifier_in(line, 26).as_deref(), Some("n"));
+        let line = "    pub fn go_to_floor(&self, n: i64);";
+        assert_eq!(identifier_in(line, 13).as_deref(), Some("go_to_floor"));
+        assert_eq!(identifier_in(line, 22).as_deref(), Some("go_to_floor"));
         assert_eq!(identifier_in(line, 2), None);
     }
 
     #[test]
-    fn event_names_inside_string_literals_resolve_like_identifiers() {
-        let line = r#"    elevator.on("idle", || {});"#;
-        assert_eq!(identifier_in(line, 18).as_deref(), Some("idle"));
-        assert!(lookup("idle").is_some());
-    }
-
-    #[test]
-    fn jumping_lands_the_cursor_on_the_requested_line() {
+    fn opening_a_page_lands_the_cursor_on_the_requested_line() {
         let mut state = State::new();
-        let line = lookup("stopped_at_floor").unwrap();
-        state.jump_to(line);
+        let (page, line) = resolve("stopped_at_floor", None).unwrap();
+        state.open(page, line);
+        assert_eq!(state.page(), Page::Elevator);
         assert_eq!(state.content.cursor().position.line, line);
     }
 }

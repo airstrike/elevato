@@ -36,6 +36,13 @@ contexts:
       scope: keyword.declaration.rhai
     - match: '\b(?:if|else|switch|for|in|while|loop|do|until|break|continue|return|throw|try|catch)\b'
       scope: keyword.control.rhai
+    # Rust-flavored keywords, for the API reference pages (harmless in
+    # game scripts — none are Rhai identifiers players would use).
+    - match: '\b(?:pub|struct|impl|enum|mod|self|Self|mut|dyn)\b'
+      scope: keyword.declaration.rust
+    # CamelCase names read as types, matching the reference's Rust voice.
+    - match: '\b[A-Z][A-Za-z0-9_]*\b'
+      scope: constant.language.type.rhai
     - match: '[+\-*/%=!<>&^~?.,;:|]+'
       scope: keyword.operator.rhai
 

@@ -6,6 +6,7 @@
 
 use iced::event::{self, Event};
 use iced::keyboard::{self, key::Named};
+use iced::mouse;
 use iced::time::{self, milliseconds};
 use iced::widget::{
     Id, button, canvas, center, column, container, pick_list, row, selector, space, stack, text,
@@ -22,6 +23,7 @@ use crate::playback::{self, Playback};
 use crate::sim;
 use crate::storage;
 use crate::theme;
+use crate::widget::pointer::pointer;
 use crate::widget::split::{Axis, Split};
 
 /// The splash's full-bleed container; measuring it yields the viewport
@@ -83,6 +85,17 @@ pub enum Tab {
     Code,
     /// The API reference.
     Api,
+}
+
+impl Tab {
+    /// The face selector's label.
+    fn label(self) -> &'static str {
+        match self {
+            Self::Player => "Player",
+            Self::Code => "Code",
+            Self::Api => "API",
+        }
+    }
 }
 
 /// Resolves the active iced theme from the app's mode.
@@ -227,7 +240,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
 /// The landing card: title, pitch, credit, and Continue.
 fn splash() -> Element<'static, Message> {
     let content = column![
-        text("elevato").size(56).style(theme::text::primary),
+        text("elevato.rs").size(56).style(theme::text::primary),
         text("Program a bank of elevators in Rhai. Watch the simulation. Clear the challenges.")
             .size(16)
             .style(theme::text::secondary),
@@ -345,13 +358,13 @@ impl Game {
                     );
                 let action = self.docs.update(message);
                 if jump {
-                    if let Some(line) = self
+                    if let Some((page, line)) = self
                         .docs
                         .identifier_at_cursor()
                         .as_deref()
-                        .and_then(docs::lookup)
+                        .and_then(|name| docs::resolve(name, Some(self.docs.page())))
                     {
-                        self.docs.jump_to(line);
+                        self.docs.open(page, line);
                     }
                 }
                 return action.task.map(Message::Docs);
@@ -366,13 +379,13 @@ impl Game {
                     );
                 let action = self.editor.update(message);
                 if jump {
-                    if let Some(line) = self
+                    if let Some((page, line)) = self
                         .editor
                         .identifier_at_cursor()
                         .as_deref()
-                        .and_then(docs::lookup)
+                        .and_then(|name| docs::resolve(name, None))
                     {
-                        self.docs.jump_to(line);
+                        self.docs.open(page, line);
                         self.tab = Tab::Api;
                     }
                 }
@@ -412,10 +425,16 @@ impl Game {
         // Code on the left, world on the right — the reading order of
         // the game loop: write, then watch — twin rounded cards around
         // a draggable hairline divider.
+        let right = column![
+            self.tab_bar(&[Tab::Player, Tab::Api]),
+            card(self.world_pane())
+        ]
+        .spacing(6);
+
         let workspace = container(
             Split::new(
                 card(self.editor_pane()),
-                card(self.world_pane()),
+                right,
                 self.divider,
                 Axis::Vertical,
             )
@@ -435,23 +454,34 @@ impl Game {
             .into()
     }
 
-    /// The right side of the split: a Player/API tab bar over either
-    /// the sim canvas (with the end-of-run banner stacked once the
-    /// challenge decides) or the API reference.
+    /// The face of the right card: the world, or the API reference.
     fn world_pane(&self) -> Element<'_, Message> {
-        let tabs = row![
-            tab_button("Player", Tab::Player, self.tab),
-            tab_button("API", Tab::Api, self.tab),
-        ]
-        .spacing(4);
-
-        let face: Element<'_, Message> = match self.tab {
+        match self.tab {
             // Code is a narrow-layout face; wide has the editor card.
             Tab::Player | Tab::Code => self.player_face(),
-            Tab::Api => self.docs.view().map(Message::Docs),
-        };
+            Tab::Api => self.docs_face(),
+        }
+    }
 
-        column![tabs, face].spacing(8).into()
+    /// The face-selector row, right-aligned, living OUTSIDE the card.
+    fn tab_bar(&self, tabs: &'static [Tab]) -> Element<'_, Message> {
+        let mut bar = row![space::horizontal()].spacing(4);
+        for &tab in tabs {
+            bar = bar.push(tab_button(tab.label(), tab, self.tab));
+        }
+        bar.into()
+    }
+
+    /// The API reference, with a pointer cursor while command is held
+    /// (the cmd+click affordance).
+    fn docs_face(&self) -> Element<'_, Message> {
+        pointer(
+            self.docs.view().map(Message::Docs),
+            self.modifiers
+                .command()
+                .then_some(mouse::Interaction::Pointer),
+        )
+        .into()
     }
 
     /// The running world: the sim canvas with the end-of-run banner
@@ -470,23 +500,22 @@ impl Game {
     /// The narrow (phone) layout: compact toolbar and stats over one
     /// card where the world, the editor, and the reference are tabs.
     fn narrow_view(&self, mode: theme::Mode) -> Element<'_, Message> {
-        let tabs = row![
-            tab_button("Player", Tab::Player, self.tab),
-            tab_button("Code", Tab::Code, self.tab),
-            tab_button("API", Tab::Api, self.tab),
-        ]
-        .spacing(4);
-
         let face: Element<'_, Message> = match self.tab {
             Tab::Player => self.player_face(),
             Tab::Code => self.editor_pane(),
-            Tab::Api => self.docs.view().map(Message::Docs),
+            Tab::Api => self.docs_face(),
         };
 
-        let workspace = container(card(column![tabs, face].spacing(8).into()))
-            .width(Fill)
-            .height(Fill)
-            .padding(8);
+        let workspace = container(
+            column![
+                self.tab_bar(&[Tab::Player, Tab::Code, Tab::Api]),
+                card(face)
+            ]
+            .spacing(6),
+        )
+        .width(Fill)
+        .height(Fill)
+        .padding(8);
 
         container(column![
             self.compact_toolbar(mode),
@@ -585,7 +614,13 @@ impl Game {
     /// runtime throw).
     fn editor_pane(&self) -> Element<'_, Message> {
         let error = self.apply_error.as_ref().or_else(|| self.playback.error());
-        self.editor.view(error).map(Message::Editor)
+        pointer(
+            self.editor.view(error).map(Message::Editor),
+            self.modifiers
+                .command()
+                .then_some(mouse::Interaction::Pointer),
+        )
+        .into()
     }
 
     fn toolbar(&self, mode: theme::Mode) -> Element<'_, Message> {
