@@ -232,17 +232,19 @@ pub fn subscription(app: &App) -> Subscription<Message> {
             if modifiers.command() || modifiers.control() =>
         {
             match key.as_ref() {
-                keyboard::Key::Named(Named::PageDown) => Some(Message::NextChallenge),
-                keyboard::Key::Named(Named::PageUp) => Some(Message::PreviousChallenge),
-                // Editor-navigation dialects: vim's ctrl+O/ctrl+I
-                // (accepted with cmd too) and the JetBrains/Xcode
-                // bracket pair.
-                keyboard::Key::Character("o") | keyboard::Key::Character("[") => {
-                    Some(Message::DocsBack)
+                keyboard::Key::Named(Named::PageDown) if modifiers.command() => {
+                    Some(Message::NextChallenge)
                 }
-                keyboard::Key::Character("i") | keyboard::Key::Character("]") => {
-                    Some(Message::DocsForward)
+                keyboard::Key::Named(Named::PageUp) if modifiers.command() => {
+                    Some(Message::PreviousChallenge)
                 }
+                // Vim's jump list is ctrl+O/ctrl+I on every OS; the
+                // bracket pair follows the platform command key
+                // (JetBrains/Xcode dialect).
+                keyboard::Key::Character("o") if modifiers.control() => Some(Message::DocsBack),
+                keyboard::Key::Character("i") if modifiers.control() => Some(Message::DocsForward),
+                keyboard::Key::Character("[") if modifiers.command() => Some(Message::DocsBack),
+                keyboard::Key::Character("]") if modifiers.command() => Some(Message::DocsForward),
                 _ => None,
             }
         }
