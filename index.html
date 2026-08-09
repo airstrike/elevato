@@ -92,6 +92,18 @@
         }
     });
     observer.observe(document.body, { childList: true });
+
+    // Boot-failure surface: consoles are invisible on phones, so any
+    // uncaught error or rejected promise replaces the loading line.
+    function bootFailure(detail) {
+        const loading = document.querySelector("#intro .loading");
+        if (!loading || document.querySelector("body > canvas")) return;
+        loading.style.fontStyle = "normal";
+        loading.style.color = "#d95f4e";
+        loading.textContent = "Boot failed: " + detail;
+    }
+    addEventListener("error", (e) => bootFailure(e.message || String(e.error)));
+    addEventListener("unhandledrejection", (e) => bootFailure(String(e.reason)));
 </script>
 <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="elevato" />
 <link data-trunk rel="copy-file" href="assets/fonts/OFL.txt" />
