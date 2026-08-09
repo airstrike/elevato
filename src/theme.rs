@@ -25,13 +25,12 @@ impl Mode {
             }
         }
         #[cfg(target_arch = "wasm32")]
-        if let Some(query) = web_sys::window()
+        if web_sys::window()
             .and_then(|window| window.match_media("(prefers-color-scheme: light)").ok())
             .flatten()
+            .is_some_and(|query| query.matches())
         {
-            if query.matches() {
-                return Self::Light;
-            }
+            return Self::Light;
         }
         Self::default()
     }
