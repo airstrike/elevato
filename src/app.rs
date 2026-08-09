@@ -144,8 +144,12 @@ pub enum Message {
     /// A tab of the right card was selected.
     Tab(Tab),
     /// Back through the reference's jump history (the tab-bar arrow, a
-    /// keyboard's browser-back key, or a mouse's back button).
+    /// keyboard's browser-back key, a mouse's back button, or the
+    /// cmd+O / cmd+[ chords).
     DocsBack,
+    /// Forward again (arrow, browser-forward key, mouse forward
+    /// button, or the cmd+I / cmd+] chords).
+    DocsForward,
     /// An API-reference pane message.
     Docs(docs::Message),
     /// The keyboard modifier state changed.
@@ -228,6 +232,14 @@ pub fn subscription(app: &App) -> Subscription<Message> {
             match key.as_ref() {
                 keyboard::Key::Named(Named::PageDown) => Some(Message::NextChallenge),
                 keyboard::Key::Named(Named::PageUp) => Some(Message::PreviousChallenge),
+                // Editor-navigation dialects: vim's C-o/C-i and the
+                // JetBrains/Xcode bracket pair.
+                keyboard::Key::Character("o") | keyboard::Key::Character("[") => {
+                    Some(Message::DocsBack)
+                }
+                keyboard::Key::Character("i") | keyboard::Key::Character("]") => {
+                    Some(Message::DocsForward)
+                }
                 _ => None,
             }
         }
@@ -240,7 +252,14 @@ pub fn subscription(app: &App) -> Subscription<Message> {
             key: keyboard::Key::Named(Named::BrowserBack),
             ..
         }) => Some(Message::DocsBack),
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(Named::BrowserForward),
+            ..
+        }) => Some(Message::DocsForward),
         Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back)) => Some(Message::DocsBack),
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Forward)) => {
+            Some(Message::DocsForward)
+        }
         _ => None,
     });
     Subscription::batch([tick, hotkeys, resizes])
@@ -382,6 +401,11 @@ impl Game {
                     self.docs.back();
                 }
             }
+            Message::DocsForward => {
+                if self.tab == Tab::Api {
+                    self.docs.forward();
+                }
+            }
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
             Message::Resized(width) => self.viewport_width = width,
             Message::Docs(message) => {
@@ -505,6 +529,12 @@ impl Game {
                 button(icon::arrow_left().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_back().then_some(Message::DocsBack))
+                    .style(theme::button::ghost),
+            );
+            bar = bar.push(
+                button(icon::arrow_right().size(13))
+                    .padding([4, 6])
+                    .on_press_maybe(self.docs.can_go_forward().then_some(Message::DocsForward))
                     .style(theme::button::ghost),
             );
         }

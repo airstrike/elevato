@@ -1,48 +1,27 @@
-//! ─────────────────────────────────────────────────────────────────
-//! elevato.rs — the scripting API
-//!
-//! This reference is code: cmd+click any name — here or in your own
-//! program — to jump to its definition. `Elevator` and `Floor` open
-//! their own pages; cmd+click keeps working there.
-//! ─────────────────────────────────────────────────────────────────
+//! The scripting surface. A program defines `init` and, optionally,
+//! `update`; both receive live handles into the running world.
 
-/// Called once, when the challenge starts.
-///
-/// Required — a program without `init` does not compile. This is
-/// where handlers are bound and shared state is declared.
+/// Runs once, at challenge start. Required.
 fn init(elevators: Vec<Elevator>, floors: Vec<Floor>);
 
-/// Called once per frame, before that frame's physics. Optional.
-///
-/// `dt` is the simulated seconds since the previous call — it grows
-/// with the timescale. The heavy-handed alternative to events:
-/// replan everything, every frame.
+/// Runs once per frame, before that frame's physics. Optional.
+/// `dt` is the frame's simulated seconds; it grows with the timescale.
 fn update(dt: f64, elevators: Vec<Elevator>, floors: Vec<Floor>);
 
-// Any exception thrown from your code — in `init`, `update`, or a
-// handler — pauses the game and shows the error under the editor.
+// Exceptions thrown anywhere in user code pause the run; the message
+// surfaces under the editor.
 //
-// ── Rhai vs Rust, in thirty seconds ─────────────────────────────
-//
-// Your program is Rhai, which reads like Rust with the types left
-// out. Three things bite ported JavaScript and Rust intuition alike:
-//
-// Loop captures: a `for` loop shares ONE loop variable across
-// iterations. Closures made in the body must capture a shadow:
+// Rhai shares one loop variable across `for` iterations, so closures
+// bound in the body must capture a per-iteration shadow:
 //
 //     for elevator in elevators {
-//         let elevator = elevator;      // fresh binding, each turn
+//         let elevator = elevator;
 //         elevator.on("idle", || elevator.go_to_floor(0));
 //     }
 //
-// Shared state: variables captured by several closures are shared
-// between them — declare request lists in `init`, capture them in
-// every handler.
-//
+// Variables captured by several closures are shared between them.
 // Top-level statements run once, before `init`, and functions cannot
-// see top-level variables: cross-handler state lives in captures.
+// see top-level variables — cross-handler state lives in captures.
 //
-// ── Determinism ─────────────────────────────────────────────────
-//
-// Seeded RNG, fixed-timestep playback: same seed, same program,
-// same result. The Seed readout in the stats bar names the run.
+// Runs are deterministic: same seed, same program, same result. The
+// stats bar's Seed names the attempt.

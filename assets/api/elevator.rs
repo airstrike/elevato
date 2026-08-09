@@ -1,87 +1,76 @@
-/// One car of the bank. Command it with destinations, steer boarding
-/// with the indicator lamps, and subscribe to its `Event`s with `on`.
-///
-/// All fields are read-only unless marked otherwise.
+/// One car of the bank. Fields are read-only unless marked otherwise.
 pub struct Elevator {
-    /// The current floor, rounded — updated continuously while
-    /// moving, so it does NOT mean the car is stopped here.
+    /// The current floor, rounded. Updated continuously while moving —
+    /// it does not imply the car is stopped here.
     pub current_floor: i64,
 
-    /// Capacity, in riders. Boarding is slot-count based: when
-    /// `is_full`, nobody else fits, whatever `load_factor` says.
+    /// Capacity, in riders. Boarding is slot-count based.
     pub max_passenger_count: i64,
 
-    /// Aboard weight / (capacity × 100). 0.0 is empty; 1.0 is
-    /// roughly full — riders weigh 55–100, so a slot-full car can
-    /// read as low as 0.55. For an exact answer use `is_full`.
+    /// Aboard weight / (capacity × 100). Riders weigh 55–100, so a
+    /// slot-full car reads anywhere from ~0.55 to 1.0; `is_full` is
+    /// the exact test.
     pub load_factor: f64,
 
-    /// True when every slot is taken — the question `load_factor`
-    /// cannot answer precisely.
+    /// Whether every slot is taken.
     pub is_full: bool,
 
-    /// "up", "down", or "stopped" — where the car is headed.
+    /// "up", "down", or "stopped".
     pub destination_direction: String,
 
-    /// The queue as an array — a VALUE COPY. Mutating it changes
-    /// nothing until written back; see `set_destination_queue`.
+    /// The queue, as a value copy: mutations are invisible until
+    /// written back through `set_destination_queue`.
     pub destination_queue: Vec<f64>,
 
-    /// Floors whose in-car destination buttons are lit, ascending.
-    /// A rider presses ~1 s after boarding (`floor_button_pressed`).
+    /// Floors with lit in-car destination buttons, ascending. A rider
+    /// presses ~1 s after boarding.
     pub pressed_floors: Vec<i64>,
 
-    /// Floor boundaries this car has crossed — the currency of the
-    /// move-limit challenges (6 and 7). A 0 → 3 trip costs 3.
+    /// Floor boundaries crossed so far; a 0 → 3 trip counts 3. The
+    /// quantity the move-limit challenges score.
     pub move_count: i64,
 
-    /// True during the 1 s door dwell after arriving at a floor. A
-    /// dwelling car ignores movement commands until doors close.
+    /// Whether the car is in the 1 s door dwell that follows every
+    /// floor arrival. Movement commands are ignored until it ends.
     pub is_busy: bool,
 
-    /// True while under way toward a destination.
+    /// Whether the car is under way toward a destination.
     pub is_moving: bool,
 
-    /// True when resting exactly on a floor. False after a
-    /// mid-flight `stop()` — see `stop` for why that matters.
+    /// Whether the car rests exactly on a floor. False after a
+    /// mid-flight `stop()`.
     pub is_on_a_floor: bool,
 
-    /// Whether the up lamp is lit. READ-WRITE; both lamps start on.
-    /// A waiting rider boards only if the lamp matching their
-    /// direction is lit, so clearing one at `stopped_at_floor` time
-    /// filters who gets in: `elevator.going_up_indicator = false;`
+    /// Read-write. Both lamps start on. A waiting rider boards only if
+    /// the lamp matching their direction is lit; the engine never
+    /// touches the lamps itself.
     pub going_up_indicator: bool,
 
-    /// Whether the down lamp is lit. READ-WRITE; see
-    /// `going_up_indicator`.
+    /// Read-write. See `going_up_indicator`.
     pub going_down_indicator: bool,
 }
 
 impl Elevator {
-    /// Queues floor `n` as a destination, clamped to the building.
-    ///
-    /// Duplicates are suppressed only against the ADJACENT queue
-    /// entry: enqueueing 2 twice in a row is one stop, but 2, 3, 2
-    /// visits 2 twice. Ints and floats both accepted.
+    /// Queues floor `n`, clamped to the building. Deduplicated against
+    /// the adjacent queue entry only: 2, 2 is one stop; 2, 3, 2 visits
+    /// 2 twice. Accepts ints and floats.
     pub fn go_to_floor(&self, n: i64);
 
-    /// The same, but `force = true` puts the floor at the FRONT of
-    /// the queue: go there first. The classic use is inside
-    /// `passing_floor`, where braking distance still allows the stop.
+    /// With `force`, the floor goes to the front of the queue instead
+    /// of the back.
     pub fn go_to_floor(&self, n: i64, force: bool);
 
     /// Clears the queue and halts at the projected stopping point —
-    /// usually BETWEEN floors, doors shut, riders trapped. For
-    /// advanced in-transit rescheduling; follow with `go_to_floor`.
+    /// generally between floors, doors shut. Intended for in-transit
+    /// rescheduling; follow with `go_to_floor`.
     pub fn stop(&self);
 
-    /// Re-examines the queue right now. Non-empty: start toward the
-    /// front. Empty (and not mid-dwell): fire `idle`. Call after
-    /// `set_destination_queue` for edits to take effect immediately.
+    /// Re-examines the queue now: non-empty starts toward the front
+    /// entry; empty (outside a dwell) fires `idle`. Queue edits made
+    /// through `set_destination_queue` apply on the next check.
     pub fn check_destination_queue(&self);
 
-    /// Replaces the destination queue (entries clamped to the
-    /// building). The read → modify → write-back idiom:
+    /// Replaces the queue, entries clamped to the building.
     ///
     ///     let queue = elevator.destination_queue;
     ///     queue.insert(0, 3);
@@ -89,36 +78,31 @@ impl Elevator {
     ///     elevator.check_destination_queue();
     pub fn set_destination_queue(&self, queue: Vec<f64>);
 
-    /// Subscribes a handler to one `Event` by name — or several via
-    /// a space-separated string, in which case the event's name is
-    /// prepended as the handler's first argument.
-    ///
-    /// Extra handler arguments are dropped and missing ones padded,
-    /// so a zero-argument closure works on any event. Unknown names
-    /// error at bind time.
+    /// Binds a handler to an `Event` by name, or to several via a
+    /// space-separated string — the event's name is then prepended as
+    /// the handler's first argument. Handler arity is adapted: extra
+    /// arguments are dropped, missing ones padded. Unknown names are a
+    /// bind-time error.
     pub fn on(&self, events: &str, handler: impl FnMut(...));
 }
 
-/// Everything an `Elevator` reports, by name:
-/// `elevator.on("idle", || …)`.
+/// Dispatched by name: `elevator.on("idle", || …)`.
 pub enum Event {
-    /// `"idle"` — the destination queue was checked while empty:
-    /// this car has nothing to do. Fires for every elevator at
-    /// challenge start, and ~1 s after the last destination
-    /// completes. Handlers receive nothing — capture your elevator.
+    /// `"idle"` — the queue was checked while empty. Fires for every
+    /// elevator at challenge start, and ~1 s after the last
+    /// destination completes. Carries nothing; capture the elevator.
     Idle,
 
     /// `"floor_button_pressed"` — a rider pressed an unlit in-car
-    /// destination button, about 1 s after boarding.
+    /// destination button.
     FloorButtonPressed { floor: i64 },
 
     /// `"passing_floor"` — about to pass `floor` without stopping,
-    /// with braking room to spare: `go_to_floor(floor, true)` still
-    /// makes the stop. `direction` is "up" or "down".
+    /// early enough that `go_to_floor(floor, true)` still makes the
+    /// stop.
     PassingFloor { floor: i64, direction: String },
 
-    /// `"stopped_at_floor"` — physically arrived and snapped, fired
-    /// BEFORE riders exit and board: indicator changes made here
-    /// decide who gets in.
+    /// `"stopped_at_floor"` — arrived and snapped, fired before exit
+    /// and boarding: indicator changes here affect who boards.
     StoppedAtFloor { floor: i64 },
 }

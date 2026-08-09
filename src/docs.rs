@@ -171,6 +171,8 @@ pub struct State {
     content: text_editor::Content,
     /// Where cmd+clicks came from, newest last — the back stack.
     history: Vec<(Page, usize)>,
+    /// Where back() came from, newest last — the forward stack.
+    future: Vec<(Page, usize)>,
 }
 
 /// How deep the back stack grows before old entries fall off.
@@ -190,6 +192,7 @@ impl State {
             page: Page::Lib,
             content: text_editor::Content::with_text(Page::Lib.source()),
             history: Vec::new(),
+            future: Vec::new(),
         }
     }
 
@@ -228,6 +231,8 @@ impl State {
         if self.history.len() > HISTORY_DEPTH {
             self.history.remove(0);
         }
+        // A fresh jump forks the timeline, browser-style.
+        self.future.clear();
         self.show(page, line);
     }
 
@@ -236,9 +241,25 @@ impl State {
         !self.history.is_empty()
     }
 
+    /// Whether [`State::forward`] has anywhere to go.
+    pub fn can_go_forward(&self) -> bool {
+        !self.future.is_empty()
+    }
+
     /// Returns to where the last jump came from.
     pub fn back(&mut self) {
         if let Some((page, line)) = self.history.pop() {
+            self.future
+                .push((self.page, self.content.cursor().position.line));
+            self.show(page, line);
+        }
+    }
+
+    /// Un-does a [`State::back`].
+    pub fn forward(&mut self) {
+        if let Some((page, line)) = self.future.pop() {
+            self.history
+                .push((self.page, self.content.cursor().position.line));
             self.show(page, line);
         }
     }
@@ -371,6 +392,23 @@ mod tests {
         assert_eq!(identifier_in(line, 13).as_deref(), Some("go_to_floor"));
         assert_eq!(identifier_in(line, 22).as_deref(), Some("go_to_floor"));
         assert_eq!(identifier_in(line, 2), None);
+    }
+
+    #[test]
+    fn forward_undoes_back_until_a_fresh_jump_forks_the_timeline() {
+        let mut state = State::new();
+        let (page, line) = resolve("go_to_floor", None).unwrap();
+        state.open(page, line);
+        let (page, line) = resolve("floor_num", None).unwrap();
+        state.open(page, line);
+        state.back();
+        assert!(state.can_go_forward());
+        state.forward();
+        assert_eq!(state.page(), Page::Floor);
+        state.back();
+        let (page, line) = resolve("init", None).unwrap();
+        state.open(page, line);
+        assert!(!state.can_go_forward(), "a fresh jump clears forward");
     }
 
     #[test]

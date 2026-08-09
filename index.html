@@ -126,6 +126,16 @@
     }
     addEventListener("error", (e) => bootFailure(e.message || String(e.error)));
     addEventListener("unhandledrejection", (e) => bootFailure(String(e.reason)));
+
+    // Mouse back/forward buttons are the reference's history keys; the
+    // browser must not ALSO navigate. winit preventDefaults keyboard
+    // events but not auxiliary mouse buttons, so we do it here (the
+    // canvas still receives the pointer events).
+    for (const kind of ["mousedown", "mouseup", "pointerup", "auxclick"]) {
+        addEventListener(kind, (e) => {
+            if (e.button === 3 || e.button === 4) e.preventDefault();
+        });
+    }
 </script>
 <link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-bin="elevato" />
 <link data-trunk rel="copy-file" href="assets/fonts/OFL.txt" />
