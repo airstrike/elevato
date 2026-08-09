@@ -1,6 +1,6 @@
 // Generated automatically by iced_lucide at build time.
 // Do not edit manually.
-// 9dd623e15ba5a8371c9d88122d329c02717e7e1442d1403c08ceaf85f4127e97
+// 9f2c0e6e9b3ebbb012cfb15510bd16a9f3beba187f8799acec405e5969027ed9
 use iced::widget::text::{self, Text};
 
 pub const FONT: &[u8] = include_bytes!("../assets/fonts/lucide.ttf");
@@ -9,6 +9,7 @@ pub const FONT: &[u8] = include_bytes!("../assets/fonts/lucide.ttf");
 /// Use this to populate an icon-picker widget.
 #[allow(dead_code)]
 pub const ALL_ICONS: &[(&str, &str)] = &[
+    ("arrow_left", "\u{E048}"),
     ("arrow_up_right", "\u{E04D}"),
     ("check", "\u{E06C}"),
     ("eraser", "\u{E28F}"),
@@ -23,6 +24,13 @@ pub const ALL_ICONS: &[(&str, &str)] = &[
     ("sun", "\u{E178}"),
     ("undo_2", "\u{E2A1}"),
 ];
+
+pub fn arrow_left<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E048}")
+}
 
 pub fn arrow_up_right<'a, Theme>() -> Text<'a, Theme>
 where

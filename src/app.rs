@@ -143,6 +143,9 @@ pub enum Message {
     SplitResized(Pixels),
     /// A tab of the right card was selected.
     Tab(Tab),
+    /// Back through the reference's jump history (the tab-bar arrow, a
+    /// keyboard's browser-back key, or a mouse's back button).
+    DocsBack,
     /// An API-reference pane message.
     Docs(docs::Message),
     /// The keyboard modifier state changed.
@@ -233,6 +236,11 @@ pub fn subscription(app: &App) -> Subscription<Message> {
     });
     let resizes = event::listen_with(|event, _status, _window| match event {
         Event::Window(window::Event::Resized(size)) => Some(Message::Resized(size.width)),
+        Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(Named::BrowserBack),
+            ..
+        }) => Some(Message::DocsBack),
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Back)) => Some(Message::DocsBack),
         _ => None,
     });
     Subscription::batch([tick, hotkeys, resizes])
@@ -369,6 +377,11 @@ impl Game {
             }
             Message::SplitResized(position) => self.divider = Some(position),
             Message::Tab(tab) => self.tab = tab,
+            Message::DocsBack => {
+                if self.tab == Tab::Api {
+                    self.docs.back();
+                }
+            }
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
             Message::Resized(width) => self.viewport_width = width,
             Message::Docs(message) => {
@@ -451,16 +464,10 @@ impl Game {
         // Code on the left, world on the right — the reading order of
         // the game loop: write, then watch — twin rounded cards around
         // a draggable hairline divider.
-        let right = column![
-            self.tab_bar(&[Tab::Player, Tab::Api]),
-            card(self.world_pane())
-        ]
-        .spacing(6);
-
         let workspace = container(
             Split::new(
                 card(self.editor_pane()),
-                right,
+                card(self.world_pane()),
                 self.divider,
                 Axis::Vertical,
             )
@@ -489,9 +496,18 @@ impl Game {
         }
     }
 
-    /// The face-selector row, right-aligned, living OUTSIDE the card.
+    /// The face selectors, prefixed — when the reference is up and has
+    /// somewhere to return to — by the back arrow.
     fn tab_bar(&self, tabs: &'static [Tab]) -> Element<'_, Message> {
-        let mut bar = row![space::horizontal()].spacing(4);
+        let mut bar = row![].spacing(4).align_y(Center);
+        if self.tab == Tab::Api {
+            bar = bar.push(
+                button(icon::arrow_left().size(13))
+                    .padding([4, 6])
+                    .on_press_maybe(self.docs.can_go_back().then_some(Message::DocsBack))
+                    .style(theme::button::ghost),
+            );
+        }
         for &tab in tabs {
             bar = bar.push(tab_button(tab.label(), tab, self.tab));
         }
@@ -534,7 +550,10 @@ impl Game {
 
         let workspace = container(
             column![
-                self.tab_bar(&[Tab::Player, Tab::Code, Tab::Api]),
+                row![
+                    space::horizontal(),
+                    self.tab_bar(&[Tab::Player, Tab::Code, Tab::Api])
+                ],
                 card(face)
             ]
             .spacing(6),
@@ -722,6 +741,8 @@ impl Game {
             stat("Max waiting time", format!("{:.1}s", stats.max_wait_time())),
             stat("Moves", stats.move_count().to_string()),
             stat("Seed", self.playback.seed().to_string()),
+            space::horizontal(),
+            self.tab_bar(&[Tab::Player, Tab::Api]),
         ]
         .spacing(24)
         .align_y(Center);

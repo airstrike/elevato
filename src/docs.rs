@@ -169,7 +169,12 @@ pub fn identifier_in(line: &str, column: usize) -> Option<String> {
 pub struct State {
     page: Page,
     content: text_editor::Content,
+    /// Where cmd+clicks came from, newest last — the back stack.
+    history: Vec<(Page, usize)>,
 }
+
+/// How deep the back stack grows before old entries fall off.
+const HISTORY_DEPTH: usize = 32;
 
 /// Docs pane messages.
 #[derive(Debug, Clone)]
@@ -184,6 +189,7 @@ impl State {
         Self {
             page: Page::Lib,
             content: text_editor::Content::with_text(Page::Lib.source()),
+            history: Vec::new(),
         }
     }
 
@@ -214,8 +220,30 @@ impl State {
     }
 
     /// Opens `page` (switching files if needed), moves the cursor to
-    /// `line`, and selects it, scrolling it into view.
+    /// `line`, and selects it, scrolling it into view. The spot being
+    /// left goes onto the back stack.
     pub fn open(&mut self, page: Page, line: usize) {
+        let from = (self.page, self.content.cursor().position.line);
+        self.history.push(from);
+        if self.history.len() > HISTORY_DEPTH {
+            self.history.remove(0);
+        }
+        self.show(page, line);
+    }
+
+    /// Whether [`State::back`] has anywhere to go.
+    pub fn can_go_back(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    /// Returns to where the last jump came from.
+    pub fn back(&mut self) {
+        if let Some((page, line)) = self.history.pop() {
+            self.show(page, line);
+        }
+    }
+
+    fn show(&mut self, page: Page, line: usize) {
         use text_editor::{Action, Motion};
         if page != self.page {
             self.page = page;
@@ -343,6 +371,22 @@ mod tests {
         assert_eq!(identifier_in(line, 13).as_deref(), Some("go_to_floor"));
         assert_eq!(identifier_in(line, 22).as_deref(), Some("go_to_floor"));
         assert_eq!(identifier_in(line, 2), None);
+    }
+
+    #[test]
+    fn back_returns_through_the_jump_history() {
+        let mut state = State::new();
+        assert!(!state.can_go_back());
+        let (page, line) = resolve("go_to_floor", None).unwrap();
+        state.open(page, line);
+        let (page, line) = resolve("floor_num", None).unwrap();
+        state.open(page, line);
+        assert_eq!(state.page(), Page::Floor);
+        state.back();
+        assert_eq!(state.page(), Page::Elevator);
+        state.back();
+        assert_eq!(state.page(), Page::Lib);
+        assert!(!state.can_go_back());
     }
 
     #[test]
