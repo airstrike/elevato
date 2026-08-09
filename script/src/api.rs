@@ -1,28 +1,122 @@
-//! The scripting API surface: engine construction and the handler
-//! registry the `on(...)` methods write into.
+//! The scripting API surface: the opaque [`Command`] type with its
+//! registered constructor functions, the snapshot builders that turn
+//! world state into the plain-data maps and arrays `update` receives,
+//! and engine construction.
 //!
-//! Handles ([`elevator::Handle`], [`floor::Handle`]) are cheap clonable
-//! `(Rc<RefCell<World>>, index)` references registered as rhai types.
-//! Every handle method borrows the `RefCell` only for the duration of
-//! that one call — rhai invocations are strictly sequential, so no
-//! borrow is ever live while script code runs. The original's reentrant
-//! synchronous events (`goToFloor` → `idle` → handler → `goToFloor`) are
-//! reproduced by the runtime's drain-to-quiescence dispatch loop
-//! instead: a command stages events in the world's queue during its own
-//! short borrow, and the runtime drains them after the borrow ends.
+//! Scripts never hold a reference into the world. State flows in as
+//! snapshots rebuilt before every `update` call; effects flow out as
+//! commands in `update`'s return value, applied by the runtime the
+//! moment the call returns.
 
-pub(crate) mod elevator;
-pub(crate) mod floor;
+use elevato_core::World;
+use elevato_core::event::Direction;
+use rhai::{Array, Dynamic, Engine, EvalAltResult, Map, Position};
 
-use std::collections::HashMap;
+/// One instruction to the world, minted by the constructor functions
+/// registered on the engine (`go_to_floor(…)`, `stop(…)`, …) and
+/// consumed by the runtime from `update`'s return value. Opaque to
+/// scripts — a command cannot be inspected or altered, only returned.
+///
+/// Floor values are clamped to the building by core, exactly as the
+/// original coerced them; elevator indices are *not* clamped — an index
+/// the challenge does not have is a runtime error at application time.
+#[derive(Debug, Clone)]
+pub(crate) enum Command {
+    /// `go_to_floor(elevator, floor)` / `(elevator, floor, force)`.
+    GoToFloor {
+        elevator: i64,
+        floor: f64,
+        force: bool,
+    },
+    /// `stop(elevator)`.
+    Stop { elevator: i64 },
+    /// `check_destination_queue(elevator)`.
+    CheckDestinationQueue { elevator: i64 },
+    /// `set_destination_queue(elevator, queue)`.
+    SetDestinationQueue { elevator: i64, queue: Vec<f64> },
+    /// `set_going_up_indicator(elevator, on)`.
+    SetGoingUpIndicator { elevator: i64, on: bool },
+    /// `set_going_down_indicator(elevator, on)`.
+    SetGoingDownIndicator { elevator: i64, on: bool },
+}
 
-use rhai::{Engine, EvalAltResult, FnPtr, ImmutableString, Position};
+impl Command {
+    /// Applies the command to the world (`transformation-method`: a
+    /// command is consumed by its application). Fails when the elevator
+    /// index is outside the challenge's bank.
+    pub(crate) fn apply(self, world: &mut World) -> Result<(), Box<EvalAltResult>> {
+        let index = self.elevator_index(world)?;
+        match self {
+            Command::GoToFloor { floor, force, .. } => world.go_to_floor(index, floor, force),
+            Command::Stop { .. } => world.stop(index),
+            Command::CheckDestinationQueue { .. } => world.check_destination_queue(index),
+            Command::SetDestinationQueue { queue, .. } => {
+                world.elevator_mut(index).set_destination_queue(queue);
+            }
+            Command::SetGoingUpIndicator { on, .. } => {
+                world.elevator_mut(index).set_going_up_indicator(on);
+            }
+            Command::SetGoingDownIndicator { on, .. } => {
+                world.elevator_mut(index).set_going_down_indicator(on);
+            }
+        }
+        Ok(())
+    }
 
-/// A position-less runtime error for fallible API methods (rhai adds the
-/// call-site position when it propagates).
+    /// The constructor name, for error messages.
+    fn name(&self) -> &'static str {
+        match self {
+            Command::GoToFloor { .. } => "go_to_floor",
+            Command::Stop { .. } => "stop",
+            Command::CheckDestinationQueue { .. } => "check_destination_queue",
+            Command::SetDestinationQueue { .. } => "set_destination_queue",
+            Command::SetGoingUpIndicator { .. } => "set_going_up_indicator",
+            Command::SetGoingDownIndicator { .. } => "set_going_down_indicator",
+        }
+    }
+
+    /// The raw elevator argument the script passed.
+    fn elevator(&self) -> i64 {
+        match *self {
+            Command::GoToFloor { elevator, .. }
+            | Command::Stop { elevator }
+            | Command::CheckDestinationQueue { elevator }
+            | Command::SetDestinationQueue { elevator, .. }
+            | Command::SetGoingUpIndicator { elevator, .. }
+            | Command::SetGoingDownIndicator { elevator, .. } => elevator,
+        }
+    }
+
+    /// The validated elevator index, or a clear error naming the
+    /// command. Floors are clamped by core; elevators never are.
+    fn elevator_index(&self, world: &World) -> Result<usize, Box<EvalAltResult>> {
+        let count = world.elevators().len();
+        usize::try_from(self.elevator())
+            .ok()
+            .filter(|&index| index < count)
+            .ok_or_else(|| {
+                runtime_error(format!(
+                    "{}: no elevator {} — this challenge has {count} (indices 0 to {})",
+                    self.name(),
+                    self.elevator(),
+                    count - 1
+                ))
+            })
+    }
+}
+
+/// A position-less runtime error (rhai adds the call-site position when
+/// it propagates through a script frame).
 pub(crate) fn runtime_error(message: String) -> Box<EvalAltResult> {
     Box::new(EvalAltResult::ErrorRuntime(message.into(), Position::NONE))
 }
+
+/// The internal spelling of the boot function. `new` is a *reserved*
+/// rhai keyword and the parser refuses reserved function names, so the
+/// engine's token mapper rewrites the bare `new` token to this
+/// identifier at lex time — the compile scan and the runtime's boot
+/// call both look it up under this name.
+pub(crate) const NEW: &str = "__new";
 
 /// A fresh engine with the elevato API registered. Compilation and the
 /// runtime both build engines here, so the registered surface can never
@@ -38,71 +132,166 @@ pub(crate) fn engine() -> Engine {
     // a budget the original did not have.
     engine.set_max_expr_depths(128, 128);
     engine.set_max_call_levels(64);
-    elevator::register(&mut engine);
-    floor::register(&mut engine);
+
+    // Let players write the dialect's `fn new()`: remap the reserved
+    // `new` token to the internal [`NEW`] spelling. Definitions and
+    // call sites remap alike, so a script calling `new()` (say, to
+    // reset its own model) still reaches the boot function. The API is
+    // flagged volatile upstream, not deprecated — see its own docs.
+    #[allow(deprecated)]
+    engine.on_parse_token(|token, _position, _state| match token {
+        rhai::Token::Reserved(word) if word.as_str() == "new" => {
+            rhai::Token::Identifier(Box::new(NEW.into()))
+        }
+        token => token,
+    });
+
+    // The command constructors. `go_to_floor` accepts int and float
+    // floors, like the original's `Number()` coercion.
+    engine
+        .register_type_with_name::<Command>("Command")
+        .register_fn("go_to_floor", |elevator: i64, floor: i64| {
+            Command::GoToFloor {
+                elevator,
+                floor: floor as f64,
+                force: false,
+            }
+        })
+        .register_fn("go_to_floor", |elevator: i64, floor: f64| {
+            Command::GoToFloor {
+                elevator,
+                floor,
+                force: false,
+            }
+        })
+        .register_fn("go_to_floor", |elevator: i64, floor: i64, force: bool| {
+            Command::GoToFloor {
+                elevator,
+                floor: floor as f64,
+                force,
+            }
+        })
+        .register_fn("go_to_floor", |elevator: i64, floor: f64, force: bool| {
+            Command::GoToFloor {
+                elevator,
+                floor,
+                force,
+            }
+        })
+        .register_fn("stop", |elevator: i64| Command::Stop { elevator })
+        .register_fn("check_destination_queue", |elevator: i64| {
+            Command::CheckDestinationQueue { elevator }
+        })
+        .register_fn(
+            "set_destination_queue",
+            |elevator: i64, queue: Array| -> Result<Command, Box<EvalAltResult>> {
+                Ok(Command::SetDestinationQueue {
+                    elevator,
+                    queue: levels(queue)?,
+                })
+            },
+        )
+        .register_fn("set_going_up_indicator", |elevator: i64, on: bool| {
+            Command::SetGoingUpIndicator { elevator, on }
+        })
+        .register_fn("set_going_down_indicator", |elevator: i64, on: bool| {
+            Command::SetGoingDownIndicator { elevator, on }
+        });
     engine
 }
 
-/// One handler slot: which event on which elevator or floor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Hook {
-    /// `elevator.on("idle", …)`.
-    Idle { elevator: usize },
-    /// `elevator.on("floor_button_pressed", …)`.
-    FloorButtonPressed { elevator: usize },
-    /// `elevator.on("passing_floor", …)`.
-    PassingFloor { elevator: usize },
-    /// `elevator.on("stopped_at_floor", …)`.
-    StoppedAtFloor { elevator: usize },
-    /// `floor.on("up_button_pressed", …)`.
-    UpButtonPressed { floor: usize },
-    /// `floor.on("down_button_pressed", …)`.
-    DownButtonPressed { floor: usize },
+/// The `elevators` argument to `update`: one plain-data map per
+/// elevator, rebuilt fresh before every call — state may have changed
+/// since the previous message.
+pub(crate) fn elevator_snapshots(world: &World) -> Array {
+    world
+        .elevators()
+        .iter()
+        .map(|elevator| {
+            let mut map = Map::new();
+            let mut put = |key: &str, value: Dynamic| {
+                map.insert(key.into(), value);
+            };
+            put("current_floor", (elevator.current_floor() as i64).into());
+            put("max_passenger_count", (elevator.capacity() as i64).into());
+            put("load_factor", elevator.load_factor().into());
+            put("is_full", elevator.is_full().into());
+            put(
+                "destination_direction",
+                match elevator.destination_direction() {
+                    Some(Direction::Up) => "up".into(),
+                    Some(Direction::Down) => "down".into(),
+                    None => "stopped".into(),
+                },
+            );
+            // Integral levels come back as ints so queue entries compare
+            // cleanly against floor numbers.
+            let queue: Array = elevator
+                .destination_queue()
+                .iter()
+                .map(|&level| {
+                    if level.fract() == 0.0 {
+                        Dynamic::from(level as i64)
+                    } else {
+                        Dynamic::from(level)
+                    }
+                })
+                .collect();
+            put("destination_queue", queue.into());
+            let pressed: Array = elevator
+                .pressed_floors()
+                .into_iter()
+                .map(|level| Dynamic::from(level as i64))
+                .collect();
+            put("pressed_floors", pressed.into());
+            put("move_count", (elevator.move_count() as i64).into());
+            put("is_busy", elevator.is_busy().into());
+            put("is_moving", elevator.is_moving().into());
+            put("is_on_a_floor", elevator.is_on_a_floor().into());
+            put("going_up_indicator", elevator.going_up_indicator().into());
+            put(
+                "going_down_indicator",
+                elevator.going_down_indicator().into(),
+            );
+            Dynamic::from(map)
+        })
+        .collect()
 }
 
-/// One registered handler: the function pointer plus, for multi-event
-/// binds, the event name riot prepended as the first handler argument
-/// (single-event binds pass only the event's own arguments).
-#[derive(Debug, Clone)]
-pub(crate) struct Binding {
-    /// The handler; captured variables ride along as curried arguments.
-    pub fn_ptr: FnPtr,
-    /// `Some(event_name)` when the bind came from a space-separated
-    /// multi-event string.
-    pub prepended_name: Option<ImmutableString>,
+/// The `floors` argument to `update`: one plain-data map per floor,
+/// rebuilt fresh before every call.
+pub(crate) fn floor_snapshots(world: &World) -> Array {
+    world
+        .floors()
+        .iter()
+        .map(|floor| {
+            let mut map = Map::new();
+            let level = floor.level() as i64;
+            map.insert("floor_num".into(), level.into());
+            map.insert("level".into(), level.into());
+            map.insert("up_pressed".into(), floor.up_pressed().into());
+            map.insert("down_pressed".into(), floor.down_pressed().into());
+            Dynamic::from(map)
+        })
+        .collect()
 }
 
-/// Every `on(...)` binding, keyed by hook. Written by handles during
-/// `init` (or later — handlers may bind more handlers), read by the
-/// runtime at dispatch.
-#[derive(Debug, Default)]
-pub(crate) struct Registry {
-    bindings: HashMap<Hook, Vec<Binding>>,
-    /// Set for TEA programs: `on(...)` refuses to bind, since events
-    /// arrive through `fn update(message, …)` instead.
-    pub(crate) tea: bool,
-}
-
-impl Registry {
-    /// Appends a binding; a hook's handlers dispatch in registration
-    /// order, like riot's observable.
-    pub(crate) fn bind(&mut self, hook: Hook, binding: Binding) {
-        self.bindings.entry(hook).or_default().push(binding);
+/// The numeric levels of a queue argument, or the original's
+/// type-naming refusal.
+fn levels(queue: Array) -> Result<Vec<f64>, Box<EvalAltResult>> {
+    let mut levels = Vec::with_capacity(queue.len());
+    for item in queue {
+        let level = if let Ok(int) = item.as_int() {
+            int as f64
+        } else if let Ok(float) = item.as_float() {
+            float
+        } else {
+            return Err(runtime_error(format!(
+                "set_destination_queue expects numbers, found {}",
+                item.type_name()
+            )));
+        };
+        levels.push(level);
     }
-
-    /// A hook's bindings, cloned out — dispatch must never hold the
-    /// registry borrow while invoking rhai (a handler may bind more
-    /// handlers).
-    pub(crate) fn bindings(&self, hook: Hook) -> Vec<Binding> {
-        self.bindings.get(&hook).cloned().unwrap_or_default()
-    }
-
-    /// Drops every binding. The runtime calls this on teardown to break
-    /// the `Registry → FnPtr → curried Handle → Registry` reference
-    /// cycle (handles hold strong `Rc`s; a handler capturing its
-    /// elevator would otherwise pin the registry — and the world —
-    /// forever).
-    pub(crate) fn clear(&mut self) {
-        self.bindings.clear();
-    }
+    Ok(levels)
 }

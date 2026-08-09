@@ -9,30 +9,23 @@ pub enum Error {
     #[error("compile error: {0}")]
     Compile(#[from] rhai::ParseError),
 
-    /// The program never defines the required entry point.
-    #[error("the program must define `fn init(elevators, floors)`")]
-    MissingInit,
+    /// The program never defines the boot function whose return value
+    /// becomes the model.
+    #[error("the program must define `fn new()` — its return value is the model")]
+    MissingNew,
 
-    /// A `fn update` exists, but not with the three required parameters —
-    /// silently never calling it would be crueler than refusing.
-    #[error("`fn update` must take (dt, elevators, floors), found {0} parameter(s)")]
-    UpdateArity(usize),
+    /// A `fn new` exists, but with parameters it cannot have.
+    #[error("`fn new` takes no parameters, found {0}")]
+    NewArity(usize),
 
-    /// A TEA program (`fn model`) without the update that must consume
-    /// its messages.
-    #[error("a program with `fn model` must define `fn update(message, elevators, floors)`")]
+    /// No `fn update` to consume the messages.
+    #[error("the program must define `fn update(message, elevators, floors)`")]
     MissingUpdate,
 
-    /// `fn model` exists, but with a parameter count it cannot have.
-    #[error("`fn model` takes no parameters, or (elevators, floors); found {0}")]
-    ModelArity(usize),
-
-    /// Both dialects' boot functions in one program.
-    #[error("define `fn init` (callbacks) or `fn model` (messages), not both")]
-    AmbiguousMode,
-
-    /// A throw or failure inside `init`, `update`, or an event handler.
-    /// The inner error's display includes the source position.
+    /// A throw or failure inside `new` or `update` — including a
+    /// command applied to an elevator the challenge does not have, and
+    /// an `update` return value that is not a command. The inner
+    /// error's display includes the source position when there is one.
     #[error("{0}")]
     Runtime(#[from] Box<rhai::EvalAltResult>),
 }

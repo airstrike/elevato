@@ -1,4 +1,4 @@
-// Research §5.3-style ("Twentyliner"): no events at all — every update
+// Research §5.3-style ("Twentyliner"): no events at all — every tick
 // re-plans each elevator from scratch by polling the floors' call-button
 // states. Down calls are encoded as negative floor numbers, exactly like
 // the original (so a floor-0 up call, +0, has sign 0 and is only taken
@@ -11,15 +11,21 @@ fn sgn(x) {
     if x > 0 { 1 } else if x < 0 { -1 } else { 0 }
 }
 
-fn init(elevators, floors) {}
+fn new() {
+    #{}
+}
 
-fn update(dt, elevators, floors) {
+fn update(message, elevators, floors) {
+    if message.kind != "tick" { return; }
+
+    let commands = [];
     let calls = [];
     for f in floors {
         if f.up_pressed { calls.push(f.floor_num); }
         if f.down_pressed { calls.push(-f.floor_num); }
     }
-    for e in elevators {
+    for index in 0..elevators.len() {
+        let e = elevators[index];
         let current = e.current_floor;
         let pressed = e.pressed_floors;
 
@@ -59,10 +65,11 @@ fn update(dt, elevators, floors) {
             // Claim the call, drop any stale plan, indicate direction,
             // and go.
             calls = calls.filter(|c| c != best);
-            e.stop();
-            e.going_down_indicator = dir <= 0;
-            e.going_up_indicator = dir >= 0;
-            e.go_to_floor(abs(best));
+            commands.push(stop(index));
+            commands.push(set_going_down_indicator(index, dir <= 0));
+            commands.push(set_going_up_indicator(index, dir >= 0));
+            commands.push(go_to_floor(index, abs(best)));
         }
     }
+    commands
 }

@@ -18,11 +18,12 @@ use crate::theme;
 /// One page of the reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
-    /// Program shape: `init`, `update`, gotchas, determinism.
+    /// Program shape: `new`, `update`, the commands, gotchas,
+    /// determinism.
     Lib,
-    /// The `Elevator` struct, impl, and events.
+    /// The `Elevator` snapshot struct and its events.
     Elevator,
-    /// The `Floor` struct, impl, and events.
+    /// The `Floor` snapshot struct and its events.
     Floor,
 }
 
@@ -74,8 +75,14 @@ static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|
         }
     }
     // Entry-point parameters read like globals in scripts; point them
-    // at their declaring signature.
-    for (alias, target) in [("dt", "update"), ("elevators", "init"), ("floors", "init")] {
+    // at their declaring signature — `update` receives all three
+    // (`new` has no parameters).
+    for (alias, target) in [
+        ("message", "update"),
+        ("dt", "update"),
+        ("elevators", "update"),
+        ("floors", "update"),
+    ] {
         if let Some(&(page, line)) = registry.get(target).and_then(|sites| sites.first()) {
             registry
                 .entry(alias.to_string())
@@ -314,17 +321,21 @@ mod tests {
     /// its documentation lives on. A rename or addition in `script/`
     /// that forgets the reference fails here.
     const CONTRACT: &[(&str, Page)] = &[
-        ("init", Page::Lib),
+        ("new", Page::Lib),
         ("update", Page::Lib),
+        ("message", Page::Lib),
         ("dt", Page::Lib),
         ("elevators", Page::Lib),
         ("floors", Page::Lib),
+        ("Command", Page::Lib),
+        ("go_to_floor", Page::Lib),
+        ("stop", Page::Lib),
+        ("check_destination_queue", Page::Lib),
+        ("set_destination_queue", Page::Lib),
+        ("set_going_up_indicator", Page::Lib),
+        ("set_going_down_indicator", Page::Lib),
         ("Elevator", Page::Elevator),
-        ("go_to_floor", Page::Elevator),
-        ("stop", Page::Elevator),
-        ("check_destination_queue", Page::Elevator),
         ("destination_queue", Page::Elevator),
-        ("set_destination_queue", Page::Elevator),
         ("current_floor", Page::Elevator),
         ("max_passenger_count", Page::Elevator),
         ("load_factor", Page::Elevator),
@@ -337,7 +348,6 @@ mod tests {
         ("is_on_a_floor", Page::Elevator),
         ("going_up_indicator", Page::Elevator),
         ("going_down_indicator", Page::Elevator),
-        ("on", Page::Elevator),
         ("idle", Page::Elevator),
         ("floor_button_pressed", Page::Elevator),
         ("passing_floor", Page::Elevator),
@@ -366,7 +376,7 @@ mod tests {
         assert_eq!(page, Page::Floor);
         let (page, _) = resolve("Event", Some(Page::Elevator)).unwrap();
         assert_eq!(page, Page::Elevator);
-        let (page, _) = resolve("on", None).unwrap();
+        let (page, _) = resolve("Event", None).unwrap();
         assert_eq!(page, Page::Elevator, "default preference order");
     }
 
@@ -406,7 +416,7 @@ mod tests {
         state.forward();
         assert_eq!(state.page(), Page::Floor);
         state.back();
-        let (page, line) = resolve("init", None).unwrap();
+        let (page, line) = resolve("new", None).unwrap();
         state.open(page, line);
         assert!(!state.can_go_forward(), "a fresh jump clears forward");
     }
@@ -415,7 +425,7 @@ mod tests {
     fn back_returns_through_the_jump_history() {
         let mut state = State::new();
         assert!(!state.can_go_back());
-        let (page, line) = resolve("go_to_floor", None).unwrap();
+        let (page, line) = resolve("load_factor", None).unwrap();
         state.open(page, line);
         let (page, line) = resolve("floor_num", None).unwrap();
         state.open(page, line);

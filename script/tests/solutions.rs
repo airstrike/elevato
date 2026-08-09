@@ -25,7 +25,7 @@ const SEED: u64 = 1;
 fn run(source: &str, index: usize, seed: u64, frames: usize) -> Runtime {
     let program = Program::compile(source).expect("solution must compile");
     let mut runtime =
-        Runtime::new(program, &challenge::roster()[index], seed).expect("init must run cleanly");
+        Runtime::new(program, &challenge::roster()[index], seed).expect("boot must run cleanly");
     for _ in 0..frames {
         if runtime.ended() {
             break;
@@ -35,11 +35,12 @@ fn run(source: &str, index: usize, seed: u64, frames: usize) -> Runtime {
     runtime
 }
 
-/// Drives an already-built runtime until it errors, up to `frames`.
+/// Compiles `source` on challenge `index` and drives it until it
+/// errors, up to `frames`.
 fn run_until_error(source: &str, index: usize, frames: usize) -> Error {
     let program = Program::compile(source).expect("source must compile");
     let mut runtime =
-        Runtime::new(program, &challenge::roster()[index], SEED).expect("init must run cleanly");
+        Runtime::new(program, &challenge::roster()[index], SEED).expect("boot must run cleanly");
     for _ in 0..frames {
         if let Err(error) = runtime.frame(1) {
             return error;
@@ -159,148 +160,152 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
 }
 
 #[test]
-fn a_program_without_init_is_a_compile_time_error() {
-    let error = Program::compile("fn update(dt, elevators, floors) {}").unwrap_err();
-    assert!(matches!(error, Error::MissingInit));
+fn a_program_without_new_is_a_compile_time_error() {
+    let error = Program::compile("fn update(message, elevators, floors) {}").unwrap_err();
+    assert!(matches!(error, Error::MissingNew));
 }
 
 #[test]
-fn an_update_with_the_wrong_arity_is_a_compile_time_error() {
-    let error = Program::compile("fn init(e, f) {}\nfn update(dt) {}").unwrap_err();
-    assert!(matches!(error, Error::UpdateArity(1)));
+fn a_new_with_parameters_is_a_compile_time_error() {
+    let error = Program::compile("fn new(a) { #{} }\nfn update(message, elevators, floors) {}")
+        .unwrap_err();
+    assert!(matches!(error, Error::NewArity(1)));
 }
 
 #[test]
-fn a_program_without_update_is_fine() {
-    Program::compile("fn init(elevators, floors) {}").expect("update is optional");
+fn a_program_without_update_is_a_compile_time_error() {
+    let error = Program::compile("fn new() { #{} }").unwrap_err();
+    assert!(matches!(error, Error::MissingUpdate));
 }
 
 #[test]
-fn a_throwing_handler_surfaces_a_runtime_error_with_its_position() {
+fn an_update_returning_a_non_command_is_a_runtime_error_naming_the_type() {
+    // The initial idle round delivers the first message during
+    // construction, so the bad return surfaces from `Runtime::new`.
+    let program =
+        Program::compile("fn new() { #{} }\nfn update(message, elevators, floors) { 42 }").unwrap();
+    let error = Runtime::new(program, &challenge::roster()[0], SEED).unwrap_err();
+    assert!(matches!(error, Error::Runtime(_)));
+    assert!(
+        error.to_string().contains("i64"),
+        "unexpected error display: {error}"
+    );
+}
+
+#[test]
+fn a_command_array_with_a_non_command_element_is_a_runtime_error() {
     let source = r#"
-fn init(elevators, floors) {
-    elevators[0].on("stopped_at_floor", |floor_num| {
+fn new() { #{} }
+fn update(message, elevators, floors) {
+    [go_to_floor(0, 1), "nope"]
+}
+"#;
+    let program = Program::compile(source).unwrap();
+    let error = Runtime::new(program, &challenge::roster()[0], SEED).unwrap_err();
+    assert!(
+        error.to_string().contains("string"),
+        "unexpected error display: {error}"
+    );
+}
+
+#[test]
+fn a_command_for_an_elevator_the_challenge_does_not_have_is_a_runtime_error() {
+    // Challenge 1 has a single elevator; index 1 does not exist. The
+    // index is refused, never clamped.
+    let source = r#"
+fn new() { #{} }
+fn update(message, elevators, floors) {
+    if message.kind == "idle" { go_to_floor(1, 0) }
+}
+"#;
+    let program = Program::compile(source).unwrap();
+    let error = Runtime::new(program, &challenge::roster()[0], SEED).unwrap_err();
+    let display = error.to_string();
+    assert!(
+        display.contains("go_to_floor") && display.contains("no elevator 1"),
+        "unexpected error display: {display}"
+    );
+}
+
+#[test]
+fn a_throwing_update_surfaces_a_runtime_error_with_its_position() {
+    let source = r#"
+fn new() {
+    #{}
+}
+
+fn update(message, elevators, floors) {
+    if message.kind == "stopped_at_floor" {
         throw "kaboom";
-    });
-    elevators[0].go_to_floor(1);
+    }
+    if message.kind == "idle" {
+        return go_to_floor(message.elevator, 1);
+    }
 }
 "#;
     let error = run_until_error(source, 0, 600);
     assert!(matches!(error, Error::Runtime(_)));
     let display = error.to_string();
     assert!(
-        display.contains("kaboom") && display.contains("line 4"),
+        display.contains("kaboom") && display.contains("line 8"),
         "unexpected error display: {display}"
     );
 }
 
 #[test]
-fn a_throw_inside_init_surfaces_from_runtime_construction() {
-    let program = Program::compile("fn init(e, f) { throw \"early\"; }").expect("compiles");
-    let error = Runtime::new(program, &challenge::roster()[0], SEED).unwrap_err();
-    assert!(matches!(error, Error::Runtime(_)));
-    assert!(error.to_string().contains("early"));
-}
-
-#[test]
-fn binding_an_unknown_event_name_errors_at_bind_time() {
-    let program = Program::compile("fn init(e, f) { e[0].on(\"idel\", || 0); }").expect("compiles");
-    let error = Runtime::new(program, &challenge::roster()[0], SEED).unwrap_err();
-    assert!(
-        error.to_string().contains("unknown elevator event"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn a_zero_argument_handler_on_an_argument_carrying_event_still_fires() {
-    // `stopped_at_floor` carries the floor number; the handler declares
-    // nothing. The throw proves it ran.
+fn the_tier_one_snapshot_fields_are_readable_from_scripts() {
+    // Every elevator and floor snapshot field, probed on the first tick
+    // (fresh, parked world) — a snapshot-builder typo throws here.
     let source = r#"
-fn init(elevators, floors) {
-    elevators[0].on("stopped_at_floor", || throw "fired");
-    elevators[0].go_to_floor(1);
-}
-"#;
-    let error = run_until_error(source, 0, 600);
-    assert!(error.to_string().contains("fired"));
+fn new() {
+    #{ checked: false }
 }
 
-#[test]
-fn a_multi_event_bind_receives_the_event_name_as_its_first_argument() {
-    // The first spawn presses a call button within the first frames; the
-    // handler throws the prepended name back out.
-    let source = r#"
-fn init(elevators, floors) {
-    for floor in floors {
-        floor.on("up_button_pressed down_button_pressed", |name| throw name);
-    }
-}
-"#;
-    let error = run_until_error(source, 0, 600);
-    assert!(
-        error.to_string().contains("button_pressed"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn the_tier_one_introspection_properties_are_readable_from_scripts() {
-    let source = r#"
-fn init(elevators, floors) {
+fn update(message, elevators, floors) {
+    if message.kind != "tick" || this.checked { return; }
+    this.checked = true;
     let e = elevators[0];
+    if e.current_floor != 0 { throw "fresh elevator away from the lobby"; }
+    if e.max_passenger_count != 4 { throw "challenge 1 capacity is 4"; }
+    if e.load_factor != 0.0 { throw "empty elevator carries weight"; }
     if e.is_full { throw "empty elevator claims to be full"; }
+    if e.destination_direction != "stopped" { throw "parked elevator has a direction"; }
+    if !e.destination_queue.is_empty() { throw "fresh elevator has a queue"; }
+    if !e.pressed_floors.is_empty() { throw "fresh elevator has lit buttons"; }
+    if e.move_count != 0 { throw "fresh elevator has moves"; }
     if e.is_busy { throw "parked elevator claims to be dwelling"; }
     if e.is_moving { throw "parked elevator claims to be moving"; }
     if !e.is_on_a_floor { throw "parked elevator floats between floors"; }
-    if e.move_count != 0 { throw "fresh elevator has moves"; }
-    e.go_to_floor(2);
+    if !e.going_up_indicator { throw "the up lamp starts on"; }
+    if !e.going_down_indicator { throw "the down lamp starts on"; }
+    let f = floors[1];
+    if f.floor_num != 1 { throw "floor 1 misnumbered"; }
+    if f.level != f.floor_num { throw "level must alias floor_num"; }
+    // The first tick precedes the first physics step: nobody has
+    // spawned, so no call button is lit yet.
+    if f.up_pressed { throw "fresh floor has a lit up button"; }
+    if f.down_pressed { throw "fresh floor has a lit down button"; }
+    go_to_floor(0, 2)
 }
 "#;
-    let program = script::Program::compile(source).unwrap();
-    let challenge = &elevato_core::challenge::roster()[0];
-    let mut runtime = script::Runtime::new(program, challenge, 1).unwrap();
-    for _ in 0..600 {
-        runtime.frame(1).unwrap();
-    }
-    let world = runtime.world();
+    let runtime = run(source, 0, SEED, 600);
     assert!(
-        world.elevators()[0].move_count() >= 2,
+        runtime.world().elevators()[0].move_count() >= 2,
         "the commanded trip must be visible through move_count"
     );
 }
 
-const NAIVE_TEA: &str = include_str!("solutions/naive_tea.rhai");
-
 #[test]
-fn the_tea_naive_solution_matches_its_classic_twin_byte_for_byte() {
-    let classic = run(NAIVE, 0, SEED, 3700);
-    let tea = run(NAIVE_TEA, 0, SEED, 3700);
-    assert_eq!(
-        classic.stats(),
-        tea.stats(),
-        "identical strategy, identical world"
-    );
-    assert_eq!(classic.outcome(), tea.outcome());
-}
-
-#[test]
-fn the_tea_naive_solution_passes_challenge_one_and_fails_challenge_five() {
-    assert_eq!(run(NAIVE_TEA, 0, SEED, 3700).outcome(), Outcome::Succeeded);
-    assert_eq!(run(NAIVE_TEA, 4, SEED, 4200).outcome(), Outcome::Failed);
-}
-
-#[test]
-fn tea_model_state_persists_across_update_calls() {
+fn model_state_persists_across_update_calls() {
     let source = r#"
-fn model() {
+fn new() {
     #{ launched: false }
 }
 
 fn update(message, elevators, floors) {
     if message.kind == "tick" && !this.launched {
         this.launched = true;
-        elevators[0].go_to_floor(2);
+        return go_to_floor(0, 2);
     }
 }
 "#;
@@ -312,36 +317,4 @@ fn update(message, elevators, floors) {
         2,
         "exactly one trip: the launched flag must persist"
     );
-}
-
-#[test]
-fn binding_on_in_a_tea_program_is_a_runtime_error() {
-    let source = r#"
-fn model() {
-    #{}
-}
-
-fn update(message, elevators, floors) {
-    if message.kind == "idle" {
-        message.elevator.on("idle", || {});
-    }
-}
-"#;
-    let program = Program::compile(source).unwrap();
-    let error = Runtime::new(program, &challenge::roster()[0], SEED)
-        .err()
-        .expect("the initial idle round must surface the on() refusal");
-    assert!(error.to_string().contains("fn model"));
-}
-
-#[test]
-fn tea_programs_without_update_or_with_both_boots_fail_to_compile() {
-    assert!(matches!(
-        Program::compile("fn model() { #{} }"),
-        Err(Error::MissingUpdate)
-    ));
-    assert!(matches!(
-        Program::compile("fn init(e, f) {}\nfn model() { #{} }\nfn update(m, e, f) {}"),
-        Err(Error::AmbiguousMode)
-    ));
 }

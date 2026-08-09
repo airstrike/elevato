@@ -59,7 +59,7 @@ impl<Message> canvas::Program<Message> for View<'_> {
             // the (rounded) surface both panes share.
             let palette = theme::palette(theme);
             if let Some(world) = self.playback.world() {
-                draw_world(frame, &world, palette);
+                draw_world(frame, world, palette);
             }
         });
         vec![geometry]

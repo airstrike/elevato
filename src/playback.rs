@@ -23,8 +23,6 @@
 //! fixed-timestep deviation that makes a live run replay a headless run
 //! byte for byte.
 
-use std::cell::Ref;
-
 use crate::core::World;
 use crate::core::challenge::{self, Challenge, Outcome};
 use crate::core::stats::Stats;
@@ -128,9 +126,8 @@ impl Playback {
         self.error.as_ref()
     }
 
-    /// Read access to the world, for rendering. The borrow must not be
-    /// held across any `&mut self` call.
-    pub fn world(&self) -> Option<Ref<'_, World>> {
+    /// Read access to the world, for rendering.
+    pub fn world(&self) -> Option<&World> {
         self.runtime.as_ref().map(Runtime::world)
     }
 
@@ -243,7 +240,7 @@ impl Playback {
 
     /// Builds the runtime for the current (challenge, seed) — dropping
     /// the previous attempt first, so its world is freed before the new
-    /// one exists. A construction failure (`init` threw) leaves no
+    /// one exists. A construction failure (`new` threw) leaves no
     /// runtime and records the error.
     fn rebuild(&mut self) {
         self.error = None;
@@ -334,7 +331,9 @@ mod tests {
         playback.tick();
         assert!(playback.stats().elapsed() > 0.0);
 
-        playback.apply("fn init(elevators, floors) {}").unwrap();
+        playback
+            .apply("fn new() { #{} }\nfn update(message, elevators, floors) {}")
+            .unwrap();
         assert_eq!(playback.challenge_index(), 2);
         assert_eq!(playback.seed(), 3);
         assert!(playback.is_running(), "apply auto-starts the new attempt");
@@ -350,7 +349,7 @@ mod tests {
         let elapsed = playback.stats().elapsed();
         assert!(elapsed > 0.0);
 
-        let error = playback.apply("fn init(").unwrap_err();
+        let error = playback.apply("fn new(").unwrap_err();
         assert!(matches!(error, script::Error::Compile(_)));
         assert!(!playback.is_running(), "a failed apply pauses playback");
         assert!(

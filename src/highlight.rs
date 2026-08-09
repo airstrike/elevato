@@ -267,16 +267,16 @@ mod tests {
     }
 
     #[test]
-    fn keywords_strings_numbers_and_pipes_in_the_starter_are_classified() {
+    fn keywords_strings_numbers_and_arrows_in_the_starter_are_classified() {
         let lines: Vec<&str> = crate::playback::STARTER.lines().collect();
         let classified = tokens(&lines);
 
         let all: Vec<(String, Kind)> = classified.into_iter().flatten().collect();
         assert!(has(&all, "fn", Kind::Keyword));
-        assert!(has(&all, "let", Kind::Keyword));
+        assert!(has(&all, "switch", Kind::Keyword));
         assert!(has(&all, "idle", Kind::String));
         assert!(has(&all, "0", Kind::Number));
-        assert!(has(&all, "||", Kind::Operator));
+        assert!(has(&all, "=>", Kind::Operator));
         assert!(has(&all, "did we forget one?", Kind::Comment));
     }
 
