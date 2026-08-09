@@ -11,7 +11,17 @@ pub fn main() -> iced::Result {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     }
 
+    let settings = iced::Settings {
+        // Safari now ships WebGPU, so wgpu auto-detects it on iOS — and
+        // renders black. WebGL2 is the proven web path; force it on
+        // wasm (Chrome included: consistency beats novelty here).
+        #[cfg(target_arch = "wasm32")]
+        backend: iced::Backend::Hardware(iced::backend::Api::OpenGL),
+        ..iced::Settings::default()
+    };
+
     iced::application(app::boot, app::update, app::view)
+        .settings(settings)
         .subscription(app::subscription)
         .theme(app::theme)
         .font(theme::MONO_BYTES)
