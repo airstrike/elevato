@@ -262,16 +262,21 @@ fn splash() -> Element<'static, Message> {
         )
         .on_press(Message::Continue)
         .style(theme::button::primary),
-        button(
-            row![
-                text("Based on Elevator Saga by Magnus Wolffelt — play the original").size(12),
-                icon::arrow_up_right().size(12),
-            ]
-            .spacing(4)
-            .align_y(Center),
-        )
-        .on_press(Message::OpenOriginal)
-        .style(theme::button::link),
+        row![
+            text("Based on ").size(12).style(theme::text::secondary),
+            button(
+                row![
+                    text("Elevator Saga by Magnus Wolffelt").size(12),
+                    icon::arrow_up_right().size(12),
+                ]
+                .spacing(4)
+                .align_y(Center),
+            )
+            .padding(0)
+            .on_press(Message::OpenOriginal)
+            .style(theme::button::link),
+        ]
+        .align_y(Center),
     ]
     .spacing(20)
     .align_x(Center);
