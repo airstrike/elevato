@@ -1,7 +1,8 @@
-//! The scripting API surface: the opaque [`Command`] type with its
-//! registered constructor functions, the snapshot builders that turn
-//! world state into the plain-data maps and arrays `update` receives,
-//! and engine construction.
+//! The scripting API surface: the [`Message`] enum scripts match with
+//! `switch`, the opaque [`Command`] type with its registered
+//! constructor functions, the snapshot builders that turn world state
+//! into the plain-data maps and arrays `update` receives, and engine
+//! construction.
 //!
 //! Scripts never hold a reference into the world. State flows in as
 //! snapshots rebuilt before every `update` call; effects flow out as
@@ -11,6 +12,33 @@
 use elevato_core::World;
 use elevato_core::event::Direction;
 use rhai::{Array, Dynamic, Engine, EvalAltResult, Map, Position};
+
+/// One world occurrence, delivered to `update` as an enum value the
+/// script matches with the fork's qualified switch patterns:
+/// `switch message { Message::Idle(elevator) => … }`. Payloads are
+/// plain data - indices, numbers, `"up"`/`"down"` - never handles.
+#[derive(Debug, Clone)]
+pub(crate) enum Message {
+    /// Time, once per frame, before that frame's physics.
+    Tick { dt: f64 },
+    /// The elevator's queue ran dry.
+    Idle { elevator: usize },
+    /// A button inside the cab was pressed.
+    FloorButtonPressed { elevator: usize, floor: usize },
+    /// About to pass a floor (fires only mid-flight, never for the
+    /// destination itself).
+    PassingFloor {
+        elevator: usize,
+        floor: usize,
+        direction: Direction,
+    },
+    /// Arrived and doors open.
+    StoppedAtFloor { elevator: usize, floor: usize },
+    /// A waiting rider pressed the floor's up call button.
+    UpButtonPressed { floor: usize },
+    /// A waiting rider pressed the floor's down call button.
+    DownButtonPressed { floor: usize },
+}
 
 /// One instruction to the world, minted by the constructor functions
 /// registered on the engine (`go_to_floor(…)`, `stop(…)`, …) and
@@ -125,6 +153,51 @@ pub(crate) fn engine() -> Engine {
     // a budget the original did not have.
     engine.set_max_expr_depths(128, 128);
     engine.set_max_call_levels(64);
+
+    // The message enum: `switch` patterns over `Message::…` are
+    // compile-time checked against this registration (unknown variants
+    // and wrong binding arities refuse to parse).
+    let up: Dynamic = "up".into();
+    let down: Dynamic = "down".into();
+    engine.register_enum::<Message>(
+        "Message",
+        &[
+            ("Tick", 1),
+            ("Idle", 1),
+            ("FloorButtonPressed", 2),
+            ("PassingFloor", 3),
+            ("StoppedAtFloor", 2),
+            ("UpButtonPressed", 1),
+            ("DownButtonPressed", 1),
+        ],
+        move |message| match *message {
+            Message::Tick { dt } => (0, vec![dt.into()]),
+            Message::Idle { elevator } => (1, vec![(elevator as i64).into()]),
+            Message::FloorButtonPressed { elevator, floor } => {
+                (2, vec![(elevator as i64).into(), (floor as i64).into()])
+            }
+            Message::PassingFloor {
+                elevator,
+                floor,
+                direction,
+            } => (
+                3,
+                vec![
+                    (elevator as i64).into(),
+                    (floor as i64).into(),
+                    match direction {
+                        Direction::Up => up.clone(),
+                        Direction::Down => down.clone(),
+                    },
+                ],
+            ),
+            Message::StoppedAtFloor { elevator, floor } => {
+                (4, vec![(elevator as i64).into(), (floor as i64).into()])
+            }
+            Message::UpButtonPressed { floor } => (5, vec![(floor as i64).into()]),
+            Message::DownButtonPressed { floor } => (6, vec![(floor as i64).into()]),
+        },
+    );
 
     // The command constructors. `go_to_floor` accepts int and float
     // floors, like the original's `Number()` coercion.

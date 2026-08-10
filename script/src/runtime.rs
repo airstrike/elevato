@@ -19,10 +19,10 @@
 
 use elevato_core::World;
 use elevato_core::challenge::{Challenge, Outcome};
-use elevato_core::event::{Direction, Event};
+use elevato_core::event::Event;
 use elevato_core::stats::Stats;
 use elevato_core::world::DT_MAX;
-use rhai::{AST, Array, CallFnOptions, Dynamic, Engine, Map, Scope};
+use rhai::{AST, Array, CallFnOptions, Dynamic, Engine, Scope};
 
 use crate::api::{self, Command};
 use crate::{Error, Program};
@@ -109,10 +109,7 @@ impl Runtime {
         }
         // Time is a message like any other.
         let dt = substeps as f64 * DT_MAX;
-        let mut message = Map::new();
-        message.insert("kind".into(), "tick".into());
-        message.insert("dt".into(), dt.into());
-        self.deliver(message)?;
+        self.deliver(api::Message::Tick { dt })?;
 
         for _ in 0..substeps {
             if self.world.ended() {
@@ -166,7 +163,7 @@ impl Runtime {
     /// model bound as `this` (mutations persist), and the return value
     /// is applied before this call returns - i.e. before the next
     /// message dispatches.
-    fn deliver(&mut self, message: Map) -> Result<(), Error> {
+    fn deliver(&mut self, message: api::Message) -> Result<(), Error> {
         let mut arguments: Vec<Dynamic> = vec![
             Dynamic::from(message),
             Dynamic::from(api::elevator_snapshots(&self.world)),
@@ -230,53 +227,27 @@ impl Runtime {
     }
 }
 
-/// The message map for a world event: `kind` (the `Event` name in
-/// snake_case) plus that event's fields, flattened - all plain data,
-/// elevators and floors as indices.
-fn message(event: Event) -> Map {
-    let mut message = Map::new();
-    let mut put = |key: &str, value: Dynamic| {
-        message.insert(key.into(), value);
-    };
+/// The [`api::Message`] for a world event - all plain data, elevators
+/// and floors as indices.
+fn message(event: Event) -> api::Message {
     match event {
-        Event::Idle { elevator } => {
-            put("kind", "idle".into());
-            put("elevator", (elevator as i64).into());
-        }
+        Event::Idle { elevator } => api::Message::Idle { elevator },
         Event::FloorButtonPressed { elevator, floor } => {
-            put("kind", "floor_button_pressed".into());
-            put("elevator", (elevator as i64).into());
-            put("floor", (floor as i64).into());
+            api::Message::FloorButtonPressed { elevator, floor }
         }
         Event::PassingFloor {
             elevator,
             floor,
             direction,
-        } => {
-            put("kind", "passing_floor".into());
-            put("elevator", (elevator as i64).into());
-            put("floor", (floor as i64).into());
-            put(
-                "direction",
-                match direction {
-                    Direction::Up => "up".into(),
-                    Direction::Down => "down".into(),
-                },
-            );
-        }
+        } => api::Message::PassingFloor {
+            elevator,
+            floor,
+            direction,
+        },
         Event::StoppedAtFloor { elevator, floor } => {
-            put("kind", "stopped_at_floor".into());
-            put("elevator", (elevator as i64).into());
-            put("floor", (floor as i64).into());
+            api::Message::StoppedAtFloor { elevator, floor }
         }
-        Event::UpButtonPressed { floor } => {
-            put("kind", "up_button_pressed".into());
-            put("floor", (floor as i64).into());
-        }
-        Event::DownButtonPressed { floor } => {
-            put("kind", "down_button_pressed".into());
-            put("floor", (floor as i64).into());
-        }
+        Event::UpButtonPressed { floor } => api::Message::UpButtonPressed { floor },
+        Event::DownButtonPressed { floor } => api::Message::DownButtonPressed { floor },
     }
-    message
 }

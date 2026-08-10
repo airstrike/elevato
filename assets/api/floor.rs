@@ -14,15 +14,4 @@ pub struct Floor {
     pub down_pressed: bool,
 }
 
-/// The floor half of the message catalog: `message.kind` holds the
-/// variant name in snake_case, and the fields arrive flattened into
-/// the message map alongside `kind`.
-pub enum Event {
-    /// `"up_button_pressed"` - the up call button went from unlit to
-    /// lit. Re-fires when riders who could not board press again
-    /// after an arrival cleared it.
-    UpButtonPressed { floor: i64 },
-
-    /// `"down_button_pressed"` - likewise, for down.
-    DownButtonPressed { floor: i64 },
-}
+// Call-button presses arrive as `Message` variants - see lib.rs.

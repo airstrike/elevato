@@ -267,14 +267,16 @@ mod tests {
     }
 
     #[test]
-    fn keywords_strings_numbers_and_arrows_in_the_starter_are_classified() {
+    fn keywords_types_numbers_and_arrows_in_the_starter_are_classified() {
         let lines: Vec<&str> = crate::playback::STARTER.lines().collect();
         let classified = tokens(&lines);
 
         let all: Vec<(String, Kind)> = classified.into_iter().flatten().collect();
         assert!(has(&all, "fn", Kind::Keyword));
         assert!(has(&all, "switch", Kind::Keyword));
-        assert!(has(&all, "idle", Kind::String));
+        // CamelCase reads as a type; the grammar files it under the
+        // constant scope.
+        assert!(has(&all, "Message", Kind::Constant));
         assert!(has(&all, "0", Kind::Number));
         assert!(has(&all, "=>", Kind::Operator));
         assert!(has(&all, "did we forget one?", Kind::Comment));

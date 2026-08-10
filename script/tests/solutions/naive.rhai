@@ -8,9 +8,10 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    switch message.kind {
-        "idle" => go_to_floor(message.elevator, 0),
-        "floor_button_pressed" => go_to_floor(message.elevator, message.floor),
-        "up_button_pressed" | "down_button_pressed" => go_to_floor(0, message.floor)
+    switch message {
+        Message::Idle(elevator) => go_to_floor(elevator, 0),
+        Message::FloorButtonPressed(elevator, floor) => go_to_floor(elevator, floor),
+        Message::UpButtonPressed(floor) => go_to_floor(0, floor),
+        Message::DownButtonPressed(floor) => go_to_floor(0, floor)
     }
 }

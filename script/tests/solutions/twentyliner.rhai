@@ -16,8 +16,12 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    if message.kind != "tick" { return; }
+    switch message {
+        Message::Tick(_) => plan(elevators, floors)
+    }
+}
 
+fn plan(elevators, floors) {
     let commands = [];
     let calls = [];
     for f in floors {

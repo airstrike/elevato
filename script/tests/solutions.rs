@@ -215,7 +215,9 @@ fn a_command_for_an_elevator_the_challenge_does_not_have_is_a_runtime_error() {
     let source = r#"
 fn new() { #{} }
 fn update(message, elevators, floors) {
-    if message.kind == "idle" { go_to_floor(1, 0) }
+    switch message {
+        Message::Idle(_) => go_to_floor(1, 0)
+    }
 }
 "#;
     let program = Program::compile(source).unwrap();
@@ -235,11 +237,9 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    if message.kind == "stopped_at_floor" {
-        throw "kaboom";
-    }
-    if message.kind == "idle" {
-        return go_to_floor(message.elevator, 1);
+    switch message {
+        Message::StoppedAtFloor(_, _) => { throw "kaboom"; }
+        Message::Idle(elevator) => go_to_floor(elevator, 1)
     }
 }
 "#;
@@ -262,8 +262,16 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    if message.kind != "tick" || this.checked { return; }
-    this.checked = true;
+    switch message {
+        Message::Tick(_) => {
+            if this.checked { return; }
+            this.checked = true;
+            probe(elevators, floors)
+        }
+    }
+}
+
+fn probe(elevators, floors) {
     let e = elevators[0];
     if e.current_floor != 0 { throw "fresh elevator away from the lobby"; }
     if e.max_passenger_count != 4 { throw "challenge 1 capacity is 4"; }
@@ -303,9 +311,13 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    if message.kind == "tick" && !this.launched {
-        this.launched = true;
-        return go_to_floor(0, 2);
+    switch message {
+        Message::Tick(_) => {
+            if !this.launched {
+                this.launched = true;
+                return go_to_floor(0, 2);
+            }
+        }
     }
 }
 "#;

@@ -7,15 +7,52 @@
 /// persist between messages. `#{}` is a fine start.
 fn new() -> Model;
 
-/// Runs for every event. Required. `message` is a map: `kind` holds an
-/// `Event` name in snake_case plus that event's fields - elevator
-/// events carry `elevator`, floor events carry `floor`, both plain
-/// numbers - and time arrives as `#{ kind: "tick", dt }` once per
-/// frame, before that frame's physics. `elevators` and `floors` are
-/// arrays of read-only snapshot data, rebuilt before every call.
-/// Return a `Command`, an array of them (applied in order), or
-/// nothing.
+/// Runs for every event. Required. `message` is a `Message`; match it
+/// with `switch`, binding payloads by position. `elevators` and
+/// `floors` are arrays of read-only snapshot data (see `Elevator` and
+/// `Floor`), rebuilt before every call. Return a `Command`, an array
+/// of them (applied in order), or nothing.
+///
+///     switch message {
+///         Message::Idle(elevator) => go_to_floor(elevator, 0),
+///         Message::PassingFloor(e, floor, dir) if dir == "up" => stop(e),
+///     }
 fn update(message, elevators, floors) -> Command;
+
+/// Everything that can happen, one message per occurrence. Payloads
+/// bind by position; `_` discards one. An unmatched message falls out
+/// of the `switch` as `()` and is ignored - no default arm needed.
+/// Unknown variants and wrong arities refuse to compile.
+pub enum Message {
+    /// Time: once per frame, before that frame's physics. `dt` is the
+    /// frame's simulated seconds.
+    Tick(dt: f64),
+
+    /// The elevator's queue was checked while empty. Fires for every
+    /// elevator at challenge start, and ~1 s after the last
+    /// destination completes.
+    Idle(elevator: i64),
+
+    /// A rider pressed an unlit in-car destination button.
+    FloorButtonPressed(elevator: i64, floor: i64),
+
+    /// About to pass `floor` without stopping, early enough that
+    /// `go_to_floor(elevator, floor, true)` still makes the stop.
+    /// `direction` is "up" or "down".
+    PassingFloor(elevator: i64, floor: i64, direction: String),
+
+    /// Arrived and snapped, fired before exit and boarding: indicator
+    /// commands returned here affect who boards.
+    StoppedAtFloor(elevator: i64, floor: i64),
+
+    /// The floor's up call button went from unlit to lit. Re-fires
+    /// when riders who could not board press again after an arrival
+    /// cleared it.
+    UpButtonPressed(floor: i64),
+
+    /// Likewise, for down.
+    DownButtonPressed(floor: i64),
+}
 
 /// An instruction to the world, minted by the constructors below and
 /// applied the moment `update` returns. Elevator indices out of the
@@ -37,8 +74,8 @@ pub fn go_to_floor(elevator: i64, floor: i64, force: bool) -> Command;
 pub fn stop(elevator: i64) -> Command;
 
 /// Re-examines the queue now: non-empty starts toward the front entry;
-/// empty (outside a dwell) fires `idle`. Queue edits made through
-/// `set_destination_queue` apply on the next check.
+/// empty (outside a dwell) fires `Message::Idle`. Queue edits made
+/// through `set_destination_queue` apply on the next check.
 pub fn check_destination_queue(elevator: i64) -> Command;
 
 /// Replaces the queue, entries clamped to the building.
@@ -59,9 +96,6 @@ pub fn set_going_down_indicator(elevator: i64, on: bool) -> Command;
 // Exceptions thrown anywhere in user code pause the run; the message
 // surfaces under the editor. Returning anything that is not a command
 // (or an array of commands, or nothing) is an error too.
-//
-// A `switch` over `message.kind` needs no default arm - an unmatched
-// message returns `()` and is simply ignored.
 //
 // Top-level statements run once, before `new`, and functions cannot
 // see top-level variables - cross-message state lives in the model

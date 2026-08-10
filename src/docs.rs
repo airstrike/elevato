@@ -1,9 +1,9 @@
 //! The API reference: three Rust-voiced pages (`lib.rs`,
 //! `elevator.rs`, `floor.rs`) rendered read-only through the same
 //! highlighter as the code pane, plus the jump registry behind
-//! cmd+click - struct fields, methods, enum variants (and their
-//! snake_case event names), and entry points all navigate, from the
-//! reference or from the editor.
+//! cmd+click - struct fields, `Message` variants, command
+//! constructors, and entry points all navigate, from the reference or
+//! from the editor.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -344,6 +344,14 @@ mod tests {
         ("dt", Page::Lib),
         ("elevators", Page::Lib),
         ("floors", Page::Lib),
+        ("Message", Page::Lib),
+        ("Tick", Page::Lib),
+        ("Idle", Page::Lib),
+        ("FloorButtonPressed", Page::Lib),
+        ("PassingFloor", Page::Lib),
+        ("StoppedAtFloor", Page::Lib),
+        ("UpButtonPressed", Page::Lib),
+        ("DownButtonPressed", Page::Lib),
         ("Command", Page::Lib),
         ("go_to_floor", Page::Lib),
         ("stop", Page::Lib),
@@ -365,17 +373,11 @@ mod tests {
         ("is_on_a_floor", Page::Elevator),
         ("going_up_indicator", Page::Elevator),
         ("going_down_indicator", Page::Elevator),
-        ("idle", Page::Elevator),
-        ("floor_button_pressed", Page::Elevator),
-        ("passing_floor", Page::Elevator),
-        ("stopped_at_floor", Page::Elevator),
         ("Floor", Page::Floor),
         ("floor_num", Page::Floor),
         ("level", Page::Floor),
         ("up_pressed", Page::Floor),
         ("down_pressed", Page::Floor),
-        ("up_button_pressed", Page::Floor),
-        ("down_button_pressed", Page::Floor),
     ];
 
     #[test]
@@ -388,20 +390,19 @@ mod tests {
     }
 
     #[test]
-    fn ambiguous_names_prefer_the_page_they_were_clicked_on() {
-        let (page, _) = resolve("Event", Some(Page::Floor)).unwrap();
-        assert_eq!(page, Page::Floor);
-        let (page, _) = resolve("Event", Some(Page::Elevator)).unwrap();
-        assert_eq!(page, Page::Elevator);
-        let (page, _) = resolve("Event", None).unwrap();
-        assert_eq!(page, Page::Elevator, "default preference order");
+    fn page_preference_falls_back_when_the_name_lives_elsewhere() {
+        // Clicking `Idle` inside elevator.rs still lands on the
+        // `Message` variant in lib.rs - preference only applies when
+        // the clicked page actually defines the name.
+        let (page, _) = resolve("Idle", Some(Page::Elevator)).unwrap();
+        assert_eq!(page, Page::Lib);
     }
 
     #[test]
-    fn camel_case_variants_register_their_snake_case_event_names() {
+    fn camel_case_variants_register_their_snake_case_names_too() {
         let (page, camel) = resolve("StoppedAtFloor", None).unwrap();
         let (_, snake) = resolve("stopped_at_floor", None).unwrap();
-        assert_eq!(page, Page::Elevator);
+        assert_eq!(page, Page::Lib);
         assert_eq!(camel, snake, "both spellings share the variant line");
     }
 
@@ -457,9 +458,9 @@ mod tests {
     #[test]
     fn opening_a_page_lands_the_cursor_on_the_requested_line() {
         let mut state = State::new();
-        let (page, line) = resolve("stopped_at_floor", None).unwrap();
+        let (page, line) = resolve("StoppedAtFloor", None).unwrap();
         state.open(page, line);
-        assert_eq!(state.page(), Page::Elevator);
+        assert_eq!(state.page(), Page::Lib);
         assert_eq!(state.content.cursor().position.line, line);
     }
 }

@@ -15,16 +15,16 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    switch message.kind {
-        "up_button_pressed" => {
-            if !this.ups.contains(message.floor) {
-                this.ups.push(message.floor);
+    switch message {
+        Message::UpButtonPressed(floor) => {
+            if !this.ups.contains(floor) {
+                this.ups.push(floor);
                 this.ups.sort();
             }
         }
-        "down_button_pressed" => {
-            if !this.downs.contains(message.floor) {
-                this.downs.push(message.floor);
+        Message::DownButtonPressed(floor) => {
+            if !this.downs.contains(floor) {
+                this.downs.push(floor);
                 this.downs.sort();
             }
         }
@@ -33,8 +33,7 @@ fn update(message, elevators, floors) {
         // lobby - with both indicators lit so anyone may board on
         // arrival. Overflow passengers re-press, refilling the lists
         // for the next idle car.
-        "idle" => {
-            let e = message.elevator;
+        Message::Idle(e) => {
             let commands = [
                 set_going_up_indicator(e, true),
                 set_going_down_indicator(e, true)
@@ -55,17 +54,16 @@ fn update(message, elevators, floors) {
         // New dropoffs are inserted into the queue in travel order, so
         // the car sweeps floors in one direction instead of ping-ponging
         // in press order.
-        "floor_button_pressed" => {
-            let e = message.elevator;
+        Message::FloorButtonPressed(e, floor) => {
             let queue = elevators[e].destination_queue;
             if queue.is_empty() {
-                go_to_floor(e, message.floor)
-            } else if !queue.contains(message.floor) {
+                go_to_floor(e, floor)
+            } else if !queue.contains(floor) {
                 let commands = [];
                 let placed = false;
                 for i in 0..queue.len() {
-                    if between(message.floor, elevators[e].current_floor, queue[i]) {
-                        queue.insert(i, message.floor);
+                    if between(floor, elevators[e].current_floor, queue[i]) {
+                        queue.insert(i, floor);
                         commands.push(set_destination_queue(e, queue));
                         commands.push(check_destination_queue(e));
                         placed = true;
@@ -73,15 +71,14 @@ fn update(message, elevators, floors) {
                     }
                 }
                 if !placed {
-                    commands.push(go_to_floor(e, message.floor));
+                    commands.push(go_to_floor(e, floor));
                 }
                 commands
             }
         }
         // At each stop, indicate the direction of the next destination -
         // the boarding rule then keeps wrong-direction passengers out.
-        "stopped_at_floor" => {
-            let e = message.elevator;
+        Message::StoppedAtFloor(e, floor) => {
             let queue = elevators[e].destination_queue;
             if queue.is_empty() {
                 [
@@ -90,8 +87,8 @@ fn update(message, elevators, floors) {
                 ]
             } else {
                 [
-                    set_going_up_indicator(e, queue[0] > message.floor),
-                    set_going_down_indicator(e, queue[0] < message.floor)
+                    set_going_up_indicator(e, queue[0] > floor),
+                    set_going_down_indicator(e, queue[0] < floor)
                 ]
             }
         }

@@ -6,13 +6,13 @@ fn new() {
 }
 
 fn update(message, elevators, floors) {
-    switch message.kind {
+    switch message {
         // Whenever an elevator is idle (has no more queued
         // destinations) ...
-        "idle" => [
+        Message::Idle(elevator) => [
             // let's go to all the floors (or did we forget one?)
-            go_to_floor(message.elevator, 0),
-            go_to_floor(message.elevator, 1)
+            go_to_floor(elevator, 0),
+            go_to_floor(elevator, 1)
         ]
     }
 }
