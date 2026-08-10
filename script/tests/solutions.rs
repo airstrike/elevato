@@ -1,6 +1,6 @@
 //! End-to-end proof that ported community solutions drive real
 //! challenges through the rhai runtime exactly as they did in the
-//! original — asserting known failures as well as known passes — plus
+//! original - asserting known failures as well as known passes - plus
 //! the parity pin: the rhai naive solution must produce byte-identical
 //! final stats to its native-controller twin run through
 //! `core::headless`, freezing the runtime's replicated driver loop to
@@ -20,7 +20,7 @@ const TWENTYLINER: &str = include_str!("solutions/twentyliner.rhai");
 const SEED: u64 = 1;
 
 /// Compiles `source` and drives challenge `index` (0-based) for at most
-/// `frames` single-substep frames, breaking when the challenge decides —
+/// `frames` single-substep frames, breaking when the challenge decides -
 /// the same budgeting as `headless::run(…, frames, 1)`.
 fn run(source: &str, index: usize, seed: u64, frames: usize) -> Runtime {
     let program = Program::compile(source).expect("solution must compile");
@@ -83,7 +83,7 @@ fn the_naive_port_fails_challenge_five() {
 }
 
 /// The native twin of `naive.rhai` (cribbed from core's own challenge
-/// tests) — issuing exactly the same commands at exactly the same
+/// tests) - issuing exactly the same commands at exactly the same
 /// dispatch points.
 struct Naive;
 
@@ -121,7 +121,7 @@ fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
     // indicator-steered sweeps first beat blind dispatch: across seeds
     // 1-10 the naive fails 9 times while the indicator port passes 8.
     // Challenge 5 was tried first per the plan and is genuinely out of
-    // this strategy's reach — it is a raw-throughput lobby shuttle
+    // this strategy's reach - it is a raw-throughput lobby shuttle
     // (6 floors, 4 cars, spawn 1.7/s) where direction-filtered boarding
     // costs more than it saves; the indicator port peaks at 98/100 over
     // ten seeds (and the naive actually edges it out there).
@@ -152,7 +152,7 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
         assert_eq!(
             runtime.outcome(),
             Outcome::Succeeded,
-            "challenge {} — final stats: {:?}",
+            "challenge {} - final stats: {:?}",
             index + 1,
             runtime.stats()
         );
@@ -255,7 +255,7 @@ fn update(message, elevators, floors) {
 #[test]
 fn the_tier_one_snapshot_fields_are_readable_from_scripts() {
     // Every elevator and floor snapshot field, probed on the first tick
-    // (fresh, parked world) — a snapshot-builder typo throws here.
+    // (fresh, parked world) - a snapshot-builder typo throws here.
     let source = r#"
 fn new() {
     #{ checked: false }

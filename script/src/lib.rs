@@ -1,9 +1,9 @@
 //! Rhai bindings over the core simulation: players write message-driven
-//! Rhai programs that steer the elevators — every world event arrives
+//! Rhai programs that steer the elevators - every world event arrives
 //! as a plain-data message, world state arrives as plain-data
 //! snapshots, and the program answers with commands.
 //!
-//! [`Program::compile`] proves a source has the required shape — a
+//! [`Program::compile`] proves a source has the required shape - a
 //! zero-parameter `fn new` whose return value is the model, and a
 //! `fn update`, bound to that model as `this`, that receives the
 //! messages; a [`Runtime`] is minted from a program plus a challenge
@@ -19,8 +19,8 @@ pub use runtime::Runtime;
 
 use rhai::AST;
 
-/// A compiled player program, proven to have the valid shape —
-/// `fn new()` + `fn update` — and the only thing a [`Runtime`] can be
+/// A compiled player program, proven to have the valid shape -
+/// `fn new()` + `fn update` - and the only thing a [`Runtime`] can be
 /// minted from (`smart-constructor-newtype`).
 #[derive(Debug, Clone)]
 pub struct Program {

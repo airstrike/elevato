@@ -41,7 +41,7 @@ rhai = "1"
 thiserror = "2"
 
 # Highlighting: parsing only (the app maps scopes to theme colors
-# itself); fancy-regex backend — wasm-clean, never onig.
+# itself); fancy-regex backend - wasm-clean, never onig.
 syntect = { version = "5", default-features = false, features = ["parsing", "yaml-load", "regex-fancy"] }
 dirs = "6"
 
@@ -60,7 +60,7 @@ iced_graphics = { path = "/Users/andy/projects/iced-web-clipboard/graphics" }
 iced_renderer = { path = "/Users/andy/projects/iced-web-clipboard/renderer" }
 iced_runtime = { path = "/Users/andy/projects/iced-web-clipboard/runtime" }
 # elevato's rhai fork (branch `enums`): de-reserves `new` so the dialect's
-# `fn new()` parses natively — replaces the `internals` token-remap hack.
+# `fn new()` parses natively - replaces the `internals` token-remap hack.
 # Publish flip: push the branch to airstrike/rhai and patch by git.
 rhai = { path = "/Users/andy/projects/rhai" }
 
@@ -81,7 +81,7 @@ opt-level = 0
 opt-level = 3
 
 # ----------------------------------------------------------------------
-# Publish flip — clean-clone builds from the airstrike forks.
+# Publish flip - clean-clone builds from the airstrike forks.
 #
 # Keep COMMENTED while developing against the local checkouts. To
 # activate (full checklist in PUBLISHING.md):
@@ -96,7 +96,7 @@ opt-level = 3
 #
 # Every iced sub-crate in Cargo.lock is patched from the same git source
 # (the armature shape). Entries nothing requests from crates.io make
-# cargo warn "was not used in the crate graph" — harmless; prune them if
+# cargo warn "was not used in the crate graph" - harmless; prune them if
 # the noise bothers you. Note: the fork's iced transitively pins
 # winit = { git = "airstrike/winit", branch = "unified-titlebar" } via
 # its own manifest; that branch must stay reachable too.

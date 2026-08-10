@@ -1,12 +1,12 @@
 //! The world canvas: floor strips, elevators, and passengers drawn from
 //! the playback's world snapshot in the original's layout geometry
-//! (research §3) — floors are 50 px strips, elevators start at x = 200
-//! spaced `20 + width` apart with `width = 10 px × capacity` — uniformly
+//! (research §3) - floors are 50 px strips, elevators start at x = 200
+//! spaced `20 + width` apart with `width = 10 px × capacity` - uniformly
 //! scaled down to fit the canvas when the building outgrows it.
 //!
 //! The [`canvas::Cache`] lives in the app and is cleared on every tick
 //! (and on any world-replacing message); between clears the cached
-//! geometry is reused. Solid colors only — gradients no-op on wasm.
+//! geometry is reused. Solid colors only - gradients no-op on wasm.
 
 use iced::widget::{canvas, text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, alignment, mouse};
@@ -66,7 +66,7 @@ impl<Message> canvas::Program<Message> for View<'_> {
     }
 }
 
-/// A cacheless sibling of [`View`] that borrows a bare [`World`] —
+/// A cacheless sibling of [`View`] that borrows a bare [`World`] -
 /// previews and tests render frozen worlds without a `Playback` or a
 /// long-lived cache (a fresh frame per draw is fine for still frames).
 pub struct Still<'a> {
@@ -98,7 +98,7 @@ impl<Message> canvas::Program<Message> for Still<'_> {
     }
 }
 
-/// Maps world coordinates (y-down px, floor 0 at the largest y — i.e.
+/// Maps world coordinates (y-down px, floor 0 at the largest y - i.e.
 /// at the *bottom* of the screen) into the canvas: a uniform shrink-only
 /// scale plus a centering offset.
 struct Camera {
@@ -197,7 +197,7 @@ fn draw_world(frame: &mut canvas::Frame, world: &World, palette: theme::Palette)
     }
 
     // Passengers: riders sit in their slots; everyone else queues on
-    // their floor's baseline — waiters leftward from the elevators,
+    // their floor's baseline - waiters leftward from the elevators,
     // walk-offs (faded) rightward from the call buttons.
     let floor_count = world.floors().len();
     let mut waiting = vec![0usize; floor_count];
@@ -332,7 +332,7 @@ fn triangle(
     frame.fill(&path, color);
 }
 
-/// A simple standing figure — head over body — with its feet at
+/// A simple standing figure - head over body - with its feet at
 /// world-space `(x, y)`. No icon art; shapes are enough.
 fn person(frame: &mut canvas::Frame, camera: &Camera, x: f64, y: f64, color: Color) {
     let feet = camera.point(x, y);
@@ -349,7 +349,7 @@ fn faded(color: Color) -> Color {
     color.scale_alpha(0.4)
 }
 
-/// Granita previews — native-only dev tooling (plain module `#[cfg]`;
+/// Granita previews - native-only dev tooling (plain module `#[cfg]`;
 /// the walker cannot see through `cfg_attr`).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod previews {
@@ -363,7 +363,7 @@ pub mod previews {
 
     /// A frozen mid-game world: challenge 4 (8 floors, 2 elevators)
     /// driven ~35 sim-seconds by the naive strategy, so the canvas
-    /// preview shows real traffic — riders, queues, lit buttons —
+    /// preview shows real traffic - riders, queues, lit buttons -
     /// instead of an empty lobby. Migrated across reloads.
     pub struct MidGame {
         world: World,

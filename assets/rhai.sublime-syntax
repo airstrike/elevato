@@ -4,7 +4,7 @@
 # strings, numbers, booleans, and operators (including closure pipes).
 # Good-enough tokenization for a game script pane, not a full port of
 # the language. Loaded by src/highlight.rs with lines_include_newline
-# set to false — the text editor hands lines over bare.
+# set to false - the text editor hands lines over bare.
 name: Rhai
 file_extensions:
   - rhai
@@ -37,7 +37,7 @@ contexts:
     - match: '\b(?:if|else|switch|for|in|while|loop|do|until|break|continue|return|throw|try|catch)\b'
       scope: keyword.control.rhai
     # Rust-flavored keywords, for the API reference pages (harmless in
-    # game scripts — none are Rhai identifiers players would use).
+    # game scripts - none are Rhai identifiers players would use).
     - match: '\b(?:pub|struct|impl|enum|mod|self|Self|mut|dyn)\b'
       scope: keyword.declaration.rust
     # CamelCase names read as types, matching the reference's Rust voice.

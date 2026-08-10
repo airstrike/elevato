@@ -3,14 +3,14 @@
 //! and answers with commands.
 
 /// Runs once, at challenge start. Required. The returned value is the
-/// program's state, bound as `this` inside `update` — mutations there
+/// program's state, bound as `this` inside `update` - mutations there
 /// persist between messages. `#{}` is a fine start.
 fn new() -> Model;
 
 /// Runs for every event. Required. `message` is a map: `kind` holds an
-/// `Event` name in snake_case plus that event's fields — elevator
+/// `Event` name in snake_case plus that event's fields - elevator
 /// events carry `elevator`, floor events carry `floor`, both plain
-/// numbers — and time arrives as `#{ kind: "tick", dt }` once per
+/// numbers - and time arrives as `#{ kind: "tick", dt }` once per
 /// frame, before that frame's physics. `elevators` and `floors` are
 /// arrays of read-only snapshot data, rebuilt before every call.
 /// Return a `Command`, an array of them (applied in order), or
@@ -32,7 +32,7 @@ pub fn go_to_floor(elevator: i64, floor: i64) -> Command;
 pub fn go_to_floor(elevator: i64, floor: i64, force: bool) -> Command;
 
 /// Clears the elevator's queue and halts it at the projected stopping
-/// point — generally between floors, doors shut. Intended for
+/// point - generally between floors, doors shut. Intended for
 /// in-transit rescheduling; follow with `go_to_floor`.
 pub fn stop(elevator: i64) -> Command;
 
@@ -60,11 +60,11 @@ pub fn set_going_down_indicator(elevator: i64, on: bool) -> Command;
 // surfaces under the editor. Returning anything that is not a command
 // (or an array of commands, or nothing) is an error too.
 //
-// A `switch` over `message.kind` needs no default arm — an unmatched
+// A `switch` over `message.kind` needs no default arm - an unmatched
 // message returns `()` and is simply ignored.
 //
 // Top-level statements run once, before `new`, and functions cannot
-// see top-level variables — cross-message state lives in the model
+// see top-level variables - cross-message state lives in the model
 // (`this`).
 //
 // Runs are deterministic: same seed, same program, same result. The

@@ -7,7 +7,7 @@
 //! research §3 because [`crate::floor::HEIGHT`] is 50.0.
 //!
 //! Per-substep order (research §3): clamp velocity → integrate position
-//! (velocity applied *before* the acceleration update — explicit Euler) →
+//! (velocity applied *before* the acceleration update - explicit Euler) →
 //! update acceleration (brake / soft-ramp accelerate / recover) → arrival
 //! snap check. The whole update is skipped while the elevator is busy
 //! dwelling at a floor.
@@ -56,14 +56,14 @@ pub struct Elevator {
     going_down_indicator: bool,
     pressed_floors: Vec<bool>,
     /// Passenger slots; an occupied slot holds its occupant's weight.
-    /// Capacity is the slot count — weight never blocks boarding, it only
+    /// Capacity is the slot count - weight never blocks boarding, it only
     /// feeds [`Self::load_factor`].
     slots: Vec<Option<u32>>,
 }
 
 impl Elevator {
     /// A new elevator standing at floor 0, both indicators on, no lit
-    /// buttons, every slot free — the original's starting state.
+    /// buttons, every slot free - the original's starting state.
     pub(crate) fn new(id: usize, floor_count: usize, capacity: usize) -> Self {
         let y = floor::y_of_level(0.0, floor_count);
         Self {
@@ -111,7 +111,7 @@ impl Elevator {
         &self.destination_queue
     }
 
-    /// Replaces the destination queue wholesale — the scripting API's
+    /// Replaces the destination queue wholesale - the scripting API's
     /// `destinationQueue` reassignment idiom. Entries are clamped to the
     /// building exactly like [`Self::go_to_floor`]; the queue is *not*
     /// re-checked (callers follow with
@@ -126,7 +126,7 @@ impl Elevator {
     }
 
     /// Direction of travel toward the current physical destination, or
-    /// `None` when the destination equals the current position — the
+    /// `None` when the destination equals the current position - the
     /// original's `destinationDirection()` returning `"stopped"`. In the
     /// y-down pixel space a destination at *smaller* y is *higher* up
     /// the building.
@@ -182,7 +182,7 @@ impl Elevator {
     }
 
     /// Whether every slot is occupied. Slot count is the only boarding
-    /// limit — weight never blocks.
+    /// limit - weight never blocks.
     pub fn is_full(&self) -> bool {
         self.slots.iter().all(Option::is_some)
     }
@@ -247,7 +247,7 @@ impl Elevator {
     }
 
     /// Clears the queue. If not busy, commands a halt at the projected
-    /// stop point — generally *between* floors, so no arrival events and
+    /// stop point - generally *between* floors, so no arrival events and
     /// no dwell. During a dwell this only clears the queue.
     pub(crate) fn stop(&mut self) {
         self.destination_queue.clear();
@@ -288,7 +288,7 @@ impl Elevator {
     }
 
     /// Occupies a free slot for a boarder of the given weight, probing
-    /// linearly (with wraparound) from `offset` — the original's
+    /// linearly (with wraparound) from `offset` - the original's
     /// `userEntering`, whose random starting offset the world draws.
     /// Returns the occupied slot index, or `None` when full (the boarder
     /// stays behind and re-presses the floor call button).
@@ -304,7 +304,7 @@ impl Elevator {
         None
     }
 
-    /// Frees the slot an exiting rider occupied — before boarding runs, so
+    /// Frees the slot an exiting rider occupied - before boarding runs, so
     /// leavers make room for boarders within the same arrival.
     pub(crate) fn free_slot(&mut self, slot: usize) {
         self.slots
@@ -315,8 +315,8 @@ impl Elevator {
     }
 
     /// Advances the dwell timer (the original's movable task update, run
-    /// each substep *before* physics). Completion — strictly past
-    /// [`DWELL`] — re-checks the queue, so the next destination or an
+    /// each substep *before* physics). Completion - strictly past
+    /// [`DWELL`] - re-checks the queue, so the next destination or an
     /// [`Event::Idle`] follows in this same substep.
     pub(crate) fn update_tasks(&mut self, dt: f64, events: &mut Vec<Event>) {
         if let Some(spent) = &mut self.dwell_spent {
@@ -432,8 +432,8 @@ impl Elevator {
     }
 
     /// Snaps onto the destination and runs the arrival sequence: the
-    /// queue-head shift and dwell start happen *here*, synchronously —
-    /// before the driver ever sees [`Event::StoppedAtFloor`] — matching
+    /// queue-head shift and dwell start happen *here*, synchronously -
+    /// before the driver ever sees [`Event::StoppedAtFloor`] - matching
     /// the original's `stopped` reaction firing ahead of
     /// `stopped_at_floor`. Exit/boarding stay staged for
     /// [`crate::World::process_arrivals`].
@@ -484,7 +484,7 @@ impl Elevator {
 
 /// Distance needed to change from `current` to `target` speed at the given
 /// acceleration (`v² = u² + 2ad` solved for `d`). Braking toward zero
-/// yields a *negative* distance — callers rely on that sign.
+/// yields a *negative* distance - callers rely on that sign.
 fn distance_to_achieve_speed(current: f64, target: f64, acceleration: f64) -> f64 {
     (target.powi(2) - current.powi(2)) / (2.0 * acceleration)
 }

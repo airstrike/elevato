@@ -2,7 +2,7 @@
 /// `elevators`, rebuilt before every call. Changes go through the
 /// `Command` constructors on `lib.rs`.
 pub struct Elevator {
-    /// The current floor, rounded. Updated continuously while moving —
+    /// The current floor, rounded. Updated continuously while moving -
     /// it does not imply the car is stopped here.
     pub current_floor: i64,
 
@@ -59,21 +59,21 @@ pub struct Elevator {
 /// the message map alongside `kind` and `elevator` (the car's index
 /// into `elevators`).
 pub enum Event {
-    /// `"idle"` — the queue was checked while empty. Fires for every
+    /// `"idle"` - the queue was checked while empty. Fires for every
     /// elevator at challenge start, and ~1 s after the last
     /// destination completes. The message carries only `elevator`.
     Idle,
 
-    /// `"floor_button_pressed"` — a rider pressed an unlit in-car
+    /// `"floor_button_pressed"` - a rider pressed an unlit in-car
     /// destination button.
     FloorButtonPressed { floor: i64 },
 
-    /// `"passing_floor"` — about to pass `floor` without stopping,
+    /// `"passing_floor"` - about to pass `floor` without stopping,
     /// early enough that `go_to_floor(elevator, floor, true)` still
     /// makes the stop.
     PassingFloor { floor: i64, direction: String },
 
-    /// `"stopped_at_floor"` — arrived and snapped, fired before exit
+    /// `"stopped_at_floor"` - arrived and snapped, fired before exit
     /// and boarding: indicator commands returned here affect who
     /// boards.
     StoppedAtFloor { floor: i64 },

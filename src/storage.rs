@@ -5,10 +5,10 @@
 //! (`~/.config/elevato` or the OS equivalent); wasm stores two
 //! localStorage entries, mirroring the original game's persistence.
 //!
-//! Saving happens on explicit Save and on successful Apply — a
+//! Saving happens on explicit Save and on successful Apply - a
 //! documented simplification of the original's debounced autosave.
 
-/// A persisted snapshot: the raw editor text (which need not compile —
+/// A persisted snapshot: the raw editor text (which need not compile -
 /// Save stores whatever the player wrote) and, when readable, the
 /// timescale.
 #[derive(Debug, Clone, PartialEq, Eq)]

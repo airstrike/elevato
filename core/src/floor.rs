@@ -7,7 +7,7 @@
 //! Each floor carries an up and a down call button (the original's
 //! `buttonStates`): passengers press them on spawn and on boarding
 //! overflow; a suitable elevator arrival clears the matching one. The
-//! world owns the press *events* and the re-arrival scan — a floor only
+//! world owns the press *events* and the re-arrival scan - a floor only
 //! tracks the lit/unlit state.
 
 use crate::event::Direction;
@@ -57,8 +57,8 @@ impl Floor {
     }
 
     /// Lights a call button, returning `true` only on the unlit → lit
-    /// transition (the world emits the press event — and runs the
-    /// re-arrival scan — only then).
+    /// transition (the world emits the press event - and runs the
+    /// re-arrival scan - only then).
     pub(crate) fn press(&mut self, direction: Direction) -> bool {
         let lit = match direction {
             Direction::Up => &mut self.up_pressed,

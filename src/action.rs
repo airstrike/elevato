@@ -1,5 +1,5 @@
 //! What a TEA cell's `update` hands back to its parent: an optional
-//! `Instruction` the parent must act on (state it owns — playback,
+//! `Instruction` the parent must act on (state it owns - playback,
 //! storage, navigation) and a [`Task`] the parent must return to the
 //! iced runtime, suitably `.map`ped.
 
@@ -59,7 +59,7 @@ impl<I, Message> Action<I, Message> {
         }
     }
 
-    /// Maps the instruction into another type — for re-bubbling a
+    /// Maps the instruction into another type - for re-bubbling a
     /// child's instruction through an intermediate layer unchanged.
     pub fn map_instruction<N>(self, f: impl Fn(I) -> N + Send + 'static) -> Action<N, Message>
     where

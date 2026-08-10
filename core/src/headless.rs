@@ -1,4 +1,4 @@
-//! The fixed-step headless runner — the one and only driver of the
+//! The fixed-step headless runner - the one and only driver of the
 //! substep/dispatch loop from the [`crate::world`] contract. The script
 //! runtime (Phase 4), tests, and benchmarks all run worlds through here.
 //!

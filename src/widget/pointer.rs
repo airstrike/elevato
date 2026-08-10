@@ -1,5 +1,5 @@
 //! A transparent wrapper that can force the mouse interaction over its
-//! content — the pointer-cursor affordance while the command key is
+//! content - the pointer-cursor affordance while the command key is
 //! held for cmd+click navigation. (`mouse_area` cannot do this: its
 //! interaction only fills in when the content reports none, and a text
 //! editor always reports the text cursor.)

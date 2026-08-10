@@ -1,9 +1,9 @@
 //! The frame driver: owns the engine, the compiled AST, the model, and
-//! the world — directly, by value — and replays the core driver
+//! the world - directly, by value - and replays the core driver
 //! contract ([`elevato_core::world`] module docs) one frame at a time.
 //!
 //! This deliberately duplicates the ~30-line substep/dispatch loop of
-//! [`elevato_core::headless::run`] — the runtime cannot implement
+//! [`elevato_core::headless::run`] - the runtime cannot implement
 //! [`elevato_core::controller::Controller`] because the trait's hooks
 //! are infallible while a script error must abort the frame and pause
 //! playback (see `.claude/DECISIONS.md` D6/D9). The duplication is
@@ -13,8 +13,8 @@
 //!
 //! Scripts never touch the world. Per message the runtime builds fresh
 //! snapshots, calls `update` with the model bound as `this`, and applies
-//! the returned commands immediately — before the next message
-//! dispatches — so a command cascade unfolds in exactly the order the
+//! the returned commands immediately - before the next message
+//! dispatches - so a command cascade unfolds in exactly the order the
 //! original's synchronous callbacks did.
 
 use elevato_core::World;
@@ -35,7 +35,7 @@ const DISPATCH_ROUNDS: usize = 128;
 /// A running scripted simulation, minted from a [`Program`] plus a
 /// challenge and seed (`transformation-method`): construction builds the
 /// world, boots the model via `fn new`, and fires the initial idle
-/// round, so a `Runtime` that exists is already under way —
+/// round, so a `Runtime` that exists is already under way -
 /// [`Runtime::frame`] does the rest.
 pub struct Runtime {
     engine: Engine,
@@ -80,7 +80,7 @@ impl Runtime {
         };
 
         // Top-level statements run exactly once, here, before the boot
-        // function — eval_ast(false) everywhere later keeps them from
+        // function - eval_ast(false) everywhere later keeps them from
         // re-running.
         let options = CallFnOptions::new().eval_ast(true).rewind_scope(false);
         runtime.model = runtime.engine.call_fn_with_options(
@@ -99,9 +99,9 @@ impl Runtime {
     }
 
     /// Advances one frame of `substeps` × [`DT_MAX`] simulated seconds:
-    /// a `tick` message with the whole frame dt first, then per substep —
+    /// a `tick` message with the whole frame dt first, then per substep -
     /// step physics, dispatch drained events, process staged arrivals,
-    /// dispatch again — breaking the moment the challenge decides. A
+    /// dispatch again - breaking the moment the challenge decides. A
     /// returned error aborts the frame; the caller pauses on it.
     pub fn frame(&mut self, substeps: usize) -> Result<(), Error> {
         if self.world.ended() {
@@ -164,7 +164,7 @@ impl Runtime {
     /// Folds one message into the model and applies the returned
     /// commands: snapshots are rebuilt fresh, `update` runs with the
     /// model bound as `this` (mutations persist), and the return value
-    /// is applied before this call returns — i.e. before the next
+    /// is applied before this call returns - i.e. before the next
     /// message dispatches.
     fn deliver(&mut self, message: Map) -> Result<(), Error> {
         let mut arguments: Vec<Dynamic> = vec![
@@ -192,7 +192,7 @@ impl Runtime {
         self.apply(result?)
     }
 
-    /// Interprets `update`'s return value — the effect channel: `()` is
+    /// Interprets `update`'s return value - the effect channel: `()` is
     /// nothing (an unmatched `switch` arm lands here), a command
     /// applies, an array applies each command element in order (unit
     /// elements are skipped). Anything else is a runtime error naming
@@ -221,7 +221,7 @@ impl Runtime {
             Ok(command.apply(&mut self.world)?)
         } else {
             Err(api::runtime_error(format!(
-                "update returned a value of type {} — return a command, an array of commands, \
+                "update returned a value of type {} - return a command, an array of commands, \
                  or nothing",
                 value.type_name()
             ))
@@ -231,7 +231,7 @@ impl Runtime {
 }
 
 /// The message map for a world event: `kind` (the `Event` name in
-/// snake_case) plus that event's fields, flattened — all plain data,
+/// snake_case) plus that event's fields, flattened - all plain data,
 /// elevators and floors as indices.
 fn message(event: Event) -> Map {
     let mut message = Map::new();

@@ -1,7 +1,7 @@
 // Research §5.1, the wiki's "easy solution": every elevator serves its
 // own pressed buttons directly, idles back to floor 0, and every floor
 // call is blindly given to elevator 0. No direction awareness, no load
-// awareness — clears the first few challenges only.
+// awareness - clears the first few challenges only.
 
 fn new() {
     #{}

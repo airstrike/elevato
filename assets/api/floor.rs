@@ -18,11 +18,11 @@ pub struct Floor {
 /// variant name in snake_case, and the fields arrive flattened into
 /// the message map alongside `kind`.
 pub enum Event {
-    /// `"up_button_pressed"` — the up call button went from unlit to
+    /// `"up_button_pressed"` - the up call button went from unlit to
     /// lit. Re-fires when riders who could not board press again
     /// after an arrival cleared it.
     UpButtonPressed { floor: i64 },
 
-    /// `"down_button_pressed"` — likewise, for down.
+    /// `"down_button_pressed"` - likewise, for down.
     DownButtonPressed { floor: i64 },
 }

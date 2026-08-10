@@ -42,7 +42,7 @@ pub enum Error {
 pub enum Condition {
     /// "Transport N people in T seconds or less."
     UserCountWithinTime { user_count: usize, time_limit: f64 },
-    /// "Transport N people and let no one wait more than W seconds" — no
+    /// "Transport N people and let no one wait more than W seconds" - no
     /// time limit; fails the instant anyone's wait reaches W.
     UserCountWithMaxWaitTime {
         user_count: usize,
@@ -59,7 +59,7 @@ pub enum Condition {
         user_count: usize,
         move_limit: usize,
     },
-    /// Perpetual demo — never decides.
+    /// Perpetual demo - never decides.
     Demo,
 }
 
@@ -112,7 +112,7 @@ pub enum Outcome {
     Failed,
 }
 
-/// A validated challenge configuration — the only thing a
+/// A validated challenge configuration - the only thing a
 /// [`crate::World`] can be minted from.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Challenge {

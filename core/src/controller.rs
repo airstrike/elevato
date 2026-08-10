@@ -1,4 +1,4 @@
-//! The boundary anything driving a world implements — Rhai in Phase 4,
+//! The boundary anything driving a world implements - Rhai in Phase 4,
 //! native Rust strategies in tests and benchmarks.
 //!
 //! A controller receives `&mut World` everywhere so it can issue commands
@@ -19,7 +19,7 @@ pub trait Controller {
     fn init(&mut self, world: &mut World);
 
     /// Called once per frame with the *whole* frame dt, before that
-    /// frame's physics substeps — commands issued here take effect in this
+    /// frame's physics substeps - commands issued here take effect in this
     /// frame. Optional; the default does nothing.
     fn update(&mut self, world: &mut World, dt: f64) {
         let _ = (world, dt);

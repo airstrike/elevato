@@ -1,4 +1,4 @@
-//! Rhai syntax highlighting for the editor — rung (a) of the plan's
+//! Rhai syntax highlighting for the editor - rung (a) of the plan's
 //! ladder: iced's [`highlighter::Highlighter`] trait implemented over
 //! syntect's parser, loading the embedded `assets/rhai.sublime-syntax`
 //! grammar. Instead of syntect's theme machinery, each parsed scope is
@@ -31,7 +31,7 @@ const GRAMMAR: &str = include_str!("../assets/rhai.sublime-syntax");
 /// the previous multiple of this, not from the top.
 const LINES_PER_SNAPSHOT: usize = 50;
 
-/// The syntax set, built exactly once — syntax-set construction is far
+/// The syntax set, built exactly once - syntax-set construction is far
 /// too expensive for anything per-frame or per-keystroke.
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     let mut builder = SyntaxSetBuilder::new();
@@ -79,7 +79,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The text format for this kind under `theme` — a foreground
+    /// The text format for this kind under `theme` - a foreground
     /// color only; the font stays the editor's monospace.
     pub fn format(&self, theme: &Theme) -> highlighter::Format<Font> {
         let palette = theme::palette(theme);
@@ -201,7 +201,7 @@ fn kind_ranges<'a>(
 
 /// Splits a line into the ranges between scope operations, pairing
 /// each range with the operation that begins it (a no-op for the
-/// leading range) — the same walk `iced_highlighter` performs.
+/// leading range) - the same walk `iced_highlighter` performs.
 struct Ranges {
     ops: Vec<(usize, ScopeStackOp)>,
     line_length: usize,
@@ -285,7 +285,7 @@ mod tests {
         let classified = tokens(&["e.go_to_floor(2); // let \"x\" = 5"]);
         let line = &classified[0];
         assert!(has(line, "2", Kind::Number));
-        // Everything after `//` is one comment token — keywords,
+        // Everything after `//` is one comment token - keywords,
         // quotes, and digits inside it stay comment-colored.
         assert!(has(line, "// let \"x\" = 5", Kind::Comment));
     }

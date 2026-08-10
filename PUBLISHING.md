@@ -20,8 +20,8 @@ git -C ~/projects/cosmic-text push origin span-padding
 
 > The fork's iced also transitively pins
 > `winit = { git = "https://github.com/airstrike/winit", branch = "unified-titlebar" }`
-> in its own manifest. Nothing to push here — the branch already
-> exists — but it must **stay reachable**; deleting or rebasing it away
+> in its own manifest. Nothing to push here - the branch already
+> exists - but it must **stay reachable**; deleting or rebasing it away
 > breaks clean-clone builds.
 
 ## 2. Flip the dependencies
@@ -37,7 +37,7 @@ In the root `Cargo.toml`:
 
 ## 3. Verify with a clean clone
 
-Prove a stranger can build it — from a machine (or at least a temp dir)
+Prove a stranger can build it - from a machine (or at least a temp dir)
 without `~/projects/iced`:
 
 ```sh
@@ -61,15 +61,15 @@ trunk build --release
 
 Deferred items that only a human in front of real browsers can check:
 
-- **Clipboard in the editor** — copy, cut, and paste in Chrome,
+- **Clipboard in the editor** - copy, cut, and paste in Chrome,
   Firefox, and Safari. Expected UX per the `web-clipboard` fork branch:
   Chrome prompts for permission on first paste, Firefox shows a paste
   confirmation popover, Safari requires the paste to come from a user
   gesture (Cmd+V counts). HTTPS or localhost is required either way.
-- **Playthrough** — clear challenges 1–6 by hand in the deployed build;
+- **Playthrough** - clear challenges 1–6 by hand in the deployed build;
   confirm stats match a native run with the same seed and timescale.
-- **Persistence** — reload the page after Save; code and timescale
+- **Persistence** - reload the page after Save; code and timescale
   should come back (localStorage keys `elevato_code_v1`,
   `elevato_timescale`).
-- **Screenshots** — capture light- and dark-theme shots for the
+- **Screenshots** - capture light- and dark-theme shots for the
   README's screenshots section (placeholders are marked there).

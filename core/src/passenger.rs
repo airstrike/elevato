@@ -4,8 +4,8 @@
 //! A passenger spawns waiting on a floor, boards by walking to an elevator
 //! slot over exactly 1.0 s (only then pressing the in-elevator destination
 //! button), rides, and on arriving at its destination exits and walks off
-//! over `1.0 + rand·0.5` s before removal. Wait time — `elapsed − spawn
-//! time` — keeps feeding the every-step `max_wait_time` refresh through
+//! over `1.0 + rand·0.5` s before removal. Wait time - `elapsed − spawn
+//! time` - keeps feeding the every-step `max_wait_time` refresh through
 //! the entire lifecycle, walk-off included; mid-walk ("busy") passengers
 //! are skipped by boarding attempts.
 
@@ -14,7 +14,7 @@
 const BOARD_WALK: f64 = 1.0;
 
 /// Cosmetic passenger appearance, drawn at spawn. The draw itself is
-/// load-bearing — it keeps the RNG stream aligned — even though nothing in
+/// load-bearing - it keeps the RNG stream aligned - even though nothing in
 /// the simulation reads the result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
@@ -32,7 +32,7 @@ pub enum Appearance {
 enum State {
     /// On a floor, eligible to board a suitable arrival.
     Waiting,
-    /// Aboard, walking to its slot — busy, skipped by boarding and not yet
+    /// Aboard, walking to its slot - busy, skipped by boarding and not yet
     /// pressing the destination button.
     Boarding {
         elevator: usize,
@@ -88,7 +88,7 @@ impl Passenger {
     }
 
     /// Body weight, a uniform integer in 55–100. Feeds
-    /// [`crate::elevator::Elevator::load_factor`] only — never blocks
+    /// [`crate::elevator::Elevator::load_factor`] only - never blocks
     /// boarding.
     pub fn weight(&self) -> u32 {
         self.weight
@@ -136,7 +136,7 @@ impl Passenger {
     }
 
     /// The elevator slot occupied while aboard (boarding or riding), if
-    /// any — read by the world's exit path and by renderers placing
+    /// any - read by the world's exit path and by renderers placing
     /// riders in their slots.
     pub fn slot(&self) -> Option<usize> {
         match self.state {

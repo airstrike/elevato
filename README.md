@@ -1,7 +1,7 @@
 # elevato.rs
 
-A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) —
-Magnus Wolffelt's elevator programming game — in Rust: program a bank of
+A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) -
+Magnus Wolffelt's elevator programming game - in Rust: program a bank of
 elevators in [Rhai](https://rhai.rs), watch the simulation, and clear
 the challenges. Same physics constants, same spawn model, same boarding
 rules, same challenge roster as the original.
@@ -12,7 +12,7 @@ doubles as a working example of iced + canvas + Rhai on wasm.
 
 ## Screenshots
 
-<!-- TODO(andy): capture from the deployed build — one light-theme and
+<!-- TODO(andy): capture from the deployed build - one light-theme and
      one dark-theme shot of a run in progress, plus one of the editor
      with a compile error. -->
 
@@ -22,7 +22,7 @@ doubles as a working example of iced + canvas + Rhai on wasm.
 
 Pick a challenge, press **Start**, and watch the default program
 struggle. Then make it yours: edit the Rhai program on the right and
-press **Apply** — the world rebuilds from scratch and your new program
+press **Apply** - the world rebuilds from scratch and your new program
 takes over. **Save** persists the code and timescale (config dir
 natively, localStorage in the browser); **Reset** restores the starter
 program (with **Undo reset** as the escape hatch). The −/+ buttons step
@@ -68,7 +68,7 @@ fn init(elevators, floors) {
 `going_up_indicator`, `destination_queue`, floor call buttons, and the
 full event set (`idle`, `floor_button_pressed`, `passing_floor`,
 `stopped_at_floor`, `up_button_pressed`, `down_button_pressed`) are all
-there — see **[API.md](API.md)** for the complete mapping, the
+there - see **[API.md](API.md)** for the complete mapping, the
 Rhai-vs-JS gotchas, and the documented deviations.
 
 ## Challenges
@@ -98,12 +98,12 @@ The original's 19, verbatim:
 ```
 elevato/
 ├── src/       the iced app: canvas, editor, playback, theme
-├── core/      elevato-core — the pure simulation (no iced, no rhai)
+├── core/      elevato-core - the pure simulation (no iced, no rhai)
 └── script/    the Rhai bindings and runtime over core's boundary
 ```
 
 `core` is exhaustively pinned by integration tests: ported community
-solutions pass — and fail — real challenges headlessly exactly as they
+solutions pass - and fail - real challenges headlessly exactly as they
 do in the original, and a live run replays a headless run byte for byte.
 
 ## Development note
@@ -112,19 +112,19 @@ The workspace currently builds against local checkouts of the
 [airstrike/iced](https://github.com/airstrike/iced) and
 [airstrike/cosmic-text](https://github.com/airstrike/cosmic-text) forks
 via path dependencies (see the root `Cargo.toml`). The iced path points
-at `~/projects/iced-web-clipboard` — a git worktree of the iced checkout
+at `~/projects/iced-web-clipboard` - a git worktree of the iced checkout
 on the `web-clipboard` branch, which implements browser clipboard
 support (`navigator.clipboard`) on top of `span-padding`. Builds require
 that worktree to exist and stay on that branch until the dependency flip
-to git sources lands — the prepared patch block and the exact steps live
+to git sources lands - the prepared patch block and the exact steps live
 in [PUBLISHING.md](PUBLISHING.md) and the root `Cargo.toml`.
 
 ## Credits
 
 - [Elevator Saga](https://play.elevatorsaga.com) by
   [Magnus Wolffelt](https://github.com/magwo/elevatorsaga) and
-  contributors — the original game this is a loving rewrite of, down to
+  contributors - the original game this is a loving rewrite of, down to
   its physics constants and challenge configs.
 - [iced](https://iced.rs), [Rhai](https://rhai.rs), and
   [Fira Code](https://github.com/tonsky/FiraCode) (bundled under the SIL
-  Open Font License — `assets/fonts/OFL.txt`).
+  Open Font License - `assets/fonts/OFL.txt`).

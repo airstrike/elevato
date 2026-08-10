@@ -182,7 +182,7 @@ fn go_to_floor_issued_while_draining_idle_takes_effect_in_the_same_iteration() {
     assert_eq!(elevator.destination_queue(), &[2.0]);
 
     // ...so the very next substep accelerates it (velocity integrates
-    // into position one substep later — velocity-before-acceleration
+    // into position one substep later - velocity-before-acceleration
     // Euler, research §3).
     world.step(DT_MAX);
     let elevator = &world.elevators()[0];

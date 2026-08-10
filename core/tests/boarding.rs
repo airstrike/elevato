@@ -2,7 +2,7 @@
 //! overflow re-pressing and the re-arrival scan, the 1 s board-walk
 //! before the destination button press, and the walk-off feeding
 //! `max_wait_time` until removal. All runs go through the headless
-//! runner — it is the only driver.
+//! runner - it is the only driver.
 
 use elevato_core::challenge::{Challenge, Condition};
 use elevato_core::controller::Controller;
@@ -10,7 +10,7 @@ use elevato_core::event::Event;
 use elevato_core::{World, headless};
 
 /// Sweeps its single elevator 0 → 1 → 2 → 3 → 0 forever, forcing the
-/// down indicator off at every stop (during `StoppedAtFloor` dispatch —
+/// down indicator off at every stop (during `StoppedAtFloor` dispatch -
 /// before that same arrival's boarding runs), and audits at every event
 /// that no down-going passenger is ever aboard.
 struct UpSweeper {
@@ -316,7 +316,7 @@ impl Controller for Ferry {
 #[test]
 fn max_wait_time_keeps_climbing_through_the_walk_off_and_plateaus_at_removal() {
     // Spawn interval 10 s: the first passenger is delivered, walks off,
-    // and is removed while nobody else exists — so every change (and the
+    // and is removed while nobody else exists - so every change (and the
     // plateau) is attributable to the walk-off alone.
     let challenge = Challenge::new(3, 1, vec![4], 0.1, Condition::Demo).unwrap();
     let mut world = World::new(&challenge, 5);

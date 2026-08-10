@@ -1,7 +1,7 @@
 //! The API reference: three Rust-voiced pages (`lib.rs`,
 //! `elevator.rs`, `floor.rs`) rendered read-only through the same
 //! highlighter as the code pane, plus the jump registry behind
-//! cmd+click — struct fields, methods, enum variants (and their
+//! cmd+click - struct fields, methods, enum variants (and their
 //! snake_case event names), and entry points all navigate, from the
 //! reference or from the editor.
 
@@ -68,14 +68,14 @@ static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|
             };
             insert(name.to_string(), page, line);
             // Enum variants are CamelCase; scripts name the same event
-            // in snake_case inside `on("…")` — register both.
+            // in snake_case inside `on("…")` - register both.
             if name.starts_with(|c: char| c.is_ascii_uppercase()) {
                 insert(snake_case(name), page, line);
             }
         }
     }
     // Entry-point parameters read like globals in scripts; point them
-    // at their declaring signature — `update` receives all three
+    // at their declaring signature - `update` receives all three
     // (`new` has no parameters).
     for (alias, target) in [
         ("message", "update"),
@@ -149,7 +149,7 @@ fn snake_case(name: &str) -> String {
     snake
 }
 
-/// `text` when it is exactly one identifier — what a double click (or
+/// `text` when it is exactly one identifier - what a double click (or
 /// double tap) leaves selected on a name.
 pub fn identifier(text: &str) -> Option<&str> {
     let word = text.trim();
@@ -186,9 +186,9 @@ pub fn identifier_in(line: &str, column: usize) -> Option<String> {
 pub struct State {
     page: Page,
     content: text_editor::Content,
-    /// Where cmd+clicks came from, newest last — the back stack.
+    /// Where cmd+clicks came from, newest last - the back stack.
     history: Vec<(Page, usize)>,
-    /// Where back() came from, newest last — the forward stack.
+    /// Where back() came from, newest last - the forward stack.
     future: Vec<(Page, usize)>,
 }
 
@@ -218,7 +218,7 @@ impl State {
         self.page
     }
 
-    /// Applies a viewer message. Edits are silently dropped — the
+    /// Applies a viewer message. Edits are silently dropped - the
     /// reference is read-only; everything else (clicks, selection,
     /// scrolling, copy) behaves like a normal editor.
     pub fn update(&mut self, message: Message) -> Action<(), Message> {
@@ -239,7 +239,7 @@ impl State {
         identifier_in(&self.content.line(position.line)?.text, position.column)
     }
 
-    /// The selection, when it is exactly one identifier — the
+    /// The selection, when it is exactly one identifier - the
     /// double-tap jump affordance's input.
     pub fn selected_identifier(&self) -> Option<String> {
         let selection = self.content.selection()?;

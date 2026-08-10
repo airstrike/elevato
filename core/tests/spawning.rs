@@ -1,4 +1,4 @@
-//! Spawn-model distribution checks over a seeded run (loose bounds — the
+//! Spawn-model distribution checks over a seeded run (loose bounds - the
 //! point is the shape of the distribution, not exact frequencies).
 
 use elevato_core::challenge::{Challenge, Condition};

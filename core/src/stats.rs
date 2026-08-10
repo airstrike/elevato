@@ -1,13 +1,13 @@
 //! Live simulation statistics, exactly as the original computes them.
 //!
-//! Wait time is *time since spawn* — it includes riding and the post-exit
+//! Wait time is *time since spawn* - it includes riding and the post-exit
 //! walk-off until removal. `max_wait_time` therefore climbs every step
 //! while anyone is present; `avg_wait_time` is an incremental mean taken
 //! at each exit; `transported_per_sec` updates only at exits (it does not
 //! decay between them). Challenge conditions read this snapshot after
 //! every substep's arrival processing.
 
-/// A snapshot of the world's running statistics. Plain data — comparing
+/// A snapshot of the world's running statistics. Plain data - comparing
 /// two runs' final stats with `==` is the determinism check.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Stats {
@@ -56,7 +56,7 @@ impl Stats {
         self.elapsed += dt;
     }
 
-    /// Folds one present passenger's current wait into the maximum — the
+    /// Folds one present passenger's current wait into the maximum - the
     /// every-step refresh that keeps `max_wait_time` climbing while
     /// anyone waits, rides, or walks off.
     pub(crate) fn observe_wait(&mut self, wait: f64) {

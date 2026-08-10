@@ -1,5 +1,5 @@
-//! The application: a splash screen that hands off — via a measured
-//! viewport width — to the game screen: challenge toolbar, stats bar,
+//! The application: a splash screen that hands off - via a measured
+//! viewport width - to the game screen: challenge toolbar, stats bar,
 //! sim canvas, and the editor pane, a thin TEA shell over
 //! [`crate::playback::Playback`] composed with the [`crate::editor`]
 //! cell.
@@ -150,7 +150,7 @@ pub enum Message {
     /// Forward again (arrow, browser-forward key, mouse forward
     /// button, or the cmd+I / cmd+] chords).
     DocsForward,
-    /// The tab-bar chip: jump to the selected name's definition — the
+    /// The tab-bar chip: jump to the selected name's definition - the
     /// touch answer to cmd+click (a double tap selects the word, the
     /// chip does the jump).
     DocsJump(docs::Page, usize),
@@ -176,7 +176,7 @@ pub fn boot() -> (App, Task<Message>) {
     )
 }
 
-/// Applies a message to the state. All simulation work happens here —
+/// Applies a message to the state. All simulation work happens here -
 /// `view` only reads.
 pub fn update(app: &mut App, message: Message) -> Task<Message> {
     match message {
@@ -337,7 +337,7 @@ impl Game {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
         };
-        // A saved program can be broken — Save persists raw text — so a
+        // A saved program can be broken - Save persists raw text - so a
         // failed compile boots the starter engine underneath while the
         // editor keeps the saved text and shows its compile error.
         let (mut playback, apply_error) = match Playback::new(&code) {
@@ -357,7 +357,7 @@ impl Game {
             .map(|(index, challenge)| Choice {
                 index,
                 label: format!(
-                    "Challenge #{} — {}",
+                    "Challenge #{} - {}",
                     index + 1,
                     describe(challenge.condition())
                 ),
@@ -498,8 +498,8 @@ impl Game {
         if self.viewport_width < NARROW {
             return self.narrow_view(mode);
         }
-        // Code on the left, world on the right — the reading order of
-        // the game loop: write, then watch — twin rounded cards around
+        // Code on the left, world on the right - the reading order of
+        // the game loop: write, then watch - twin rounded cards around
         // a draggable hairline divider.
         let workspace = container(
             Split::new(
@@ -549,8 +549,8 @@ impl Game {
         Some((name, page, line))
     }
 
-    /// The face selectors, prefixed by the selection-jump chip and —
-    /// when the reference is up — the history arrows.
+    /// The face selectors, prefixed by the selection-jump chip and -
+    /// when the reference is up - the history arrows.
     fn tab_bar(&self, tabs: &'static [Tab]) -> Element<'_, Message> {
         let mut bar = row![].spacing(4).align_y(Center);
         if let Some((name, page, line)) = self.selected_reference() {
@@ -881,7 +881,7 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
         }
     } else {
         content = content.push(
-            text("Challenge failed — maybe your program needs an improvement?")
+            text("Challenge failed - maybe your program needs an improvement?")
                 .size(18)
                 .style(theme::text::outcome(false)),
         );

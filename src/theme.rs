@@ -1,5 +1,5 @@
 //! Semantic colors and widget styles. Every `.style()` call site in the
-//! app passes a named fn from this module — no inline style closures —
+//! app passes a named fn from this module - no inline style closures -
 //! and the sim canvas reads its colors from [`palette`]. Solid colors
 //! only: gradients silently no-op on the wasm build.
 
@@ -76,7 +76,7 @@ impl Mode {
     }
 }
 
-/// The one bundled face — Geist Mono (OFL, `assets/fonts/OFL.txt`) —
+/// The one bundled face - Geist Mono (OFL, `assets/fonts/OFL.txt`) -
 /// voicing the editor, chrome, and canvas labels alike. Embedded so
 /// both targets render identically; the browser gives fontdb no system
 /// fonts, so wasm has nothing to fall back on. The cosmic-text fork
@@ -135,7 +135,7 @@ pub struct Palette {
 pub fn palette(theme: &Theme) -> Palette {
     if is_dark(theme) {
         // Machine room at night: warm graphite (no blue cast), ivory
-        // text, verdigris lamp-green accents — old elevator-hall lamps.
+        // text, verdigris lamp-green accents - old elevator-hall lamps.
         Palette {
             text_primary: color!(0xece7db),
             text_secondary: color!(0x98948a),
@@ -254,7 +254,7 @@ pub mod container {
         }
     }
 
-    /// A workspace card — the editor and the world get the *same*
+    /// A workspace card - the editor and the world get the *same*
     /// rounded surface, so the two halves of the split are twins.
     pub fn pane(theme: &Theme) -> Style {
         let palette = palette(theme);
@@ -302,7 +302,7 @@ pub mod text_editor {
 
     use super::palette;
 
-    /// The Rhai code editor: chromeless — its card (the workspace pane
+    /// The Rhai code editor: chromeless - its card (the workspace pane
     /// it sits in) provides the surface and border, so the editor and
     /// the world canvas dress identically.
     pub fn code(theme: &Theme, status: Status) -> Style {
@@ -321,7 +321,7 @@ pub mod text_editor {
     }
 }
 
-/// Granita previews — native-only dev tooling. A plain module `#[cfg]`
+/// Granita previews - native-only dev tooling. A plain module `#[cfg]`
 /// (not `cfg_attr` on the fn) because granita's source walker matches
 /// the literal `#[granita::preview]` attribute path and cannot see
 /// through `cfg_attr`.
@@ -389,7 +389,7 @@ pub mod previews {
 
 pub mod button {
     //! Button styles for `.style()` on `button` widgets: a deliberate
-    //! hierarchy — one filled `primary` per surface, `outline` for
+    //! hierarchy - one filled `primary` per surface, `outline` for
     //! secondary actions (shadcn-style), `ghost` for tertiary ones.
 
     use iced::widget::button::{Status, Style};
@@ -397,7 +397,7 @@ pub mod button {
 
     use super::palette;
 
-    /// Filled accent — the surface's main action (Start, Apply).
+    /// Filled accent - the surface's main action (Start, Apply).
     pub fn primary(theme: &Theme, status: Status) -> Style {
         let ladder = theme.palette();
         let base = Style {
@@ -416,7 +416,7 @@ pub mod button {
         }
     }
 
-    /// Outlined, quiet — secondary actions (Restart, Save).
+    /// Outlined, quiet - secondary actions (Restart, Save).
     pub fn outline(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
         let base = Style {
@@ -443,7 +443,7 @@ pub mod button {
         }
     }
 
-    /// Bare — tertiary actions (speed steps, resets, mode toggle).
+    /// Bare - tertiary actions (speed steps, resets, mode toggle).
     pub fn ghost(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
         let base = Style {
@@ -464,7 +464,7 @@ pub mod button {
     }
 
     /// [`ghost`], except a disabled button disappears entirely while
-    /// still occupying its space — for paired affordances (the
+    /// still occupying its space - for paired affordances (the
     /// reference's back/forward arrows) whose layout must not shift as
     /// each end of the history is reached.
     pub fn vanishing(theme: &Theme, status: Status) -> Style {
@@ -479,7 +479,7 @@ pub mod button {
         }
     }
 
-    /// A text link: bare accent text that brightens on hover — the
+    /// A text link: bare accent text that brightens on hover - the
     /// splash's homage to the original.
     pub fn link(theme: &Theme, status: Status) -> Style {
         let ladder = theme.palette();

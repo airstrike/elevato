@@ -2,7 +2,7 @@
 // request lists fed by the floor call buttons, idle cars claiming a
 // whole list as one directional sweep, travel-order insertion into the
 // destination queue (via set_destination_queue +
-// check_destination_queue — the command idiom for the original's
+// check_destination_queue - the command idiom for the original's
 // destinationQueue.splice), and indicator steering at every stop so only
 // same-direction passengers board.
 
@@ -30,7 +30,7 @@ fn update(message, elevators, floors) {
         }
         // Idle: claim the pending up calls as one ascending sweep, else
         // the down calls as one descending sweep, else park at the
-        // lobby — with both indicators lit so anyone may board on
+        // lobby - with both indicators lit so anyone may board on
         // arrival. Overflow passengers re-press, refilling the lists
         // for the next idle car.
         "idle" => {
@@ -78,7 +78,7 @@ fn update(message, elevators, floors) {
                 commands
             }
         }
-        // At each stop, indicate the direction of the next destination —
+        // At each stop, indicate the direction of the next destination -
         // the boarding rule then keeps wrong-direction passengers out.
         "stopped_at_floor" => {
             let e = message.elevator;

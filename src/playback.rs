@@ -6,7 +6,7 @@
 //!
 //! # Seed policy
 //!
-//! The original game is unseeded — every run is different and none is
+//! The original game is unseeded - every run is different and none is
 //! reproducible. Elevato instead seeds each run from an **attempt
 //! counter** starting at 1 and incremented on every restart and
 //! challenge switch: consecutive attempts vary like the original's, yet
@@ -19,7 +19,7 @@
 //! rounded golden-ratio ladder: `round(timescale × 1.618)` up,
 //! `round(timescale / 1.618)` down, clamped ("capped below 40"). One
 //! [`Playback::tick`] advances the runtime by exactly `timescale`
-//! substeps of [`DT_MAX`](elevato_core::world::DT_MAX) — the
+//! substeps of [`DT_MAX`](elevato_core::world::DT_MAX) - the
 //! fixed-timestep deviation that makes a live run replay a headless run
 //! byte for byte.
 
@@ -29,7 +29,7 @@ use crate::core::stats::Stats;
 
 use script::{Program, Runtime};
 
-/// The built-in starter program — the rhai port of the original's
+/// The built-in starter program - the rhai port of the original's
 /// default implementation. The canonical copy lives with the script
 /// crate's solution fixtures and is included verbatim.
 pub const STARTER: &str = include_str!("../script/tests/solutions/starter.rhai");
@@ -181,7 +181,7 @@ impl Playback {
 
     /// Compiles `source` and, on success, replaces the program and
     /// starts a fresh attempt on the **current** challenge with the
-    /// next seed, auto-started (the original's Apply flow — nothing
+    /// next seed, auto-started (the original's Apply flow - nothing
     /// survives but editor text and timescale). On a compile error the
     /// running attempt is left untouched but paused, and the error is
     /// returned for the caller to surface.
@@ -238,7 +238,7 @@ impl Playback {
         }
     }
 
-    /// Builds the runtime for the current (challenge, seed) — dropping
+    /// Builds the runtime for the current (challenge, seed) - dropping
     /// the previous attempt first, so its world is freed before the new
     /// one exists. A construction failure (`new` threw) leaves no
     /// runtime and records the error.

@@ -11,7 +11,7 @@ pub enum Error {
 
     /// The program never defines the boot function whose return value
     /// becomes the model.
-    #[error("the program must define `fn new()` — its return value is the model")]
+    #[error("the program must define `fn new()` - its return value is the model")]
     MissingNew,
 
     /// A `fn new` exists, but with parameters it cannot have.
@@ -22,7 +22,7 @@ pub enum Error {
     #[error("the program must define `fn update(message, elevators, floors)`")]
     MissingUpdate,
 
-    /// A throw or failure inside `new` or `update` — including a
+    /// A throw or failure inside `new` or `update` - including a
     /// command applied to an elevator the challenge does not have, and
     /// an `update` return value that is not a command. The inner
     /// error's display includes the source position when there is one.

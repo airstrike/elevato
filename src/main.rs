@@ -12,7 +12,7 @@ pub fn main() -> iced::Result {
     }
 
     let settings = iced::Settings {
-        // Safari now ships WebGPU, so wgpu auto-detects it on iOS — and
+        // Safari now ships WebGPU, so wgpu auto-detects it on iOS - and
         // renders black. WebGL2 is the proven web path; force it on
         // wasm (Chrome included: consistency beats novelty here).
         #[cfg(target_arch = "wasm32")]

@@ -1,8 +1,8 @@
-// Research §5.3-style ("Twentyliner"): no events at all — every tick
+// Research §5.3-style ("Twentyliner"): no events at all - every tick
 // re-plans each elevator from scratch by polling the floors' call-button
 // states. Down calls are encoded as negative floor numbers, exactly like
 // the original (so a floor-0 up call, +0, has sign 0 and is only taken
-// by direction-less cars — a faithful quirk). Pickups are considered
+// by direction-less cars - a faithful quirk). Pickups are considered
 // only under half load and only along the car's current direction; the
 // chosen floor is claimed from the global list, the car is stopped and
 // re-dispatched, and the indicators are set to match its direction.

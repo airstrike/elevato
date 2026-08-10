@@ -15,10 +15,10 @@ use rhai::{Array, Dynamic, Engine, EvalAltResult, Map, Position};
 /// One instruction to the world, minted by the constructor functions
 /// registered on the engine (`go_to_floor(…)`, `stop(…)`, …) and
 /// consumed by the runtime from `update`'s return value. Opaque to
-/// scripts — a command cannot be inspected or altered, only returned.
+/// scripts - a command cannot be inspected or altered, only returned.
 ///
 /// Floor values are clamped to the building by core, exactly as the
-/// original coerced them; elevator indices are *not* clamped — an index
+/// original coerced them; elevator indices are *not* clamped - an index
 /// the challenge does not have is a runtime error at application time.
 #[derive(Debug, Clone)]
 pub(crate) enum Command {
@@ -96,7 +96,7 @@ impl Command {
             .filter(|&index| index < count)
             .ok_or_else(|| {
                 runtime_error(format!(
-                    "{}: no elevator {} — this challenge has {count} (indices 0 to {})",
+                    "{}: no elevator {} - this challenge has {count} (indices 0 to {})",
                     self.name(),
                     self.elevator(),
                     count - 1
@@ -118,7 +118,7 @@ pub(crate) fn engine() -> Engine {
     let mut engine = Engine::new();
     // rhai's default parse-depth and call-stack limits differ between
     // debug and release builds (16 vs 32 expression levels in function
-    // bodies, 8 vs 64 call levels) — tight enough that a realistic
+    // bodies, 8 vs 64 call levels) - tight enough that a realistic
     // program fails to parse in debug only. Pin generous values so a
     // program compiles and runs identically in both profiles. No
     // operations limit: per-update replanning strategies must never trip
@@ -181,7 +181,7 @@ pub(crate) fn engine() -> Engine {
 }
 
 /// The `elevators` argument to `update`: one plain-data map per
-/// elevator, rebuilt fresh before every call — state may have changed
+/// elevator, rebuilt fresh before every call - state may have changed
 /// since the previous message.
 pub(crate) fn elevator_snapshots(world: &World) -> Array {
     world

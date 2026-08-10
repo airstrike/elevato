@@ -1,6 +1,6 @@
 //! The Rhai editor pane: a self-contained TEA cell owning the text
 //! buffer, the dirty flag, and the Reset backup. The parent owns
-//! everything the buttons *do* — compiling, running, persisting — and
+//! everything the buttons *do* - compiling, running, persisting - and
 //! is told about it via [`Instruction`]; the current script error
 //! (compile or runtime) is a read-only prop passed into [`State::view`].
 
@@ -25,7 +25,7 @@ pub struct State {
     backup: Option<String>,
     /// Undo history: text snapshots taken *before* each edit burst
     /// (consecutive typing coalesces into one entry). Restoring puts
-    /// the cursor at the buffer start — a v1 simplification.
+    /// the cursor at the buffer start - a v1 simplification.
     undo: Vec<String>,
     /// Redone-able snapshots; cleared by any fresh edit.
     redo: Vec<String>,
@@ -36,9 +36,9 @@ pub struct State {
 /// How an edit action groups for undo purposes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Edit {
-    /// A plain character insertion — bursts coalesce.
+    /// A plain character insertion - bursts coalesce.
     Typing,
-    /// Anything else (newline, delete, paste) — snapshots individually.
+    /// Anything else (newline, delete, paste) - snapshots individually.
     Other,
 }
 
@@ -117,7 +117,7 @@ impl State {
         docs::identifier_in(&self.content.line(position.line)?.text, position.column)
     }
 
-    /// The selection, when it is exactly one identifier — the
+    /// The selection, when it is exactly one identifier - the
     /// double-tap jump affordance's input.
     pub fn selected_identifier(&self) -> Option<String> {
         let selection = self.content.selection()?;
@@ -189,8 +189,8 @@ impl State {
 
     /// The pane: editor, error panel (when `error` is present), and
     /// the Apply/Save/Reset/Undo-reset row. `error` is whichever
-    /// script error is current — compile from Apply or runtime from a
-    /// tick — owned by the parent.
+    /// script error is current - compile from Apply or runtime from a
+    /// tick - owned by the parent.
     pub fn view<'a>(&'a self, error: Option<&'a script::Error>) -> Element<'a, Message> {
         let editor = text_editor(&self.content)
             .height(Fill)
@@ -246,7 +246,7 @@ impl State {
         .spacing(8);
 
         // The parent's workspace card provides the surface, border, and
-        // padding — this pane is chromeless content.
+        // padding - this pane is chromeless content.
         let mut pane = column![editor].spacing(8);
         if let Some(error) = error {
             pane = pane.push(error_panel(error));

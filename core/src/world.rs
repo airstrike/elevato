@@ -4,7 +4,7 @@
 //!
 //! # Driver contract
 //!
-//! The substep loop is **not** in core — [`crate::headless::run`] owns it
+//! The substep loop is **not** in core - [`crate::headless::run`] owns it
 //! (and is the only driver), so handlers dispatch per-substep exactly as
 //! the original's synchronous events did:
 //!
@@ -28,8 +28,8 @@
 //! spawn due passengers → elevator task + movement updates (arrivals are
 //! staged) → passenger walk timers + the every-step `max_wait_time`
 //! refresh → removals → move-count refresh. Challenge conditions are
-//! evaluated at the end of [`World::process_arrivals`] — after this
-//! substep's exits landed — matching the original's `stats_changed`
+//! evaluated at the end of [`World::process_arrivals`] - after this
+//! substep's exits landed - matching the original's `stats_changed`
 //! evaluation running after its (inline) arrival processing.
 //!
 //! # Staged arrivals
@@ -37,7 +37,7 @@
 //! When a step lands an elevator exactly on a floor, the queue-head shift
 //! and the 1 s dwell start happen synchronously inside the step (the
 //! original's `stopped` reaction runs *before* `stopped_at_floor` fires),
-//! so `StoppedAtFloor` handlers observe a busy, already-shifted elevator —
+//! so `StoppedAtFloor` handlers observe a busy, already-shifted elevator -
 //! but the arrival stays staged until [`World::process_arrivals`], which
 //! clears matching floor call buttons, lets riders exit, and boards
 //! waiting passengers, strictly after `StoppedAtFloor` handlers ran.
@@ -186,8 +186,8 @@ impl World {
     /// Processes arrivals staged by [`World::step`], after the driver has
     /// dispatched their `StoppedAtFloor` events. Per arrived elevator, in
     /// research §3 order: clear the floor call button(s) matching the
-    /// elevator's lit indicator(s) — first, deliberately, so overflow
-    /// passengers re-press — then exits (freeing slots), then boarding in
+    /// elevator's lit indicator(s) - first, deliberately, so overflow
+    /// passengers re-press - then exits (freeing slots), then boarding in
     /// spawn order. Ends by evaluating the challenge condition, so a
     /// decision lands the same substep as the exit that caused it.
     pub fn process_arrivals(&mut self) {
@@ -220,7 +220,7 @@ impl World {
     }
 
     /// Clears an elevator's queue and, unless it is dwelling, halts it at
-    /// the projected stop point (generally between floors — no arrival
+    /// the projected stop point (generally between floors - no arrival
     /// events, no dwell).
     pub fn stop(&mut self, elevator: usize) {
         let elevator = self
@@ -314,7 +314,7 @@ impl World {
     }
 
     /// Lights a floor call button. Only the unlit → lit transition emits
-    /// the event and runs the re-arrival scan — pressing a lit button is
+    /// the event and runs the re-arrival scan - pressing a lit button is
     /// silent, exactly like the original.
     fn press_call_button(&mut self, level: usize, direction: Direction) {
         let transitioned = self.floors[level].press(direction);
@@ -331,7 +331,7 @@ impl World {
     /// The re-arrival rule (original `handleButtonRepressing`): scan the
     /// elevators in a random-rotation order for one standing still on
     /// this exact floor, not full, with the matching direction indicator
-    /// on — and issue it a forced `go_to_floor`, causing a re-arrival the
+    /// on - and issue it a forced `go_to_floor`, causing a re-arrival the
     /// presser can board. The rotation offset is drawn once per scan.
     fn dispatch_standing_elevator(&mut self, level: usize, direction: Direction) {
         let count = self.elevators.len();
@@ -385,7 +385,7 @@ impl World {
         let level = self.elevators[elevator].current_floor();
 
         // 1. Clear the call button(s) whose direction matches a lit
-        //    indicator — before boarding, so overflow passengers re-press
+        //    indicator - before boarding, so overflow passengers re-press
         //    and the press event re-fires.
         if self.elevators[elevator].going_up_indicator() {
             self.floors[level].clear(Direction::Up);
@@ -414,8 +414,8 @@ impl World {
 
         // 3. Boarding: every waiting passenger on this floor, in spawn
         //    order. Suitability checks the indicators; capacity is slot
-        //    count only. The slot offset is drawn per suitable attempt —
-        //    even when the elevator turns out to be full — to keep the
+        //    count only. The slot offset is drawn per suitable attempt -
+        //    even when the elevator turns out to be full - to keep the
         //    RNG stream aligned with the original's `userEntering`.
         for index in 0..self.passengers.len() {
             let passenger = &self.passengers[index];

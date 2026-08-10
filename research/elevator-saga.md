@@ -1,4 +1,4 @@
-# Elevator Saga — Complete Reference for Reimplementation
+# Elevator Saga - Complete Reference for Reimplementation
 
 Source of truth: https://github.com/magwo/elevatorsaga (commit `e0c55bf`, 2021-01-04, the
 version deployed at https://play.elevatorsaga.com/). All file citations below refer to that
@@ -18,10 +18,10 @@ based).
 ### Player loop
 
 1. Edit code in a CodeMirror editor at the bottom of the page (`app.js`).
-2. Press **Apply** — this re-`eval`s the code, tears down the current world, creates a
+2. Press **Apply** - this re-`eval`s the code, tears down the current world, creates a
    fresh one for the current challenge, and auto-starts it.
 3. Watch the simulation run; a stats bar updates live.
-4. The challenge ends with "Success!" (link to next challenge) or "Challenge failed —
+4. The challenge ends with "Success!" (link to next challenge) or "Challenge failed -
    maybe your program needs an improvement?".
 
 ### UI elements
@@ -99,7 +99,7 @@ Methods (all functions unless noted):
 | Member | Semantics (exact) |
 |---|---|
 | `goToFloor(floorNum, [forceNow])` | Queue a destination. `floorNum` is coerced with `Number()` and clamped to `[0, floorCount-1]`. **Duplicate suppression**: if the queue is non-empty and the *adjacent* element (queue **front** if `forceNow`, queue **back** otherwise) equals `floorNum` (epsilon compare), the call is a no-op. Otherwise `forceNow` `unshift`s (go there before anything else), default `push`es. Then `checkDestinationQueue()` runs automatically. |
-| `stop()` | Sets `destinationQueue = []`. If the elevator is not busy (i.e., not in its 1 s door dwell), commands the physical elevator to `goToFloor(getExactFutureFloorIfStopped())` — i.e., decelerate and halt at the nearest reachable position, which is **usually not a floor**, so passengers will not get out. Docs: intended only for advanced in-transit rescheduling. |
+| `stop()` | Sets `destinationQueue = []`. If the elevator is not busy (i.e., not in its 1 s door dwell), commands the physical elevator to `goToFloor(getExactFutureFloorIfStopped())` - i.e., decelerate and halt at the nearest reachable position, which is **usually not a floor**, so passengers will not get out. Docs: intended only for advanced in-transit rescheduling. |
 | `currentFloor()` | Returns the elevator's cached *rounded* floor number (updated whenever the rounded position changes). Does **not** imply the elevator is stopped. |
 | `goingUpIndicator([bool])` / `goingDownIndicator([bool])` | Getter/setter (setter returns the interface for chaining; truthiness coerced to bool). Both start `true`. Affects passenger boarding and floor-button clearing (section 3). |
 | `maxPassengerCount()` | The elevator's capacity in passengers (slot count). |
@@ -114,9 +114,9 @@ Events on the elevator interface:
 
 | Event | Args | Exact trigger |
 |---|---|---|
-| `idle` | — | Fired by `checkDestinationQueue()` when the destination queue is empty and the elevator is not busy. Notably fired for every elevator **at challenge start** (`world.init()` calls `checkDestinationQueue()` on each interface right after user `init` runs), and again ~1 s after finishing the last queued destination. Can be re-fired by user calls to `checkDestinationQueue()` while empty/idle. |
+| `idle` | - | Fired by `checkDestinationQueue()` when the destination queue is empty and the elevator is not busy. Notably fired for every elevator **at challenge start** (`world.init()` calls `checkDestinationQueue()` on each interface right after user `init` runs), and again ~1 s after finishing the last queued destination. Can be re-fired by user calls to `checkDestinationQueue()` while empty/idle. |
 | `floor_button_pressed` | `floorNum` | A passenger inside pressed a destination button that was **not already lit** (pressing a lit button re-triggers nothing). Passengers press their button ~1 s after boarding (walk-to-slot animation completes). |
-| `passing_floor` | `floorNum, direction` | Fired "slightly before" passing a floor — precisely: when `trunc(exactFutureFloorIfStopped)` changes, where *futureFloorIfStopped* = current position projected forward by the braking distance at full deceleration. Never fired for the current destination floor. `direction` is `"up"` or `"down"` (elevator's travel direction). It is a good moment to decide to stop at that floor (via `goToFloor(floorNum, true)`), since braking distance still allows it. Only one event per state change (multi-floor skips within one tick are not enumerated — acknowledged limitation in `elevator.js` comments). |
+| `passing_floor` | `floorNum, direction` | Fired "slightly before" passing a floor - precisely: when `trunc(exactFutureFloorIfStopped)` changes, where *futureFloorIfStopped* = current position projected forward by the braking distance at full deceleration. Never fired for the current destination floor. `direction` is `"up"` or `"down"` (elevator's travel direction). It is a good moment to decide to stop at that floor (via `goToFloor(floorNum, true)`), since braking distance still allows it. Only one event per state change (multi-floor skips within one tick are not enumerated - acknowledged limitation in `elevator.js` comments). |
 | `stopped_at_floor` | `floorNum` | The elevator has physically arrived and snapped to a floor. Fired before exit/boarding processing. |
 
 ### Floor object (`floor.js`)
@@ -159,20 +159,20 @@ Note: floor events are *not* wrapped in a facade; user handlers are invoked via 
   `dtMax * 3 * timeScale` ("limit to prevent unhealthy substepping").
 - User `update(scaledDt, elevators, floors)` is called **once per frame** with the whole
   scaled dt, *before* the physics substeps.
-- Then the world is substepped: `while(scaledDt > 0 && !challengeEnded) { world.update(min(dtMax, scaledDt)); scaledDt -= dtMax; }` —
+- Then the world is substepped: `while(scaledDt > 0 && !challengeEnded) { world.update(min(dtMax, scaledDt)); scaledDt -= dtMax; }` -
   i.e., physics always steps at ≤ 1/60 s regardless of time scale.
 - `world.update(dt)`: advance `elapsedTime`; spawn passengers (below); for each elevator
   run `movable.update(dt)` (task timers, e.g. door dwell) and `updateElevatorMovement(dt)`
   (physics); for each user run `update(dt)` and refresh `maxWaitTime`; remove users
   flagged `removeMe`; recompute stats and trigger `stats_changed` (which is when the
-  challenge condition is evaluated — `app.js`).
+  challenge condition is evaluated - `app.js`).
 - User `init` is deferred to the **first unpaused frame** (so infinite loops in user code
   can't wedge the page while paused); immediately after it, `world.init()` fires the
   initial `idle` events.
 
 ### Elevator physics (`elevator.js`)
 
-Constructor: `new Elevator(2.6, floorCount, floorHeight, capacity)` — the speed
+Constructor: `new Elevator(2.6, floorCount, floorHeight, capacity)` - the speed
 `2.6 floors/sec` is hard-coded in `world.js` `createElevators`.
 
 Constants (in pixels, with floorHeight = 50; divide by 50 for floors):
@@ -208,12 +208,12 @@ Arrival (`handleDestinationArrival`): trigger internal `stopped(exactFloor)`; if
 on a floor (epsilon 1e-8 between exact and rounded floor): clear that floor's in-elevator
 button (`buttonStates[currentFloor] = false`, with `floor_buttons_changed`), trigger
 `stopped_at_floor`, then `exit_available` (passengers leave) then `entrance_available`
-(passengers board) — order matters so leavers free capacity for boarders in the same
+(passengers board) - order matters so leavers free capacity for boarders in the same
 arrival.
 
 **Door dwell**: the interface (`interfaces.js`) reacts to `stopped` at the head-of-queue
 floor by shifting the queue and, if on a floor, calling `elevator.wait(1, cb)` before
-`checkDestinationQueue()` — the parameter is misleadingly named `millis` but is compared
+`checkDestinationQueue()` - the parameter is misleadingly named `millis` but is compared
 against accumulated `dt` in **seconds**, so this is a **1.0 s stop at every floor
 arrival** during which the elevator is "busy" (physics skipped, cannot be commanded to
 move; `stop()` during dwell only clears the queue). After the dwell, the next queued
@@ -273,7 +273,7 @@ On `entrance_available` (elevator arrived at a floor), the world:
      going up needs `goingUpIndicator` on; going down needs `goingDownIndicator`; same
      floor is always suitable. (Both indicators default on, so naive code takes everyone.)
    - **Capacity**: the user takes a free slot (`userEntering`, random starting slot,
-     linear probe). If **no free slot** (elevator full by count — slots, not weight), the
+     linear probe). If **no free slot** (elevator full by count - slots, not weight), the
      user stays and **presses the floor call button again** (state was just cleared, so
      the event re-fires for user code).
    - On success: user walks to the slot over 1.0 s, then presses the in-elevator
@@ -287,7 +287,7 @@ world.
 **Elevator "re-arrival"** (`world.js` `handleButtonRepressing`): when any floor call
 button is pressed, the world scans elevators in random rotation order; if one with the
 matching direction indicator is currently standing still, on that exact floor, and not
-full, the world itself calls `elevatorInterface.goToFloor(floor, true)` — causing the
+full, the world itself calls `elevatorInterface.goToFloor(floor, true)` - causing the
 elevator to "re-arrive" (arrival events re-fire, so the presser can board an elevator
 that had already stopped there).
 
@@ -298,8 +298,8 @@ that had already stopped there).
 | `transportedCounter` | Number of users who have exited at their destination. |
 | `elapsedTime` | Accumulated simulated seconds. |
 | `transportedPerSec` | `transportedCounter / elapsedTime`. |
-| **wait time** (per user) | `elapsedTime - user.spawnTimestamp` — time since spawn, i.e. **includes riding time**, not just waiting on the floor. |
-| `maxWaitTime` | Max over: every user's wait time at exit, **and** every still-present user's current wait time, updated every tick (so it climbs continuously while anyone — waiting, riding, or even walking off post-exit until removal — remains). |
+| **wait time** (per user) | `elapsedTime - user.spawnTimestamp` - time since spawn, i.e. **includes riding time**, not just waiting on the floor. |
+| `maxWaitTime` | Max over: every user's wait time at exit, **and** every still-present user's current wait time, updated every tick (so it climbs continuously while anyone - waiting, riding, or even walking off post-exit until removal - remains). |
 | `avgWaitTime` | Incremental mean of wait time measured at the moment each user exits: `(avg*(n-1) + wait)/n`. |
 | `moveCount` | Sum of per-elevator `moveCount` (floor boundaries crossed). |
 
@@ -311,18 +311,18 @@ returns non-null the world is flagged `challengeEnded`, paused, and feedback sho
 ## 4. All challenges (`challenges.js`)
 
 Condition templates (each `evaluate(world)` returns `null` = keep running, else pass/fail;
-note boundary semantics — evaluation *triggers* at `>=` limit, success requires `<=`
+note boundary semantics - evaluation *triggers* at `>=` limit, success requires `<=`
 limit, so hitting a limit exactly still passes):
 
-- `requireUserCountWithinTime(userCount, timeLimit)` — "Transport N people in T seconds
+- `requireUserCountWithinTime(userCount, timeLimit)` - "Transport N people in T seconds
   or less"; decides once `elapsedTime >= timeLimit || transported >= userCount`.
-- `requireUserCountWithMaxWaitTime(userCount, maxWaitTime)` — "Transport N people and let
+- `requireUserCountWithMaxWaitTime(userCount, maxWaitTime)` - "Transport N people and let
   no one wait more than W seconds"; decides once `world.maxWaitTime >= W || transported >= N`
   (no time limit; fails the instant anyone's wait hits W).
-- `requireUserCountWithinTimeWithMaxWaitTime(N, T, W)` — both.
-- `requireUserCountWithinMoves(userCount, moveLimit)` — "Transport N people using M
+- `requireUserCountWithinTimeWithMaxWaitTime(N, T, W)` - both.
+- `requireUserCountWithinMoves(userCount, moveLimit)` - "Transport N people using M
   elevator moves or less".
-- `requireDemo()` — "Perpetual demo", never ends.
+- `requireDemo()` - "Perpetual demo", never ends.
 
 Elevator capacity: `elevatorCapacities` array cycles across elevators
 (`capacities[i % len]`); default `[4]`. World defaults: `floorHeight: 50, floorCount: 4,
@@ -396,7 +396,7 @@ Idle elevators take the lowest pending up-call (or highest down-call), else park
 In-elevator button presses are *inserted into the destination queue in travel order*
 (using `destinationQueue.splice` + `checkDestinationQueue()`) rather than appended, so
 the car sweeps floors in one direction. Indicators are set from the next destination on
-each stop (up if next > current), and both switched on when empty — exploiting the
+each stop (up if next > current), and both switched on when empty - exploiting the
 boarding rule so only same-direction passengers enter. Key techniques: direct
 `destinationQueue` manipulation, indicator control, elevator-direction sweeps
 (a rudimentary SCAN/"elevator algorithm").
@@ -418,7 +418,7 @@ elevator.on("floor_button_pressed", function(floorNum) {
 });
 ```
 
-### 5.3 Advanced: pure-`update` global scheduler (wiki: "Twentyliner" — clears all 18 challenges)
+### 5.3 Advanced: pure-`update` global scheduler (wiki: "Twentyliner" - clears all 18 challenges)
 
 Strategy: ignores events entirely; every `update` tick it re-plans each elevator from
 scratch. It reads `floor.buttonStates.up/.down` directly (encoding down-calls as negative
@@ -484,7 +484,7 @@ expected demand (floor 0 dominates: ~75% of all trips start or end there).
   string is re-eval'd fresh; the same challenge restarts with `autoStart`. Nothing
   persists across applies except the editor text and timescale (localStorage).
 - **The 1-second floor dwell** (`elevator.wait(1, …)` in `interfaces.js`) is a
-  crucial hidden constant — every floor arrival costs 1 s before the next departure —
+  crucial hidden constant - every floor arrival costs 1 s before the next departure -
   and the parameter name (`millis`) is a lie; units are seconds.
 - **moveCount counts floor crossings**, not commands (increments each time the rounded
   floor changes, `elevator.js` `handleNewState`). Move-limit challenges (6, 7) depend on
@@ -500,9 +500,9 @@ expected demand (floor 0 dominates: ~75% of all trips start or end there).
   elevator arrival *before* boarding attempts; passengers who don't fit press again,
   re-firing `up/down_button_pressed`. Also the world auto-issues `goToFloor(f, true)`
   ("re-arrival") to a standing, matching-indicator, non-full elevator on that floor when
-  its call button is pressed — reimplement this or late-arriving passengers can be
+  its call button is pressed - reimplement this or late-arriving passengers can be
   stranded next to a parked elevator.
-- **Indicators default to on** (both), and are never touched by the engine — only user
+- **Indicators default to on** (both), and are never touched by the engine - only user
   code changes them. All boarding filtering flows from `isSuitableForTravelBetween`.
 - **Event dispatch is synchronous** (riot observable): `goToFloor` can trigger `idle` →
   handler → `goToFloor` reentrantly within one call stack. Elevator-facade and floor
@@ -510,7 +510,7 @@ expected demand (floor 0 dominates: ~75% of all trips start or end there).
   suppression in `goToFloor` only checks the *adjacent* queue element, not the whole
   queue.
 - **`stop()` semantics**: clears queue; if mid-flight, targets the projected stop point,
-  which is generally between floors — no arrival events, no dwell, passengers stay in.
+  which is generally between floors - no arrival events, no dwell, passengers stay in.
   During a dwell it only clears the queue (elevator is "busy").
 - **`update` before physics**: user `update` sees the world state from the end of the
   previous frame; commands issued there take effect in this frame's substeps.
@@ -523,5 +523,5 @@ expected demand (floor 0 dominates: ~75% of all trips start or end there).
   `>=` boundaries with `<=` success (exact-equality passes).
 - **Fitness harness** (`fitness.js`) shows how to run headless: fixed-step frame
   requester (`base.js` `createFrameRequester`), `controller.start(world, codeObj,
-  requester.register, true)`, N triggered frames — a good model for the Rust engine's
+  requester.register, true)`, N triggered frames - a good model for the Rust engine's
   test/bench mode.

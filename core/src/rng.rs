@@ -3,11 +3,11 @@
 //! The original game uses unseeded `Math.random` via lodash `_.random`
 //! (inclusive on both ends), making runs irreproducible. elevato seeds
 //! explicitly instead. The generator is PCG-XSH-RR 64/32 transcribed from
-//! the reference C implementation — hand-rolled rather than a crate
+//! the reference C implementation - hand-rolled rather than a crate
 //! dependency, per the conservative-deps rule.
 //!
 //! RNG call order per spawn (research §6), load-bearing for replay
-//! stability — the world consumes randomness in exactly this order:
+//! stability - the world consumes randomness in exactly this order:
 //! weight → display type → spawn floor → destination → slot offset
 //! (`userEntering`, drawn per suitable boarding attempt even when the
 //! elevator turns out to be full) → rotation offset
@@ -23,7 +23,7 @@ pub struct Pcg32 {
 
 impl Pcg32 {
     const MULTIPLIER: u64 = 6364136223846793005;
-    /// Stream 54 — the stream used by the PCG reference demo, so the
+    /// Stream 54 - the stream used by the PCG reference demo, so the
     /// known-answer test below can check against published output.
     const STREAM: u64 = 54;
 
@@ -54,7 +54,7 @@ impl Pcg32 {
     /// Uniform integer with **both ends inclusive**, matching lodash
     /// `_.random(lower, upper)` semantics (including swapping reversed
     /// bounds). Uses a widening multiply to scale; the residual bias is
-    /// below `span / 2^32` — irrelevant at simulation ranges.
+    /// below `span / 2^32` - irrelevant at simulation ranges.
     pub fn random_inclusive(&mut self, lower: u32, upper: u32) -> u32 {
         let (lower, upper) = if lower <= upper {
             (lower, upper)
@@ -68,7 +68,7 @@ impl Pcg32 {
 
     /// Uniform float in `[0, 1)`, mirroring JS `Math.random()` (the
     /// original's exit-walk duration draw). One raw 32-bit draw scaled by
-    /// 2⁻³² — 32 bits of granularity is plenty for a walk timer.
+    /// 2⁻³² - 32 bits of granularity is plenty for a walk timer.
     pub fn random_f64(&mut self) -> f64 {
         f64::from(self.next_u32()) / (f64::from(u32::MAX) + 1.0)
     }
