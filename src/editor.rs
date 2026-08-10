@@ -117,6 +117,13 @@ impl State {
         docs::identifier_in(&self.content.line(position.line)?.text, position.column)
     }
 
+    /// The selection, when it is exactly one identifier — the
+    /// double-tap jump affordance's input.
+    pub fn selected_identifier(&self) -> Option<String> {
+        let selection = self.content.selection()?;
+        Some(docs::identifier(&selection)?.to_string())
+    }
+
     /// Applies an editor message.
     pub fn update(&mut self, message: Message) -> Action<Instruction, Message> {
         match message {

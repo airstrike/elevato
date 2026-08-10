@@ -150,6 +150,10 @@ pub enum Message {
     /// Forward again (arrow, browser-forward key, mouse forward
     /// button, or the cmd+I / cmd+] chords).
     DocsForward,
+    /// The tab-bar chip: jump to the selected name's definition — the
+    /// touch answer to cmd+click (a double tap selects the word, the
+    /// chip does the jump).
+    DocsJump(docs::Page, usize),
     /// An API-reference pane message.
     Docs(docs::Message),
     /// The keyboard modifier state changed.
@@ -411,6 +415,10 @@ impl Game {
                     self.docs.forward();
                 }
             }
+            Message::DocsJump(page, line) => {
+                self.docs.open(page, line);
+                self.tab = Tab::Api;
+            }
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
             Message::Resized(width) => self.viewport_width = width,
             Message::Docs(message) => {
@@ -525,22 +533,53 @@ impl Game {
         }
     }
 
-    /// The face selectors, prefixed — when the reference is up and has
-    /// somewhere to return to — by the back arrow.
+    /// The identifier a double click (or double tap) left selected in
+    /// whichever code pane is visible, resolved to its definition.
+    fn selected_reference(&self) -> Option<(String, docs::Page, usize)> {
+        let (name, preference) = match self.tab {
+            Tab::Api => (self.docs.selected_identifier()?, Some(self.docs.page())),
+            Tab::Code => (self.editor.selected_identifier()?, None),
+            // On a wide viewport the editor pane flanks the player.
+            Tab::Player if self.viewport_width >= NARROW => {
+                (self.editor.selected_identifier()?, None)
+            }
+            Tab::Player => return None,
+        };
+        let (page, line) = docs::resolve(&name, preference)?;
+        Some((name, page, line))
+    }
+
+    /// The face selectors, prefixed by the selection-jump chip and —
+    /// when the reference is up — the history arrows.
     fn tab_bar(&self, tabs: &'static [Tab]) -> Element<'_, Message> {
         let mut bar = row![].spacing(4).align_y(Center);
+        if let Some((name, page, line)) = self.selected_reference() {
+            bar = bar.push(
+                button(
+                    row![
+                        text(name).size(12).font(theme::MONO),
+                        icon::arrow_up_right().size(11)
+                    ]
+                    .spacing(3)
+                    .align_y(Center),
+                )
+                .padding([4, 6])
+                .on_press(Message::DocsJump(page, line))
+                .style(theme::button::link),
+            );
+        }
         if self.tab == Tab::Api {
             bar = bar.push(
                 button(icon::arrow_left().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_back().then_some(Message::DocsBack))
-                    .style(theme::button::ghost),
+                    .style(theme::button::vanishing),
             );
             bar = bar.push(
                 button(icon::arrow_right().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_forward().then_some(Message::DocsForward))
-                    .style(theme::button::ghost),
+                    .style(theme::button::vanishing),
             );
         }
         for &tab in tabs {

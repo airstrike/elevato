@@ -463,6 +463,22 @@ pub mod button {
         }
     }
 
+    /// [`ghost`], except a disabled button disappears entirely while
+    /// still occupying its space — for paired affordances (the
+    /// reference's back/forward arrows) whose layout must not shift as
+    /// each end of the history is reached.
+    pub fn vanishing(theme: &Theme, status: Status) -> Style {
+        match status {
+            Status::Disabled => Style {
+                background: None,
+                text_color: iced::Color::TRANSPARENT,
+                border: border::rounded(6),
+                ..Style::default()
+            },
+            status => ghost(theme, status),
+        }
+    }
+
     /// A text link: bare accent text that brightens on hover — the
     /// splash's homage to the original.
     pub fn link(theme: &Theme, status: Status) -> Style {

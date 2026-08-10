@@ -149,6 +149,16 @@ fn snake_case(name: &str) -> String {
     snake
 }
 
+/// `text` when it is exactly one identifier — what a double click (or
+/// double tap) leaves selected on a name.
+pub fn identifier(text: &str) -> Option<&str> {
+    let word = text.trim();
+    (!word.is_empty()
+        && !word.starts_with(|c: char| c.is_ascii_digit())
+        && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+    .then_some(word)
+}
+
 /// The identifier under `column` in `line`, if any. Shared by the docs
 /// pane and the editor: both resolve cmd+clicks the same way.
 pub fn identifier_in(line: &str, column: usize) -> Option<String> {
@@ -227,6 +237,13 @@ impl State {
     pub fn identifier_at_cursor(&self) -> Option<String> {
         let position = self.content.cursor().position;
         identifier_in(&self.content.line(position.line)?.text, position.column)
+    }
+
+    /// The selection, when it is exactly one identifier — the
+    /// double-tap jump affordance's input.
+    pub fn selected_identifier(&self) -> Option<String> {
+        let selection = self.content.selection()?;
+        Some(identifier(&selection)?.to_string())
     }
 
     /// Opens `page` (switching files if needed), moves the cursor to
