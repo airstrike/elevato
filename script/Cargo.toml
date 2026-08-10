@@ -5,9 +5,7 @@ edition.workspace = true
 
 [dependencies]
 elevato-core = { workspace = true }
-# `internals` exposes the token mapper that lets players spell the boot
-# function `fn new()` — `new` is a reserved rhai keyword otherwise.
-rhai = { workspace = true, features = ["internals"] }
+rhai = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

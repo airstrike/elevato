@@ -87,7 +87,7 @@ impl Runtime {
             options,
             &mut runtime.scope,
             &runtime.ast,
-            api::NEW,
+            "new",
             (),
         )?;
 

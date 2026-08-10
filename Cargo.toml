@@ -59,6 +59,10 @@ iced_futures = { path = "/Users/andy/projects/iced-web-clipboard/futures" }
 iced_graphics = { path = "/Users/andy/projects/iced-web-clipboard/graphics" }
 iced_renderer = { path = "/Users/andy/projects/iced-web-clipboard/renderer" }
 iced_runtime = { path = "/Users/andy/projects/iced-web-clipboard/runtime" }
+# elevato's rhai fork (branch `enums`): de-reserves `new` so the dialect's
+# `fn new()` parses natively — replaces the `internals` token-remap hack.
+# Publish flip: push the branch to airstrike/rhai and patch by git.
+rhai = { path = "/Users/andy/projects/rhai" }
 
 [lib]
 crate-type = ["lib", "dylib"]

@@ -43,9 +43,7 @@ impl Program {
         let mut update_arity = None;
         for function in ast.iter_functions() {
             let arity = function.params.len();
-            // The engine lexes the reserved word `new` into its
-            // internal spelling; the scan matches that spelling.
-            if function.name == api::NEW {
+            if function.name == "new" {
                 // With several overloads, the zero-parameter one is the
                 // boot function and the others are ordinary helpers.
                 new_arity = Some(match new_arity {

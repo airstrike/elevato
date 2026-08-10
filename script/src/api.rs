@@ -111,13 +111,6 @@ pub(crate) fn runtime_error(message: String) -> Box<EvalAltResult> {
     Box::new(EvalAltResult::ErrorRuntime(message.into(), Position::NONE))
 }
 
-/// The internal spelling of the boot function. `new` is a *reserved*
-/// rhai keyword and the parser refuses reserved function names, so the
-/// engine's token mapper rewrites the bare `new` token to this
-/// identifier at lex time — the compile scan and the runtime's boot
-/// call both look it up under this name.
-pub(crate) const NEW: &str = "__new";
-
 /// A fresh engine with the elevato API registered. Compilation and the
 /// runtime both build engines here, so the registered surface can never
 /// drift between the two.
@@ -132,19 +125,6 @@ pub(crate) fn engine() -> Engine {
     // a budget the original did not have.
     engine.set_max_expr_depths(128, 128);
     engine.set_max_call_levels(64);
-
-    // Let players write the dialect's `fn new()`: remap the reserved
-    // `new` token to the internal [`NEW`] spelling. Definitions and
-    // call sites remap alike, so a script calling `new()` (say, to
-    // reset its own model) still reaches the boot function. The API is
-    // flagged volatile upstream, not deprecated — see its own docs.
-    #[allow(deprecated)]
-    engine.on_parse_token(|token, _position, _state| match token {
-        rhai::Token::Reserved(word) if word.as_str() == "new" => {
-            rhai::Token::Identifier(Box::new(NEW.into()))
-        }
-        token => token,
-    });
 
     // The command constructors. `go_to_floor` accepts int and float
     // floors, like the original's `Number()` coercion.
