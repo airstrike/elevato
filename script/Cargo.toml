@@ -2,6 +2,7 @@
 name = "script"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 elevato-core = { workspace = true }

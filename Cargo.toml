@@ -2,6 +2,7 @@
 name = "elevato"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 elevato-core = { workspace = true }
@@ -30,6 +31,7 @@ members = ["core", "script"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [workspace.dependencies]
 # Short directory `core/`, prefixed package (bare `core` collides with std).
