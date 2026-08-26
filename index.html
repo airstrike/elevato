@@ -101,6 +101,32 @@
             color: var(--failure);
             max-width: 34rem;
         }
+        /* The debug overlay: panel shade, hairline top in failure red,
+           mono like everything else. Sits over the canvas; never taller
+           than half the viewport so the app stays visible behind it. */
+        #debug {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 2147483647;
+            max-height: 50vh;
+            overflow-y: auto;
+            background: var(--bg);
+            color: var(--text);
+            border-top: 2px solid var(--failure);
+            font: 12px/1.5 "Geist Mono", ui-monospace, monospace;
+            padding: 8px 12px 12px;
+            -webkit-user-select: text; user-select: text;
+        }
+        #debug .bar { display: flex; gap: 12px; justify-content: flex-end; margin-bottom: 4px; }
+        #debug button {
+            font: inherit; color: var(--text); background: none;
+            border: 1px solid var(--track); border-radius: 6px; padding: 2px 10px; cursor: pointer;
+        }
+        #debug .entry { border-left: 3px solid var(--track); padding: 4px 10px; margin: 4px 0; }
+        #debug .entry.error, #debug .entry.panic { border-left-color: var(--failure); }
+        #debug .entry.rejection { border-left-color: var(--accent); }
+        #debug .head { opacity: 0.6; font-size: 11px; }
+        #debug pre { margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
     </style>
 </head>
 <body>
@@ -133,6 +159,57 @@
     }
     addEventListener("error", (e) => bootFailure(e.message || String(e.error)));
     addEventListener("unhandledrejection", (e) => bootFailure(String(e.reason)));
+
+    // Debug overlay: every JS error, unhandled rejection, and wasm panic
+    // (console_error_panic_hook writes to console.error) lands in a
+    // panel at the bottom of the page, so a crash on a phone can be
+    // read and copied without devtools. Hidden until something fails.
+    const overlay = document.createElement("div");
+    overlay.id = "debug";
+    overlay.setAttribute("role", "log");
+    overlay.hidden = true;
+    const log = document.createElement("div");
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const copy = document.createElement("button");
+    copy.textContent = "copy";
+    copy.onclick = () => {
+        navigator.clipboard?.writeText(log.innerText).then(
+            () => { copy.textContent = "copied"; setTimeout(() => copy.textContent = "copy", 1200); },
+            () => { copy.textContent = "select + copy manually"; },
+        );
+    };
+    const close = document.createElement("button");
+    close.textContent = "close";
+    close.onclick = () => { overlay.hidden = true; log.textContent = ""; };
+    bar.append(copy, close);
+    overlay.append(bar, log);
+    document.body.appendChild(overlay);
+
+    function report(kind, message, source) {
+        overlay.hidden = false;
+        const entry = document.createElement("div");
+        entry.className = "entry " + kind;
+        const head = document.createElement("span");
+        head.className = "head";
+        head.textContent = "[" + new Date().toLocaleTimeString() + "] " + kind;
+        const body = document.createElement("pre");
+        body.textContent = message + (source ? "\n" + source : "");
+        entry.append(head, body);
+        log.appendChild(entry);
+        overlay.scrollTop = overlay.scrollHeight;
+    }
+    addEventListener("error", (e) =>
+        report("error", e.message || String(e.error), e.filename ? e.filename + ":" + e.lineno + ":" + e.colno : ""));
+    addEventListener("unhandledrejection", (e) =>
+        report("rejection", e.reason instanceof Error ? e.reason.message : String(e.reason),
+            e.reason?.stack ? e.reason.stack.split("\n").slice(1, 4).join("\n") : ""));
+    const consoleError = console.error.bind(console);
+    console.error = (...args) => {
+        const message = args.map(String).join(" ");
+        if (/panicked|wasm|RuntimeError|unreachable/i.test(message)) report("panic", message, "");
+        consoleError(...args);
+    };
 
     // Mouse back/forward buttons are the reference's history keys; the
     // browser must not ALSO navigate. winit preventDefaults keyboard
