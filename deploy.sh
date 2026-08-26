@@ -12,5 +12,8 @@ cd "$SCRIPT_DIR"
 echo "Building WASM release..."
 trunk build --release
 
+# The Pages project's production branch is `main` (a dashboard setting,
+# unrelated to the git branch here). Without --branch, wrangler labels
+# the upload with the current git branch and it lands as a preview.
 echo "Deploying dist/ to Cloudflare Pages..."
-npx wrangler pages deploy dist --project-name elevato
+npx wrangler pages deploy dist --project-name elevato --branch main
