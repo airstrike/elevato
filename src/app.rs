@@ -13,7 +13,7 @@ use iced::widget::{
     text_editor,
 };
 use iced::window;
-use iced::{Center, Element, Fill, Pixels, Subscription, Task};
+use iced::{Center, Element, Fill, Length, Pixels, Subscription, Task};
 
 use elevato_api::{Elevator, Floor};
 
@@ -818,7 +818,10 @@ impl Game {
             |choice: &Choice| choice.label.clone(),
         )
         .on_select(Message::ChallengePicked)
-        .text_size(13);
+        .text_size(13)
+        // The longest challenge labels are wider than a default window;
+        // the picker gives way so the controls always fit.
+        .width(Length::FillPortion(3).max(640));
 
         let toggle = if self.playback.is_running() {
             row![icon::pause().size(13), text("Pause").size(13)]
