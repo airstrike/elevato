@@ -233,10 +233,10 @@ impl Elevator {
         } else {
             self.destination_queue.last()
         };
-        if let Some(&adjacent) = adjacent {
-            if epsilon_equals(adjacent, floor) {
-                return;
-            }
+        if let Some(&adjacent) = adjacent
+            && epsilon_equals(adjacent, floor)
+        {
+            return;
         }
         if force {
             self.destination_queue.insert(0, floor);
@@ -412,19 +412,19 @@ impl Elevator {
                 // Casting through the bounds check keeps a transient
                 // out-of-building projection from ever surfacing.
                 let floor = passed as i64;
-                if let Ok(floor) = usize::try_from(floor) {
-                    if floor < self.floor_count {
-                        let direction = if self.velocity_y > 0.0 {
-                            Direction::Down
-                        } else {
-                            Direction::Up
-                        };
-                        events.push(Event::PassingFloor {
-                            elevator: self.id,
-                            floor,
-                            direction,
-                        });
-                    }
+                if let Ok(floor) = usize::try_from(floor)
+                    && floor < self.floor_count
+                {
+                    let direction = if self.velocity_y > 0.0 {
+                        Direction::Down
+                    } else {
+                        Direction::Up
+                    };
+                    events.push(Event::PassingFloor {
+                        elevator: self.id,
+                        floor,
+                        direction,
+                    });
                 }
             }
         }
@@ -444,16 +444,16 @@ impl Elevator {
         self.is_moving = false;
 
         let stopped_at = self.exact_floor();
-        if let Some(&head) = self.destination_queue.first() {
-            if epsilon_equals(head, stopped_at) {
-                self.destination_queue.remove(0);
-                if self.is_on_a_floor() {
-                    self.dwell_spent = Some(0.0);
-                } else {
-                    // A user-inserted fractional destination: no dwell,
-                    // check the queue immediately.
-                    self.check_destination_queue(events);
-                }
+        if let Some(&head) = self.destination_queue.first()
+            && epsilon_equals(head, stopped_at)
+        {
+            self.destination_queue.remove(0);
+            if self.is_on_a_floor() {
+                self.dwell_spent = Some(0.0);
+            } else {
+                // A user-inserted fractional destination: no dwell,
+                // check the queue immediately.
+                self.check_destination_queue(events);
             }
         }
 
