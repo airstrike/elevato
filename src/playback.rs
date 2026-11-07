@@ -29,10 +29,10 @@ use crate::core::stats::Stats;
 
 use script::{Program, Runtime};
 
-/// The built-in starter program - the rhai port of the original's
+/// The built-in starter program - the Rust port of the original's
 /// default implementation. The canonical copy lives with the script
 /// crate's solution fixtures and is included verbatim.
-pub const STARTER: &str = include_str!("../script/tests/solutions/starter.rhai");
+pub const STARTER: &str = include_str!("../script/tests/solutions/starter.rs");
 
 /// The original's timescale stepping ratio.
 const TIMESCALE_RATIO: f64 = 1.618;

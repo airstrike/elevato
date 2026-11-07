@@ -6,8 +6,8 @@ license.workspace = true
 
 [dependencies]
 elevato-core = { workspace = true }
-rhai = { workspace = true }
+rawr = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-rhai = { workspace = true, features = ["wasm-bindgen"] }
+rawr = { workspace = true, features = ["wasm-bindgen"] }

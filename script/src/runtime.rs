@@ -7,24 +7,26 @@
 //! [`elevato_core::controller::Controller`] because the trait's hooks
 //! are infallible while a script error must abort the frame and pause
 //! playback (see `.claude/DECISIONS.md` D6/D9). The duplication is
-//! pinned by the parity test in `tests/solutions.rs`: the rhai naive
-//! solution must produce byte-identical final stats to a native
+//! pinned by the parity test in `tests/solutions.rs`: the scripted
+//! naive solution must produce byte-identical final stats to a native
 //! controller run through `core::headless`.
 //!
-//! Scripts never touch the world. Per message the runtime builds fresh
-//! snapshots, calls `update` with the model bound as `this`, and applies
-//! the returned commands immediately - before the next message
-//! dispatches - so a command cascade unfolds in exactly the order the
-//! original's synchronous callbacks did.
+//! Scripts never touch the world. Per message the runtime hands
+//! `update` the model as its `&mut` first argument, the message, and
+//! snapshots of the world, then applies the returned commands
+//! immediately - before the next message dispatches - so a command
+//! cascade unfolds in exactly the order the original's synchronous
+//! callbacks did. Snapshots are rebuilt whenever the world may have
+//! changed (a physics step, the arrival stage, an applied command), so
+//! every message sees the world as it stands.
 
 use elevato_core::World;
 use elevato_core::challenge::{Challenge, Outcome};
-use elevato_core::event::Event;
 use elevato_core::stats::Stats;
 use elevato_core::world::DT_MAX;
-use rhai::{AST, Array, CallFnOptions, Dynamic, Engine, Scope};
+use rawr::{AST, Array, CallFnOptions, Dynamic, Engine, EvalAltResult, Scope};
 
-use crate::api::{self, Command};
+use crate::api::{self, Command, Message};
 use crate::{Error, Program};
 
 /// Hard cap on drain rounds per dispatch point, mirroring
@@ -40,21 +42,24 @@ const DISPATCH_ROUNDS: usize = 128;
 pub struct Runtime {
     engine: Engine,
     ast: AST,
-    /// Persists across calls so top-level `let`s survive the boot;
-    /// script functions cannot see it, but evaluation order stays
-    /// faithful.
-    scope: Scope<'static>,
     world: World,
-    /// The value `fn new` returned, bound as `this` into every `update`
-    /// call; mutations persist.
+    /// The value `fn new` returned, lent to every `update` call as its
+    /// `&mut` model; mutations persist.
     model: Dynamic,
-    /// Largest declared arity of `fn update`; the `[message, elevators,
-    /// floors]` argument list is truncated or padded to it.
-    update_arity: usize,
+    /// The `elevators` and `floors` slices as the script holds them,
+    /// built from the world as it stood after the last change; `None`
+    /// once the world has moved on.
+    snapshots: Option<Snapshots>,
+}
+
+/// The world as `update` sees it, built by the prelude's bridges.
+struct Snapshots {
+    elevators: Dynamic,
+    floors: Dynamic,
 }
 
 impl std::fmt::Debug for Runtime {
-    // Hand-written because `rhai::Engine` has no `Debug`.
+    // Hand-written because `rawr::Engine` has no `Debug`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Runtime")
             .field("world", &self.world)
@@ -69,27 +74,22 @@ impl Runtime {
     /// the initial idle round exactly like the original's `world.init()`
     /// (and [`elevato_core::headless::run`]).
     pub fn new(program: Program, challenge: &Challenge, seed: u64) -> Result<Self, Error> {
-        let Program { ast, update_arity } = program;
+        let Program { ast } = program;
         let mut runtime = Self {
             engine: api::engine(),
             ast,
-            scope: Scope::new(),
             world: World::new(challenge, seed),
             model: Dynamic::UNIT,
-            update_arity,
+            snapshots: None,
         };
 
         // Top-level statements run exactly once, here, before the boot
-        // function - eval_ast(false) everywhere later keeps them from
-        // re-running.
-        let options = CallFnOptions::new().eval_ast(true).rewind_scope(false);
-        runtime.model = runtime.engine.call_fn_with_options(
-            options,
-            &mut runtime.scope,
-            &runtime.ast,
-            "new",
-            (),
-        )?;
+        // function - every later call skips them.
+        let options = CallFnOptions::new().eval_ast(true);
+        runtime.model =
+            runtime
+                .engine
+                .call_fn_with_options(options, &mut Scope::new(), &runtime.ast, "new", ())?;
 
         for index in 0..runtime.world.elevators().len() {
             runtime.world.check_destination_queue(index);
@@ -99,7 +99,7 @@ impl Runtime {
     }
 
     /// Advances one frame of `substeps` × [`DT_MAX`] simulated seconds:
-    /// a `tick` message with the whole frame dt first, then per substep -
+    /// a `Tick` message with the whole frame dt first, then per substep -
     /// step physics, dispatch drained events, process staged arrivals,
     /// dispatch again - breaking the moment the challenge decides. A
     /// returned error aborts the frame; the caller pauses on it.
@@ -109,15 +109,17 @@ impl Runtime {
         }
         // Time is a message like any other.
         let dt = substeps as f64 * DT_MAX;
-        self.deliver(api::Message::Tick { dt })?;
+        self.deliver(Message::Tick { dt })?;
 
         for _ in 0..substeps {
             if self.world.ended() {
                 break;
             }
             self.world.step(DT_MAX);
+            self.snapshots = None;
             self.dispatch()?;
             self.world.process_arrivals();
+            self.snapshots = None;
             self.dispatch()?;
         }
         Ok(())
@@ -152,102 +154,81 @@ impl Runtime {
                 return Ok(());
             }
             for event in events {
-                self.deliver(message(event))?;
+                self.deliver(Message::Event(event))?;
             }
         }
         Ok(())
     }
 
     /// Folds one message into the model and applies the returned
-    /// commands: snapshots are rebuilt fresh, `update` runs with the
-    /// model bound as `this` (mutations persist), and the return value
-    /// is applied before this call returns - i.e. before the next
-    /// message dispatches.
-    fn deliver(&mut self, message: api::Message) -> Result<(), Error> {
-        let mut arguments: Vec<Dynamic> = vec![
-            Dynamic::from(message),
-            Dynamic::from(api::elevator_snapshots(&self.world)),
-            Dynamic::from(api::floor_snapshots(&self.world)),
-        ];
-        arguments.truncate(self.update_arity);
-        while arguments.len() < self.update_arity {
-            arguments.push(Dynamic::UNIT);
-        }
+    /// commands: `update` runs with the model lent as its `&mut` first
+    /// argument (mutations persist), and the commands are applied before
+    /// this call returns - i.e. before the next message dispatches.
+    fn deliver(&mut self, message: Message) -> Result<(), Error> {
+        let message = self.call(api::MESSAGE, message.arguments())?;
+        let snapshots = match self.snapshots.take() {
+            Some(snapshots) => snapshots,
+            None => self.snapshot()?,
+        };
+        // Arguments are consumed by the call, so each one gets its own
+        // copy; `update` only borrows them.
+        let (elevators, floors) = (snapshots.elevators.clone(), snapshots.floors.clone());
+        self.snapshots = Some(snapshots);
 
-        let mut model = std::mem::take(&mut self.model);
+        // rawr passes a function's leading `&mut` parameter as the
+        // bound `this`, so the model goes in by pointer and the rest by
+        // value.
         let options = CallFnOptions::new()
             .eval_ast(false)
-            .bind_this_ptr(&mut model);
-        let result: Result<Dynamic, _> = self.engine.call_fn_with_options(
+            .bind_this_ptr(&mut self.model);
+        let commands: Dynamic = self.engine.call_fn_with_options(
             options,
-            &mut self.scope,
+            &mut Scope::new(),
             &self.ast,
             "update",
+            vec![message, elevators, floors],
+        )?;
+
+        let lowered = self.call(api::LOWER, vec![commands])?;
+        let commands = Command::decode(lowered)?;
+        if !commands.is_empty() {
+            self.snapshots = None;
+        }
+        for command in commands {
+            command.apply(&mut self.world)?;
+        }
+        Ok(())
+    }
+
+    /// Snapshots of the world as it stands, built by the prelude's
+    /// bridges.
+    fn snapshot(&self) -> Result<Snapshots, Box<EvalAltResult>> {
+        let elevators = self
+            .world
+            .elevators()
+            .iter()
+            .map(|elevator| self.call(api::ELEVATOR, api::elevator_arguments(elevator)))
+            .collect::<Result<Array, _>>()?;
+        let floors = self
+            .world
+            .floors()
+            .iter()
+            .map(|floor| self.call(api::FLOOR, api::floor_arguments(floor)))
+            .collect::<Result<Array, _>>()?;
+        Ok(Snapshots {
+            elevators: Dynamic::from(elevators),
+            floors: Dynamic::from(floors),
+        })
+    }
+
+    /// Calls one of the prelude's bridge functions.
+    fn call(&self, bridge: &str, arguments: Vec<Dynamic>) -> Result<Dynamic, Box<EvalAltResult>> {
+        self.engine.call_fn_with_options(
+            CallFnOptions::new().eval_ast(false),
+            &mut Scope::new(),
+            &self.ast,
+            bridge,
             arguments,
-        );
-        self.model = model;
-        self.apply(result?)
-    }
-
-    /// Interprets `update`'s return value - the effect channel: `()` is
-    /// nothing (an unmatched `switch` arm lands here), a command
-    /// applies, an array applies each command element in order (unit
-    /// elements are skipped). Anything else is a runtime error naming
-    /// the type.
-    fn apply(&mut self, returned: Dynamic) -> Result<(), Error> {
-        if returned.is_unit() {
-            Ok(())
-        } else if returned.is_array() {
-            for element in returned.cast::<Array>() {
-                if !element.is_unit() {
-                    self.apply_command(element)?;
-                }
-            }
-            Ok(())
-        } else {
-            self.apply_command(returned)
-        }
-    }
-
-    /// Applies one returned value as a command, or refuses by type name.
-    fn apply_command(&mut self, value: Dynamic) -> Result<(), Error> {
-        if value.type_id() == std::any::TypeId::of::<Command>() {
-            let command = value
-                .try_cast::<Command>()
-                .expect("invariant: the type id was just checked");
-            Ok(command.apply(&mut self.world)?)
-        } else {
-            Err(api::runtime_error(format!(
-                "update returned a value of type {} - return a command, an array of commands, \
-                 or nothing",
-                value.type_name()
-            ))
-            .into())
-        }
-    }
-}
-
-/// The [`api::Message`] for a world event - all plain data, elevators
-/// and floors as indices.
-fn message(event: Event) -> api::Message {
-    match event {
-        Event::Idle { elevator } => api::Message::Idle { elevator },
-        Event::FloorButtonPressed { elevator, floor } => {
-            api::Message::FloorButtonPressed { elevator, floor }
-        }
-        Event::PassingFloor {
-            elevator,
-            floor,
-            direction,
-        } => api::Message::PassingFloor {
-            elevator,
-            floor,
-            direction,
-        },
-        Event::StoppedAtFloor { elevator, floor } => {
-            api::Message::StoppedAtFloor { elevator, floor }
-        }
-        Event::UpButtonPressed { floor } => api::Message::UpButtonPressed { floor },
-        Event::DownButtonPressed { floor } => api::Message::DownButtonPressed { floor },
+        )
     }
 }
