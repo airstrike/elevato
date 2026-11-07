@@ -385,12 +385,11 @@ fn describe(status: &Status) -> (String, Tone) {
             Tone::Bad,
         ),
         Status::Compiled if cfg!(target_arch = "wasm32") => (
-            "Saved as a draft. The page runs the program it was built with; edits can't run in the browser yet."
-                .to_string(),
+            "Saved as a draft: the page runs the program it was built with.".to_string(),
             Tone::Quiet,
         ),
         Status::Compiled => (
-            "Saved. Under cargo run the program is compiled in and can't change while it runs: the next build picks this up, or rawr run -p program applies edits live."
+            "Saved for the next build: under cargo run, the program can't change while it runs."
                 .to_string(),
             Tone::Quiet,
         ),
