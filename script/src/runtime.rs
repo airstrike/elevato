@@ -86,10 +86,13 @@ impl Runtime {
         // Top-level statements run exactly once, here, before the boot
         // function - every later call skips them.
         let options = CallFnOptions::new().eval_ast(true);
-        runtime.model =
-            runtime
-                .engine
-                .call_fn_with_options(options, &mut Scope::new(), &runtime.ast, "new", ())?;
+        runtime.model = runtime.engine.call_fn_with_options(
+            options,
+            &mut Scope::new(),
+            &runtime.ast,
+            "new",
+            (),
+        )?;
 
         for index in 0..runtime.world.elevators().len() {
             runtime.world.check_destination_queue(index);

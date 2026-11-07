@@ -160,8 +160,7 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
 }
 
 /// The `update` signature every test program shares.
-const UPDATE: &str =
-    "fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command>";
+const UPDATE: &str = "fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command>";
 
 /// A program from a model type, its `new` body, and `update`'s body.
 fn program(model: &str, new: &str, update: &str) -> String {
@@ -177,7 +176,9 @@ fn a_program_without_new_is_a_compile_time_error() {
 
 #[test]
 fn a_new_with_parameters_is_a_compile_time_error() {
-    let source = format!("struct Model {{}}\nfn new(a: i64) -> Model {{ Model {{}} }}\n{UPDATE} {{ vec![] }}");
+    let source = format!(
+        "struct Model {{}}\nfn new(a: i64) -> Model {{ Model {{}} }}\n{UPDATE} {{ vec![] }}"
+    );
     let error = Program::compile(&source).unwrap_err();
     assert!(matches!(error, Error::NewArity(1)), "{error}");
 }
@@ -219,7 +220,11 @@ fn an_update_returning_a_non_command_is_a_compile_time_error() {
 
 #[test]
 fn a_command_list_with_a_non_command_element_is_a_compile_time_error() {
-    let source = program("struct Model {}", "Model {}", r#"    vec![go_to_floor(0, 1), "nope"]"#);
+    let source = program(
+        "struct Model {}",
+        "Model {}",
+        r#"    vec![go_to_floor(0, 1), "nope"]"#,
+    );
     let error = Program::compile(&source).unwrap_err();
     assert!(matches!(error, Error::Compile(_)), "{error}");
     assert!(error.to_string().contains("E0308"), "{error}");
@@ -227,7 +232,11 @@ fn a_command_list_with_a_non_command_element_is_a_compile_time_error() {
 
 #[test]
 fn a_compile_error_points_at_the_player_s_own_line() {
-    let source = program("struct Model {}", "Model {}", "    let x: i64 = \"no\";\n    vec![]");
+    let source = program(
+        "struct Model {}",
+        "Model {}",
+        "    let x: i64 = \"no\";\n    vec![]",
+    );
     let error = Program::compile(&source).unwrap_err();
     assert!(matches!(error, Error::Compile(_)), "{error}");
     assert!(error.to_string().contains("<script>:8:"), "{error}");

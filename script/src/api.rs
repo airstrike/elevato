@@ -172,8 +172,9 @@ impl Command {
                     .map_err(|found| malformed(format!("expected a command row, found {found}")))?
                     .into_iter()
                     .map(|word| {
-                        word.as_int()
-                            .map_err(|found| malformed(format!("expected an integer, found {found}")))
+                        word.as_int().map_err(|found| {
+                            malformed(format!("expected an integer, found {found}"))
+                        })
                     })
                     .collect::<Result<Vec<i64>, _>>()?;
                 Self::from_words(&words)
