@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+elevato-api = { workspace = true }
 elevato-core = { workspace = true }
 iced = { workspace = true }
-script = { workspace = true }
 syntect = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -23,7 +23,7 @@ web-sys = { version = "0.3", features = ["Window", "Storage", "MediaQueryList"] 
 
 [workspace]
 resolver = "3"
-members = ["core", "script"]
+members = ["api", "core", "program"]
 
 [workspace.package]
 version = "0.1.0"
@@ -33,14 +33,18 @@ license = "MIT"
 [workspace.dependencies]
 # Short directory `core/`, prefixed package (bare `core` collides with std).
 elevato-core = { path = "core" }
-script = { path = "script" }
+# The API players' programs use, re-exported at the app's root so a
+# program's `use elevato::...` names it.
+elevato-api = { path = "api" }
+# The game, which the player's program in `program/` runs inside.
+elevato = { path = "." }
 
 iced = { path = "/Users/andy/projects/iced-web-clipboard", features = ["canvas", "tokio", "advanced", "selector"] }
-# Players write their programs in Rust; rawr runs them (embedding).
-rawr = { git = "https://github.com/airstrike/rawr" }
+# The API crate needs only iced's Task and Subscription, from the same
+# checkout the app's iced uses.
+iced_futures = { path = "/Users/andy/projects/iced-web-clipboard/futures" }
+iced_runtime = { path = "/Users/andy/projects/iced-web-clipboard/runtime" }
 thiserror = "2"
-# Runs the script crate's tests in Node.js on wasm32, natively as #[test].
-wasm-bindgen-test = "0.3.58"
 
 # Highlighting: parsing only (the app maps scopes to theme colors
 # itself); fancy-regex backend - wasm-clean, never onig.

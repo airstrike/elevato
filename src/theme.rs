@@ -115,7 +115,7 @@ pub struct Palette {
     pub passenger: Color,
     /// Success green (banner text).
     pub success: Color,
-    /// Failure red (banner text, script errors).
+    /// Failure red (banner text, the program's panic).
     pub failure: Color,
     /// Editor tokens: comments.
     pub syntax_comment: Color,
@@ -283,7 +283,7 @@ pub mod container {
         }
     }
 
-    /// The script-error strip under the editor.
+    /// The panic strip under the editor.
     pub fn error_panel(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {

@@ -15,11 +15,13 @@ use iced::widget::{
 use iced::window;
 use iced::{Center, Element, Fill, Pixels, Subscription, Task};
 
+use elevato_api::{Elevator, Floor};
+
 use crate::core::challenge::{Condition, Outcome};
 use crate::docs;
 use crate::editor;
 use crate::icon;
-use crate::playback::{self, Playback};
+use crate::playback::{self, Playback, Program};
 use crate::sim;
 use crate::storage;
 use crate::theme;
@@ -34,6 +36,8 @@ const SPLASH: Id = Id::new("splash");
 pub struct App {
     /// Light or dark chrome.
     mode: theme::Mode,
+    /// The player's program, booted afresh for every attempt.
+    program: Program,
     screen: Screen,
 }
 
@@ -49,10 +53,6 @@ enum Screen {
 struct Game {
     playback: Playback,
     editor: editor::State,
-    /// The last Apply's compile error, shown until the next Apply.
-    /// Runtime errors live on [`Playback`]; `view` shows whichever is
-    /// current.
-    apply_error: Option<script::Error>,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
     /// Cached world geometry; cleared whenever the world changes.
@@ -164,12 +164,54 @@ pub enum Message {
     Editor(editor::Message),
 }
 
-/// Boots onto the splash; the game (and the rawr engine underneath it)
-/// is only built once Continue hands over a measured viewport.
-pub fn boot() -> (App, Task<Message>) {
+/// Opens the game with the player's program steering the elevators:
+/// the program's `new`, `update` and `subscription`, as
+/// [`iced::application`] takes an application's. Every attempt boots the
+/// program afresh on the challenge's world, and the game hosts it as
+/// its child.
+pub fn run<P, M>(
+    new: impl Fn(Vec<Elevator>, Vec<Floor>) -> (P, Task<M>) + 'static,
+    update: impl Fn(&mut P, M) -> Task<M> + Clone + 'static,
+    subscription: impl Fn(&P) -> Subscription<M> + Clone + 'static,
+) -> iced::Result
+where
+    P: 'static,
+    M: Send + 'static,
+{
+    #[cfg(target_arch = "wasm32")]
+    {
+        console_log::init().expect("initialize logger");
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    }
+
+    let settings = iced::Settings {
+        // Safari now ships WebGPU, so wgpu auto-detects it on iOS - and
+        // renders black. WebGL2 is the proven web path; force it on
+        // wasm (Chrome included: consistency beats novelty here).
+        #[cfg(target_arch = "wasm32")]
+        backend: iced::Backend::Hardware(iced::backend::Api::OpenGL),
+        ..iced::Settings::default()
+    };
+
+    let program = Program::new(new, update, subscription);
+    iced::application(move || boot(program.clone()), self::update, view)
+        .settings(settings)
+        .subscription(self::subscription)
+        .theme(theme)
+        .font(theme::MONO_BYTES)
+        .font(icon::FONT)
+        .default_font(theme::MONO)
+        .title("elevato.rs")
+        .run()
+}
+
+/// Boots onto the splash; the game (and the player's program underneath
+/// it) is only built once Continue hands over a measured viewport.
+pub fn boot(program: Program) -> (App, Task<Message>) {
     (
         App {
             mode: theme::Mode::from_env(),
+            program,
             screen: Screen::Splash,
         },
         Task::none(),
@@ -200,7 +242,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
                 .map(|bounds| bounds.width);
-            app.screen = Screen::Game(Box::new(Game::new(width)));
+            app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), width)));
         }
         Message::ToggleMode => {
             app.mode = app.mode.toggle();
@@ -328,25 +370,16 @@ fn splash() -> Element<'static, Message> {
 // ----------------------------------------------------------------- game
 
 impl Game {
-    /// Builds the game: the last-saved code and timescale (else the
-    /// built-in starter) on challenge 1, paused until Start is pressed
-    /// (the original's flow), with the divider seeded from the measured
-    /// viewport.
-    fn new(viewport_width: Option<f32>) -> Self {
+    /// Builds the game: the player's program on challenge 1, paused
+    /// until Start is pressed (the original's flow), its last-saved text
+    /// in the editor (else the built-in starter) and its last timescale,
+    /// with the divider seeded from the measured viewport.
+    fn new(program: Program, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
         };
-        // A saved program can be broken - Save persists raw text - so a
-        // failed compile boots the starter engine underneath while the
-        // editor keeps the saved text and shows its compile error.
-        let (mut playback, apply_error) = match Playback::new(&code) {
-            Ok(playback) => (playback, None),
-            Err(error) => (
-                Playback::new(playback::STARTER).expect("invariant: the built-in starter compiles"),
-                Some(error),
-            ),
-        };
+        let mut playback = Playback::new(program);
         if let Some(timescale) = timescale {
             playback.set_timescale(timescale);
         }
@@ -366,7 +399,6 @@ impl Game {
         Game {
             playback,
             editor: editor::State::new(&code),
-            apply_error,
             choices,
             cache: canvas::Cache::default(),
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
@@ -463,14 +495,11 @@ impl Game {
                 if let Some(instruction) = action.instruction {
                     match instruction {
                         editor::Instruction::Apply(source) => {
-                            self.apply_error = self.playback.apply(&source).err();
-                            if self.apply_error.is_none() {
-                                // Persistence is best-effort; a failed
-                                // write just means nothing saved this
-                                // time.
-                                let _ = storage::save(&source, self.playback.timescale());
-                                self.editor.mark_saved();
-                            }
+                            // Persistence is best-effort; a failed write
+                            // just means nothing saved this time.
+                            let _ = storage::save(&source, self.playback.timescale());
+                            self.editor.mark_saved();
+                            self.playback.restart();
                             self.cache.clear();
                         }
                         editor::Instruction::Save(source) => {
@@ -725,14 +754,11 @@ impl Game {
             .into()
     }
 
-    /// The editor side of the split, fed whichever script error is
-    /// current: the last Apply's compile error until the next Apply,
-    /// else whatever stopped the running attempt (an `init` failure or
-    /// runtime throw).
+    /// The editor side of the split, fed the program's panic when one
+    /// stopped the running attempt.
     fn editor_pane(&self) -> Element<'_, Message> {
-        let error = self.apply_error.as_ref().or_else(|| self.playback.error());
         pointer(
-            self.editor.view(error).map(Message::Editor),
+            self.editor.view(self.playback.error()).map(Message::Editor),
             self.modifiers
                 .command()
                 .then_some(mouse::Interaction::Pointer),

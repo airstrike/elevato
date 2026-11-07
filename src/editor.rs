@@ -1,9 +1,10 @@
 //! The Rust editor pane: a self-contained TEA cell owning the text
 //! buffer, the dirty flag, and the Reset backup. The parent owns
-//! everything the buttons *do* - compiling, running, persisting - and
-//! is told about it via [`Instruction`]; the current script error
-//! (compile or runtime) is a read-only prop passed into [`State::view`].
+//! everything the buttons *do* (saving the program, restarting the run)
+//! and is told about it via [`Instruction`]; the program's panic, when
+//! it stopped the run, is a read-only prop passed into [`State::view`].
 
+use elevato_api::simulation;
 use iced::widget::{button, column, container, row, space, text, text_editor};
 use iced::{Element, Fill};
 
@@ -62,7 +63,7 @@ fn edit_kind(action: &text_editor::Action) -> Edit {
 pub enum Message {
     /// The text editor performed an action (edit, cursor move, …).
     Edited(text_editor::Action),
-    /// Apply was pressed: compile and run the current text.
+    /// Apply was pressed: save the current text and restart the run.
     Apply,
     /// Save was pressed: persist the current text.
     Save,
@@ -79,10 +80,10 @@ pub enum Message {
 
 /// What the parent must do on the editor's behalf.
 pub enum Instruction {
-    /// Compile and run this source on the current challenge,
-    /// persisting it on success.
+    /// Save this source as the program and restart the run on the
+    /// current challenge.
     Apply(String),
-    /// Persist this source (whether or not it compiles).
+    /// Save this source as the program (whether or not it compiles).
     Save(String),
 }
 
@@ -188,10 +189,9 @@ impl State {
     }
 
     /// The pane: editor, error panel (when `error` is present), and
-    /// the Apply/Save/Reset/Undo-reset row. `error` is whichever
-    /// script error is current - compile from Apply or runtime from a
-    /// tick - owned by the parent.
-    pub fn view<'a>(&'a self, error: Option<&'a script::Error>) -> Element<'a, Message> {
+    /// the Apply/Save/Reset/Undo-reset row. `error` is the program's
+    /// panic that stopped the run, owned by the parent.
+    pub fn view<'a>(&'a self, error: Option<&'a simulation::Error>) -> Element<'a, Message> {
         let editor = text_editor(&self.content)
             .height(Fill)
             .size(14)
@@ -255,10 +255,8 @@ impl State {
     }
 }
 
-/// The error strip under the editor. `script::Error`'s display is
-/// rawr's rustc-style report - code, message, and the offending source
-/// line with a caret - or a runtime error with its line and column.
-fn error_panel<'a>(error: &script::Error) -> Element<'a, Message> {
+/// The error strip under the editor: the panic's message.
+fn error_panel<'a>(error: &simulation::Error) -> Element<'a, Message> {
     container(text(error.to_string()).size(12).style(theme::text::failure))
         .width(Fill)
         .padding(8)

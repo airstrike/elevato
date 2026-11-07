@@ -1,0 +1,10 @@
+[package]
+name = "program"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+elevato = { workspace = true }
+iced = { workspace = true }
