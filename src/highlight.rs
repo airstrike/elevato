@@ -337,7 +337,9 @@ mod tests {
         assert!(has(line, "2usize", Kind::Number));
         assert!(has(line, "'z'", Kind::String));
         assert!(
-            !line.iter().any(|(token, kind)| token.contains("'a") && *kind == Kind::String),
+            !line
+                .iter()
+                .any(|(token, kind)| token.contains("'a") && *kind == Kind::String),
             "a lifetime is not a char literal: {line:?}"
         );
     }

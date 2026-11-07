@@ -445,5 +445,9 @@ fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &
 }
 "#;
     let runtime = run(source, 0, SEED, 5);
-    assert!(runtime.world().elevators()[0].destination_queue().is_empty());
+    assert!(
+        runtime.world().elevators()[0]
+            .destination_queue()
+            .is_empty()
+    );
 }
