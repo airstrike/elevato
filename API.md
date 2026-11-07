@@ -62,7 +62,7 @@ impl Program {
 `elevato::run` opens the game and hosts the program as its child, the
 way an iced app hosts a screen: it holds the program's state, calls
 its `update`, and runs its tasks and subscription. Every attempt - a
-restart, a new challenge, Apply - boots the program afresh with `new`
+restart, a new challenge - boots the program afresh with `new`
 on a fresh world.
 
 `new` receives the challenge's elevators and floors, and the program
