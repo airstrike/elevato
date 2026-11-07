@@ -5,12 +5,17 @@
 //! final stats to its native-controller twin run through
 //! `core::headless`, freezing the runtime's replicated driver loop to
 //! the core contract.
+//!
+//! Every test runs natively under `cargo test` and in Node.js under
+//! `cargo test --target wasm32-unknown-unknown` (wasm-bindgen-test), so
+//! the web build's script path is held to the same proofs.
 
 use elevato_core::challenge::{self, Outcome};
 use elevato_core::controller::Controller;
 use elevato_core::event::Event;
 use elevato_core::{World, headless};
 use script::{Error, Program, Runtime};
+use wasm_bindgen_test::wasm_bindgen_test;
 
 const STARTER: &str = include_str!("solutions/starter.rs");
 const NAIVE: &str = include_str!("solutions/naive.rs");
@@ -49,7 +54,7 @@ fn run_until_error(source: &str, index: usize, frames: usize) -> Error {
     panic!("the script never raised the expected runtime error");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_starter_program_runs_challenge_one_without_script_errors() {
     let runtime = run(STARTER, 0, SEED, 3700);
     // Shuttling floors 0 and 1 cannot clear a 3-floor challenge; the
@@ -58,7 +63,7 @@ fn the_starter_program_runs_challenge_one_without_script_errors() {
     assert!(runtime.stats().transported() > 0);
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_naive_port_passes_challenge_one() {
     let runtime = run(NAIVE, 0, SEED, 3700);
     assert_eq!(
@@ -70,7 +75,7 @@ fn the_naive_port_passes_challenge_one() {
     assert!(runtime.stats().transported() >= 15);
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_naive_port_fails_challenge_five() {
     let runtime = run(NAIVE, 4, SEED, 4200);
     assert_eq!(
@@ -104,7 +109,7 @@ impl Controller for Naive {
     }
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_scripted_naive_replays_the_native_naive_byte_for_byte() {
     let mut world = World::new(&challenge::roster()[0], SEED);
     let native = headless::run(&mut world, &mut Naive, 3700, 1);
@@ -115,7 +120,7 @@ fn the_scripted_naive_replays_the_native_naive_byte_for_byte() {
     assert_eq!(scripted.outcome(), native.outcome);
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
     // Challenge 4 (8 floors, 2 elevators) is where request routing and
     // indicator-steered sweeps first beat blind dispatch: across seeds
@@ -145,7 +150,7 @@ fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
     );
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
     for (index, frames) in [(0, 3700), (1, 3700), (2, 3700), (3, 3700), (5, 30000)] {
         let runtime = run(TWENTYLINER, index, SEED, frames);
@@ -167,14 +172,14 @@ fn program(model: &str, new: &str, update: &str) -> String {
     format!("{model}\n\nfn new() -> Model {{\n    {new}\n}}\n\n{UPDATE} {{\n{update}\n}}\n")
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_program_without_new_is_a_compile_time_error() {
     let source = format!("struct Model {{}}\n{UPDATE} {{ vec![] }}");
     let error = Program::compile(&source).unwrap_err();
     assert!(matches!(error, Error::MissingNew), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_new_with_parameters_is_a_compile_time_error() {
     let source = format!(
         "struct Model {{}}\nfn new(a: i64) -> Model {{ Model {{}} }}\n{UPDATE} {{ vec![] }}"
@@ -183,13 +188,13 @@ fn a_new_with_parameters_is_a_compile_time_error() {
     assert!(matches!(error, Error::NewArity(1)), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_program_without_update_is_a_compile_time_error() {
     let error = Program::compile("struct Model {}\nfn new() -> Model { Model {} }").unwrap_err();
     assert!(matches!(error, Error::MissingUpdate), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn an_update_over_another_model_is_a_compile_time_error() {
     // `update` must take exactly what `new` returns.
     let source = format!("struct Model {{}}\nfn new() -> i64 {{ 0 }}\n{UPDATE} {{ vec![] }}");
@@ -197,7 +202,7 @@ fn an_update_over_another_model_is_a_compile_time_error() {
     assert!(matches!(error, Error::Signature(_)), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn an_update_taking_the_model_by_value_is_a_compile_time_error() {
     let source = "struct Model {}\nfn new() -> Model { Model {} }\n\
                   fn update(model: Model, message: Message, elevators: &[Elevator], floors: &[Floor]) \
@@ -207,7 +212,7 @@ fn an_update_taking_the_model_by_value_is_a_compile_time_error() {
     assert!(error.to_string().contains("&mut Model"), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn an_update_returning_a_non_command_is_a_compile_time_error() {
     // The original's "update returned a value of type i64" runtime
     // refusal is a type error now, caught before anything runs.
@@ -218,7 +223,7 @@ fn an_update_returning_a_non_command_is_a_compile_time_error() {
     assert!(matches!(error, Error::Signature(_)), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_command_list_with_a_non_command_element_is_a_compile_time_error() {
     let source = program(
         "struct Model {}",
@@ -230,7 +235,7 @@ fn a_command_list_with_a_non_command_element_is_a_compile_time_error() {
     assert!(error.to_string().contains("E0308"), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_compile_error_points_at_the_player_s_own_line() {
     let source = program(
         "struct Model {}",
@@ -242,7 +247,7 @@ fn a_compile_error_points_at_the_player_s_own_line() {
     assert!(error.to_string().contains("<script>:8:"), "{error}");
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_command_for_an_elevator_the_challenge_does_not_have_is_a_runtime_error() {
     // Challenge 1 has a single elevator; index 1 does not exist. The
     // index is refused, never clamped. The initial idle round delivers
@@ -262,7 +267,7 @@ fn a_command_for_an_elevator_the_challenge_does_not_have_is_a_runtime_error() {
     );
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn a_panicking_update_surfaces_a_runtime_error_with_its_position() {
     let source = r#"struct Model {}
 
@@ -287,7 +292,7 @@ fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &
     );
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn the_tier_one_snapshot_fields_are_readable_from_scripts() {
     // Every elevator and floor snapshot field, probed on the first tick
     // (fresh, parked world) - a snapshot-builder slip panics here.
@@ -343,7 +348,7 @@ fn probe(elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
     );
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn snapshots_track_the_world_between_messages() {
     // A command applied for one message is visible in the snapshots
     // the very next message sees: idle queues floor 2, and the passing
@@ -377,7 +382,7 @@ fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &
     assert_eq!(runtime.world().elevators()[0].current_floor(), 2);
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn model_state_persists_across_update_calls() {
     let source = program(
         "struct Model {\n    launched: bool,\n}",
@@ -396,7 +401,7 @@ fn model_state_persists_across_update_calls() {
     );
 }
 
-#[test]
+#[wasm_bindgen_test(unsupported = test)]
 fn every_command_constructor_reaches_the_world() {
     // One tick per step, each step checking the previous step's
     // commands through the snapshots - every constructor and both

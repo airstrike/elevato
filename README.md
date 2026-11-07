@@ -51,6 +51,19 @@ trunk serve            # develop at http://localhost:8080
 trunk build --release  # deployable bundle in dist/
 ```
 
+The script crate's tests run natively and, on the same rawr path the
+browser takes, as wasm in Node.js:
+
+```sh
+cargo test -p script
+cargo test -p script --target wasm32-unknown-unknown
+```
+
+The wasm run needs Node.js and the `wasm-bindgen-test-runner` that
+matches the wasm-bindgen version in `Cargo.lock`
+(`cargo install wasm-bindgen-cli --version 0.2.108`);
+`.cargo/config.toml` names it as the wasm32 runner.
+
 ## Scripting
 
 Programs are Rust in the Elm architecture: `fn new()` returns your

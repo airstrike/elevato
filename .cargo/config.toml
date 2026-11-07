@@ -1,0 +1,5 @@
+# `cargo test --target wasm32-unknown-unknown` runs each wasm test binary
+# in Node.js. The runner must be the version of wasm-bindgen that
+# Cargo.lock pins: `cargo install wasm-bindgen-cli --version <that>`.
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"

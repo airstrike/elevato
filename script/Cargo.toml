@@ -9,5 +9,8 @@ elevato-core = { workspace = true }
 rawr = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+wasm-bindgen-test = { workspace = true }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 rawr = { workspace = true, features = ["wasm-bindgen"] }

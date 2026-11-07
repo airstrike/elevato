@@ -39,6 +39,8 @@ iced = { path = "/Users/andy/projects/iced-web-clipboard", features = ["canvas",
 # Players write their programs in Rust; rawr runs them (embedding).
 rawr = { git = "https://github.com/airstrike/rawr" }
 thiserror = "2"
+# Runs the script crate's tests in Node.js on wasm32, natively as #[test].
+wasm-bindgen-test = "0.3.58"
 
 # Highlighting: parsing only (the app maps scopes to theme colors
 # itself); fancy-regex backend - wasm-clean, never onig.
