@@ -395,3 +395,55 @@ fn model_state_persists_across_update_calls() {
         "exactly one trip: the launched flag must persist"
     );
 }
+
+#[test]
+fn every_command_constructor_reaches_the_world() {
+    // One tick per step, each step checking the previous step's
+    // commands through the snapshots - every constructor and both
+    // lamps cross the bridge at least once.
+    let source = r#"struct Model {
+    step: usize,
+}
+
+fn new() -> Model {
+    Model { step: 0 }
+}
+
+fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
+    let Message::Tick(_) = message else {
+        return vec![];
+    };
+    model.step += 1;
+    let car = &elevators[0];
+    match model.step {
+        1 => vec![
+            set_going_up_indicator(0, false),
+            go_to_floor(0, 2),
+            go_to_floor_first(0, 1),
+        ],
+        2 => {
+            assert_eq!(car.destination_queue, vec![1, 2]);
+            assert!(!car.going_up_indicator);
+            vec![
+                set_destination_queue(0, vec![2, 1]),
+                check_destination_queue(0),
+                set_going_up_indicator(0, true),
+                set_going_down_indicator(0, false),
+            ]
+        }
+        3 => {
+            assert_eq!(car.destination_queue, vec![2, 1]);
+            assert!(car.going_up_indicator && !car.going_down_indicator);
+            vec![stop(0)]
+        }
+        4 => {
+            assert!(car.destination_queue.is_empty());
+            vec![]
+        }
+        _ => vec![],
+    }
+}
+"#;
+    let runtime = run(source, 0, SEED, 5);
+    assert!(runtime.world().elevators()[0].destination_queue().is_empty());
+}
