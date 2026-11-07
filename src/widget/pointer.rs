@@ -83,10 +83,10 @@ where
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> mouse::Interaction {
-        if let Some(interaction) = self.interaction {
-            if cursor.is_over(layout.bounds()) {
-                return interaction;
-            }
+        if let Some(interaction) = self.interaction
+            && cursor.is_over(layout.bounds())
+        {
+            return interaction;
         }
         self.content.as_widget().mouse_interaction(
             &tree.children[0],

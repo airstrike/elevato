@@ -430,15 +430,14 @@ impl Game {
                         docs::Message::Viewed(text_editor::Action::Click(_))
                     );
                 let action = self.docs.update(message);
-                if jump {
-                    if let Some((page, line)) = self
+                if jump
+                    && let Some((page, line)) = self
                         .docs
                         .identifier_at_cursor()
                         .as_deref()
                         .and_then(|name| docs::resolve(name, Some(self.docs.page())))
-                    {
-                        self.docs.open(page, line);
-                    }
+                {
+                    self.docs.open(page, line);
                 }
                 return action.task.map(Message::Docs);
             }
@@ -451,16 +450,15 @@ impl Game {
                         editor::Message::Edited(text_editor::Action::Click(_))
                     );
                 let action = self.editor.update(message);
-                if jump {
-                    if let Some((page, line)) = self
+                if jump
+                    && let Some((page, line)) = self
                         .editor
                         .identifier_at_cursor()
                         .as_deref()
                         .and_then(|name| docs::resolve(name, None))
-                    {
-                        self.docs.open(page, line);
-                        self.tab = Tab::Api;
-                    }
+                {
+                    self.docs.open(page, line);
+                    self.tab = Tab::Api;
                 }
                 if let Some(instruction) = action.instruction {
                     match instruction {

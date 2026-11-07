@@ -19,10 +19,10 @@ impl Mode {
     /// `prefers-color-scheme`, so the app agrees with the landing card.
     pub fn from_env() -> Self {
         #[cfg(not(target_arch = "wasm32"))]
-        if let Ok(value) = std::env::var("ELEVATO_THEME") {
-            if value.eq_ignore_ascii_case("light") {
-                return Self::Light;
-            }
+        if let Ok(value) = std::env::var("ELEVATO_THEME")
+            && value.eq_ignore_ascii_case("light")
+        {
+            return Self::Light;
         }
         #[cfg(target_arch = "wasm32")]
         if web_sys::window()
