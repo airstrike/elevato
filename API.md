@@ -1,151 +1,164 @@
 # elevato scripting API
 
-elevato programs are written in [Rhai](https://rhai.rs). The API mirrors
-the original Elevator Saga's JS surface, renamed to snake_case. This
-document is the full mapping; deviations from the original are marked
-**[deviation]** and collected at the end.
+elevato programs are written in Rust and run by
+[rawr](https://github.com/airstrike/rawr), a Rust interpreter the game
+embeds. The API mirrors the original Elevator Saga's JS surface,
+renamed to snake_case and reshaped into the Elm architecture: world
+events arrive as messages, world state arrives as read-only snapshots,
+and the program answers with commands. This document is the full
+mapping; deviations from the original are marked **[deviation]** and
+collected at the end.
+
+Everything below is in scope in every program, the way Rust's own
+prelude is: no `use` needed. The definitions themselves are Rust source
+the game appends to your program before rawr checks it
+([`script/prelude.rs`](script/prelude.rs)).
 
 ## Program shape
 
-```rhai
-fn init(elevators, floors) {
-    // called once, when the challenge starts
+```rust
+struct Model {
+    // whatever state your program keeps between messages
 }
 
-fn update(dt, elevators, floors) {
-    // called once per frame with the whole frame's dt, before that
-    // frame's physics - optional
+fn new() -> Model {
+    // called once, when the challenge starts
+    Model {}
+}
+
+fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
+    // called for every message; the returned commands are applied in
+    // order, the moment `update` returns
+    match message {
+        Message::Idle(elevator) => vec![go_to_floor(elevator, 0), go_to_floor(elevator, 1)],
+        _ => vec![],
+    }
 }
 ```
 
-`fn init(elevators, floors)` is **required**; a program without it fails
-to compile. `fn update(dt, elevators, floors)` is **optional**
-**[deviation]** - the original required both. If an `update` exists with
-the wrong parameter count, that is a compile error rather than a
-silently ignored function.
+Both functions are **required**, and rawr checks the whole program
+before it runs, as rustc would. `new` takes no parameters; its return
+value is the model, of any type you define. `update` must have exactly
+the signature above, over the type `new` returns - a mismatch refuses
+to Apply, with the error under the editor. Name parameters you don't
+use with a leading underscore (`_floors`), as in any Rust program.
 
-`elevators` and `floors` are arrays of handles into the running world.
-Any exception thrown from user code - in `init`, `update`, or any event
-handler - aborts the frame and pauses the game with the error (the
-original's "There is a problem with your code").
+`model` is your state: mutate it through the `&mut` and the changes
+persist between messages. `elevators` and `floors` are snapshots of the
+world as it stands at that message; index them with the indices
+messages carry. A panic anywhere in your code - `panic!`, a failed
+`assert!`, an out-of-bounds index, a `None.unwrap()` - aborts the frame
+and pauses the game with the message and its line (the original's
+"There is a problem with your code").
 
-## Elevator handle
+## Messages
 
-| Original (JS) | elevato (Rhai) | Notes |
+| Original (JS) | elevato (Rust) | Fires when |
 |---|---|---|
-| `goToFloor(n)` | `go_to_floor(n)` | Queues a destination. Accepts ints and floats; clamped to `[0, floor_count - 1]`. Duplicate-suppressed against the adjacent queue element only. |
-| `goToFloor(n, true)` | `go_to_floor(n, true)` | Forces the destination to the front of the queue ("go there first"). |
-| `stop()` | `stop()` | Clears the queue and halts at the projected stop point - usually *between* floors. Advanced in-transit rescheduling only. |
-| `currentFloor()` | `current_floor` *(get)* | Cached rounded floor. Does **not** imply the elevator is stopped. |
-| `goingUpIndicator()` / `(v)` | `going_up_indicator` *(get/set)* | Both indicators start on. Affects boarding and call-button clearing. Property assignment replaces the original's chainable setter. |
-| `goingDownIndicator()` / `(v)` | `going_down_indicator` *(get/set)* | |
-| `maxPassengerCount()` | `max_passenger_count` *(get)* | Capacity in passengers (slots). |
-| `loadFactor()` | `load_factor` *(get)* | `sum(weights) / (capacity × 100)`; 0 = empty, 1 ≈ full. |
-| `destinationDirection()` | `destination_direction` *(get)* | `"up"`, `"down"`, or `"stopped"`. |
-| `destinationQueue` | `destination_queue` *(get)* | **Value copy** - mutating the returned array cannot affect the elevator; see below. |
-| `destinationQueue = […]` | `set_destination_queue(arr)` | Replaces the queue (ints or floats). Entries are clamped to the building **[deviation]**. Follow with `check_destination_queue()`. |
-| `checkDestinationQueue()` | `check_destination_queue()` | Non-empty queue: start moving to its front. Empty queue (and not mid-dwell): fire `idle`. |
-| `getPressedFloors()` | `pressed_floors` *(get)* | Lit in-elevator buttons, ascending array of ints. |
-| `on(events, handler)` | `on(events, handler)` | See [Events](#events). |
-| - | `is_full` *(get)* | **[new]** `true` when every slot is taken. Capacity is slot-count; `load_factor` is weight-based and cannot answer this. |
-| - | `move_count` *(get)* | **[new]** Floor boundaries this elevator has crossed (what challenges 6 and 7 score). |
-| - | `is_busy` *(get)* | **[new]** `true` during the 1 s door dwell - the elevator cannot be commanded to move. |
-| - | `is_moving` *(get)* | **[new]** `true` while under way toward a destination. |
-| - | `is_on_a_floor` *(get)* | **[new]** `true` when resting exactly on a floor (false after a mid-flight `stop()`). |
+| `update(dt, …)` | `Message::Tick(dt)` | Once per frame, before that frame's physics; `dt` is the frame's simulated seconds (`f64`). |
+| `elevator.on("idle")` | `Message::Idle(elevator)` | The destination queue is checked while empty and the elevator is not mid-dwell. Fired for every elevator at challenge start, and ~1 s after the last queued destination completes. |
+| `elevator.on("floor_button_pressed")` | `Message::FloorButtonPressed(elevator, floor)` | A passenger pressed an unlit destination button (~1 s after boarding). |
+| `elevator.on("passing_floor")` | `Message::PassingFloor(elevator, floor, direction)` | About to pass a floor it is not stopping at; `direction` is `Direction::Up` or `Direction::Down`. Still in time for `go_to_floor_first(elevator, floor)`. |
+| `elevator.on("stopped_at_floor")` | `Message::StoppedAtFloor(elevator, floor)` | Physically arrived and snapped to a floor - before exit/boarding, so indicator changes here affect who boards. |
+| `floor.on("up_button_pressed")` | `Message::UpButtonPressed(floor)` | The up call button went from unlit to lit. Re-fires when overflow passengers re-press after an arrival cleared it. |
+| `floor.on("down_button_pressed")` | `Message::DownButtonPressed(floor)` | Same, for down. |
+
+Every payload is a `usize` index (or the `f64` dt, or a `Direction`).
+A `match` on `message` must cover every variant, as in Rust - end it
+with `_ => vec![]` to ignore the rest.
+
+## Commands
+
+| Original (JS) | elevato (Rust) | Notes |
+|---|---|---|
+| `goToFloor(n)` | `go_to_floor(elevator, floor)` | Queues a destination, clamped to `[0, floor_count - 1]`. Duplicate-suppressed against the adjacent queue element only. |
+| `goToFloor(n, true)` | `go_to_floor_first(elevator, floor)` | Forces the destination to the front of the queue ("go there first"). |
+| `stop()` | `stop(elevator)` | Clears the queue and halts at the projected stop point - usually *between* floors. Advanced in-transit rescheduling only. |
+| `goingUpIndicator(v)` | `set_going_up_indicator(elevator, on)` | Both indicators start on. Affects boarding and call-button clearing. |
+| `goingDownIndicator(v)` | `set_going_down_indicator(elevator, on)` | |
+| `destinationQueue = […]` | `set_destination_queue(elevator, queue)` | Replaces the queue (`Vec<usize>`). Entries are clamped to the building **[deviation]**. Follow with `check_destination_queue`. |
+| `checkDestinationQueue()` | `check_destination_queue(elevator)` | Non-empty queue: start moving to its front. Empty queue (and not mid-dwell): fire `Message::Idle`. |
+
+Each function returns a `Command`; `update` returns them as a
+`Vec<Command>`, applied in order before the next message is delivered,
+so a command cascade unfolds in exactly the order the original's
+synchronous callbacks did. An elevator index the challenge does not
+have is a runtime error naming the command; floors are clamped, never
+refused.
+
+## Elevator snapshot
+
+`elevators[i]` is an `Elevator`:
+
+| Original (JS) | elevato (Rust) | Notes |
+|---|---|---|
+| `currentFloor()` | `current_floor: usize` | Cached rounded floor. Does **not** imply the elevator is stopped. |
+| `goingUpIndicator()` | `going_up_indicator: bool` | Change it with `set_going_up_indicator`. |
+| `goingDownIndicator()` | `going_down_indicator: bool` | |
+| `maxPassengerCount()` | `max_passenger_count: usize` | Capacity in passengers (slots). |
+| `loadFactor()` | `load_factor: f64` | `sum(weights) / (capacity × 100)`; 0 = empty, 1 ≈ full. |
+| `destinationDirection()` | `destination_direction: Option<Direction>` | `Some(Direction::Up)`, `Some(Direction::Down)`, or `None` when stopped. |
+| `destinationQueue` | `destination_queue: Vec<usize>` | A snapshot - see below. |
+| `getPressedFloors()` | `pressed_floors: Vec<usize>` | Lit in-elevator buttons, ascending. |
+| - | `is_full: bool` | **[new]** `true` when every slot is taken. Capacity is slot-count; `load_factor` is weight-based and cannot answer this. |
+| - | `move_count: usize` | **[new]** Floor boundaries this elevator has crossed (what challenges 6 and 7 score). |
+| - | `is_busy: bool` | **[new]** `true` during the 1 s door dwell - the elevator cannot be commanded to move. |
+| - | `is_moving: bool` | **[new]** `true` while under way toward a destination. |
+| - | `is_on_a_floor: bool` | **[new]** `true` when resting exactly on a floor (false after a mid-flight `stop`). |
 
 ### The destination-queue idiom
 
-Rhai arrays are values: `elevator.destination_queue` returns a copy, so
-the original's `destinationQueue.splice(…)` becomes read → modify →
-write back → apply:
+Snapshots are read-only, so the original's `destinationQueue.splice(…)`
+becomes clone → modify → command → apply:
 
-```rhai
-let queue = elevator.destination_queue;
+```rust
+let mut queue = elevators[e].destination_queue.clone();
 queue.insert(0, 3);
-elevator.set_destination_queue(queue);
-elevator.check_destination_queue();   // changes take effect now
+vec![set_destination_queue(e, queue), check_destination_queue(e)]   // changes take effect now
 ```
 
-## Floor handle
+## Floor snapshot
 
-| Original (JS) | elevato (Rhai) | Notes |
+`floors[i]` is a `Floor`:
+
+| Original (JS) | elevato (Rust) | Notes |
 |---|---|---|
-| `floorNum()` | `floor_num` *(get)* or `floor_num()` | Both forms work; the method form keeps JS muscle memory intact. |
-| `level` | `level` *(get)* | Raw property alias of the same value, as in the original. |
-| `buttonStates.up == "activated"` | `up_pressed` *(get)* | `true` while the up call button is lit. |
-| `buttonStates.down == "activated"` | `down_pressed` *(get)* | `true` while the down call button is lit. |
-| `on(events, handler)` | `on(events, handler)` | See [Events](#events). |
+| `floorNum()` | `floor_num: usize` | |
+| `level` | `level: usize` | Alias of the same value, as in the original. |
+| `buttonStates.up == "activated"` | `up_pressed: bool` | `true` while the up call button is lit. |
+| `buttonStates.down == "activated"` | `down_pressed: bool` | `true` while the down call button is lit. |
 
-## Events
+## Rust as rawr runs it
 
-Subscribe with `handle.on("event_name", handler)`. Several events can be
-bound at once with a space-separated string -
-`floor.on("up_button_pressed down_button_pressed", handler)` - in which
-case the **event name is prepended as the handler's first argument**
-(riot.js multi-event semantics, exactly as the original). Single-event
-binds pass only the event's own arguments. Binding an unknown event name
-is an error **[deviation]** - the original silently registered a
-listener that never fired.
+rawr supports a large part of Rust - structs, enums, traits, generics,
+closures, iterators, `Vec`, `HashMap` and most of the std a game program
+wants - and rejects the rest with an error that names the construct. Its
+[Supported Rust](https://rawr.airstrike.fyi/docs/language) page lists
+what works. In elevato specifically:
 
-### Elevator events
-
-| Event | Handler args | Fires when |
-|---|---|---|
-| `"idle"` | - | The destination queue is checked while empty and the elevator is not mid-dwell. Fired for every elevator at challenge start, and ~1 s after the last queued destination completes. Handlers close over their elevator - none is passed. |
-| `"floor_button_pressed"` | `floor_num` | A passenger pressed an unlit destination button (~1 s after boarding). |
-| `"passing_floor"` | `floor_num, direction` | About to pass a floor it is not stopping at; `direction` is `"up"` or `"down"`. Still in time for `go_to_floor(floor_num, true)`. |
-| `"stopped_at_floor"` | `floor_num` | Physically arrived and snapped to a floor - before exit/boarding, so indicator changes here affect who boards. |
-
-### Floor events
-
-| Event | Handler args | Fires when |
-|---|---|---|
-| `"up_button_pressed"` | `floor` (the floor handle) | The up call button went from unlit to lit. Re-fires when overflow passengers re-press after an arrival cleared it. |
-| `"down_button_pressed"` | `floor` (the floor handle) | Same, for down. |
-
-### Arity adaptation
-
-JS ignored extra handler arguments; Rhai normally errors on an arity
-mismatch. elevato adapts instead: the dispatched argument list is
-truncated (or padded with `()`) to what the handler declares, so a
-zero-argument closure on an argument-carrying event just works:
-
-```rhai
-floor.on("up_button_pressed down_button_pressed", || {
-    elevators[0].go_to_floor(floor.floor_num());   // args ignored, JS-style
-});
-```
-
-## Rhai vs JS gotchas
-
-- **Loop-variable capture**: a Rhai `for` loop shares **one** loop
-  variable across iterations. Closures made in the loop body must
-  capture a per-iteration shadow, or they will all see the last value:
-
-  ```rhai
-  for elevator in elevators {
-      let elevator = elevator;          // fresh binding per iteration
-      elevator.on("idle", || elevator.go_to_floor(0));
-  }
-  ```
-
-- **Shared state**: variables captured by several closures are shared
-  between them - declare your request lists in `init` and capture them
-  in every handler, as the original's solutions did with outer-scope
-  variables.
-- **Top-level statements** run once, before `init`. Rhai functions
-  cannot see top-level variables, so cross-handler state must live in
-  captured variables.
+- **The prelude's names are taken.** Define your own `Model`, helper
+  functions and types, but not a second `Message`, `Elevator` or
+  `go_to_floor`.
+- **One file, no modules.** A program is a single file of items; `mod`
+  blocks are not supported there.
+- **No I/O.** The engine grants no file, environment or process access.
+  `println!` writes to the native app's stdout (nowhere, in the
+  browser).
 
 ## Deviations from the original
 
-1. `fn update` is optional (the original required both members).
+1. The Elm architecture replaces callbacks: events arrive as `Message`
+   variants in one `update`, and effects are returned commands instead
+   of method calls on live handles. `update` receives every message,
+   so the original's separate `update(dt, …)` is `Message::Tick(dt)`.
 2. `set_destination_queue` replaces raw `destinationQueue` assignment,
    and clamps entries to valid floor range (the original clamped only
    `goToFloor`).
-3. Unknown event names in `on(...)` error at bind time instead of
-   silently never firing.
-4. Handler arity is adapted (truncate/pad) instead of JS's implicit
-   `undefined` extras.
+3. Floors and elevators are `usize` indices. The original's
+   `Number()` coercion accepted fractional floors; Rust's types make
+   every destination a whole floor.
+4. Mistakes the original found at run time - an unknown event name, a
+   wrong return value, a missing handler argument - are type errors,
+   refused before the program runs.
 5. The simulation is deterministic: seeded RNG and fixed-timestep
    playback (see the README) - same seed, same program, same result.

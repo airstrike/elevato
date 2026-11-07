@@ -2,13 +2,16 @@
 
 A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) -
 Magnus Wolffelt's elevator programming game - in Rust: program a bank of
-elevators in [Rhai](https://rhai.rs), watch the simulation, and clear
-the challenges. Same physics constants, same spawn model, same boarding
+elevators in Rust, watch the simulation, and clear the challenges.
+Your program runs on [rawr](https://github.com/airstrike/rawr), a Rust
+interpreter the game embeds, so it is checked as rustc would check it
+and runs without a compiler. Same physics constants, same spawn model, same boarding
 rules, same challenge roster as the original.
 
 Built with [iced](https://iced.rs) as a gift to the Rust world: one
 codebase runs natively and in the browser via WebAssembly, and the repo
-doubles as a working example of iced + canvas + Rhai on wasm.
+doubles as a working example of iced + canvas + an embedded rawr
+interpreter on wasm.
 
 ## Screenshots
 
@@ -21,7 +24,7 @@ doubles as a working example of iced + canvas + Rhai on wasm.
 ## Playing
 
 Pick a challenge, press **Start**, and watch the default program
-struggle. Then make it yours: edit the Rhai program on the right and
+struggle. Then make it yours: edit the Rust program on the right and
 press **Apply** - the world rebuilds from scratch and your new program
 takes over. **Save** persists the code and timescale (config dir
 natively, localStorage in the browser); **Reset** restores the starter
@@ -50,26 +53,33 @@ trunk build --release  # deployable bundle in dist/
 
 ## Scripting
 
-Programs define `fn init(elevators, floors)` (required) and
-`fn update(dt, elevators, floors)` (optional), and drive elevators
-through an API that mirrors the original's JS surface in snake_case:
+Programs are Rust in the Elm architecture: `fn new()` returns your
+state, and `fn update` folds every world event into it, answering with
+commands:
 
-```rhai
-fn init(elevators, floors) {
-    let elevator = elevators[0];
-    elevator.on("idle", || {
-        elevator.go_to_floor(0);
-        elevator.go_to_floor(1);
-    });
+```rust
+struct Model {}
+
+fn new() -> Model {
+    Model {}
+}
+
+fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
+    match message {
+        Message::Idle(elevator) => vec![go_to_floor(elevator, 0), go_to_floor(elevator, 1)],
+        _ => vec![],
+    }
 }
 ```
 
-`go_to_floor`, `stop`, `current_floor`, `load_factor`,
-`going_up_indicator`, `destination_queue`, floor call buttons, and the
-full event set (`idle`, `floor_button_pressed`, `passing_floor`,
-`stopped_at_floor`, `up_button_pressed`, `down_button_pressed`) are all
-there - see **[API.md](API.md)** for the complete mapping, the
-Rhai-vs-JS gotchas, and the documented deviations.
+`go_to_floor`, `stop`, the indicator lamps, `destination_queue`,
+`current_floor`, `load_factor`, floor call buttons, and the full event
+set (`Idle`, `FloorButtonPressed`, `PassingFloor`, `StoppedAtFloor`,
+`UpButtonPressed`, `DownButtonPressed`, plus `Tick` for time) are all
+there - see **[API.md](API.md)** for the complete mapping from the
+original's JS, what rawr's Rust covers, and the documented deviations.
+The in-game API tab has the same reference, a cmd+click away from any
+name in your program.
 
 ## Challenges
 
@@ -98,8 +108,8 @@ The original's 19, verbatim:
 ```
 elevato/
 ├── src/       the iced app: canvas, editor, playback, theme
-├── core/      elevato-core - the pure simulation (no iced, no rhai)
-└── script/    the Rhai bindings and runtime over core's boundary
+├── core/      elevato-core - the pure simulation (no iced, no rawr)
+└── script/    the rawr bindings, the Rust game API, and the runtime
 ```
 
 `core` is exhaustively pinned by integration tests: ported community
@@ -119,12 +129,20 @@ that worktree to exist and stay on that branch until the dependency flip
 to git sources lands - the prepared patch block and the exact steps live
 in [PUBLISHING.md](PUBLISHING.md) and the root `Cargo.toml`.
 
+rawr needs no local checkout: it is a git dependency on
+[airstrike/rawr](https://github.com/airstrike/rawr), pinned by
+`Cargo.lock`, as rawr's embedding docs tell apps to depend on it. The
+web build turns on its `wasm-bindgen` feature (browser randomness for
+its hash maps, the same setup rawr's own playground uses), so `trunk`
+needs nothing extra.
+
 ## Credits
 
 - [Elevator Saga](https://play.elevatorsaga.com) by
   [Magnus Wolffelt](https://github.com/magwo/elevatorsaga) and
   contributors - the original game this is a loving rewrite of, down to
   its physics constants and challenge configs.
-- [iced](https://iced.rs), [Rhai](https://rhai.rs), and
+- [iced](https://iced.rs), [rawr](https://github.com/airstrike/rawr)
+  (whose evaluator began as a fork of [Rhai](https://rhai.rs)), and
   [Fira Code](https://github.com/tonsky/FiraCode) (bundled under the SIL
   Open Font License - `assets/fonts/OFL.txt`).
