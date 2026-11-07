@@ -22,6 +22,7 @@ use crate::docs;
 use crate::editor;
 use crate::icon;
 use crate::playback::{self, Playback, Program};
+use crate::reload;
 use crate::sim;
 use crate::storage;
 use crate::theme;
@@ -38,6 +39,8 @@ pub struct App {
     mode: theme::Mode,
     /// The player's program, booted afresh for every attempt.
     program: Program,
+    /// Whether rawr runs the program, and so reloads it on Apply.
+    host: reload::Host,
     screen: Screen,
 }
 
@@ -53,6 +56,7 @@ enum Screen {
 struct Game {
     playback: Playback,
     editor: editor::State,
+    host: reload::Host,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
     /// Cached world geometry; cleared whenever the world changes.
@@ -162,6 +166,8 @@ pub enum Message {
     Resized(f32),
     /// An editor pane message.
     Editor(editor::Message),
+    /// rawr reported what it did with a save of the program.
+    Reloaded(reload::Outcome),
 }
 
 /// Opens the game with the player's program steering the elevators:
@@ -212,6 +218,7 @@ pub fn boot(program: Program) -> (App, Task<Message>) {
         App {
             mode: theme::Mode::from_env(),
             program,
+            host: reload::host(),
             screen: Screen::Splash,
         },
         Task::none(),
@@ -242,7 +249,19 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
                 .map(|bounds| bounds.width);
-            app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), width)));
+            app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), app.host, width)));
+        }
+        Message::Reloaded(outcome) => {
+            // A game rawr restarted for an edit goes straight back to
+            // the game, not the splash.
+            if matches!(app.screen, Screen::Splash)
+                && matches!(outcome, reload::Outcome::Restarted(_))
+            {
+                app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), app.host, None)));
+            }
+            if let Screen::Game(game) = &mut app.screen {
+                return game.update(Message::Reloaded(outcome));
+            }
         }
         Message::ToggleMode => {
             app.mode = app.mode.toggle();
@@ -260,13 +279,14 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
     Task::none()
 }
 
-/// Ticks every 16 ms while playback runs (silent while paused, so a
-/// paused app costs nothing), plus the challenge hotkeys:
-/// Cmd+Page Down / Cmd+Page Up step through the roster. The splash
-/// listens for nothing.
+/// rawr's reload outcomes on every screen; on the game, a tick every
+/// 16 ms while playback runs (silent while paused, so a paused app
+/// costs nothing), plus the challenge hotkeys: Cmd+Page Down /
+/// Cmd+Page Up step through the roster.
 pub fn subscription(app: &App) -> Subscription<Message> {
+    let reloads = app.host.outcomes().map(Message::Reloaded);
     let Screen::Game(game) = &app.screen else {
-        return Subscription::none();
+        return reloads;
     };
     let tick = if game.playback.is_running() {
         time::every(milliseconds(16)).map(|_| Message::Tick)
@@ -313,7 +333,7 @@ pub fn subscription(app: &App) -> Subscription<Message> {
         }
         _ => None,
     });
-    Subscription::batch([tick, hotkeys, resizes])
+    Subscription::batch([reloads, tick, hotkeys, resizes])
 }
 
 /// Renders whichever screen is up.
@@ -374,7 +394,7 @@ impl Game {
     /// until Start is pressed (the original's flow), its last-saved text
     /// in the editor (else the built-in starter) and its last timescale,
     /// with the divider seeded from the measured viewport.
-    fn new(program: Program, viewport_width: Option<f32>) -> Self {
+    fn new(program: Program, host: reload::Host, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
@@ -399,6 +419,7 @@ impl Game {
         Game {
             playback,
             editor: editor::State::new(&code),
+            host,
             choices,
             cache: canvas::Cache::default(),
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
@@ -495,20 +516,44 @@ impl Game {
                 if let Some(instruction) = action.instruction {
                     match instruction {
                         editor::Instruction::Apply(source) => {
-                            // Persistence is best-effort; a failed write
-                            // just means nothing saved this time.
-                            let _ = storage::save(&source, self.playback.timescale());
-                            self.editor.mark_saved();
-                            self.playback.restart();
-                            self.cache.clear();
+                            let written = storage::save(
+                                &source,
+                                self.playback.timescale(),
+                                self.playback.challenge_index(),
+                            );
+                            self.editor.applied(written, self.host);
                         }
                         editor::Instruction::Save(source) => {
-                            let _ = storage::save(&source, self.playback.timescale());
-                            self.editor.mark_saved();
+                            let written = storage::save(
+                                &source,
+                                self.playback.timescale(),
+                                self.playback.challenge_index(),
+                            );
+                            self.editor.saved(written);
                         }
                     }
                 }
                 return action.task.map(Message::Editor);
+            }
+            Message::Reloaded(outcome) => {
+                match &outcome {
+                    reload::Outcome::Swapped => self.playback.edit(),
+                    // rawr restarted the process with the new code: resume
+                    // the challenge the edit was applied on, running.
+                    reload::Outcome::Restarted(_) => {
+                        if let Some(challenge) = storage::load().and_then(|saved| saved.challenge) {
+                            self.playback.select_challenge(challenge);
+                        }
+                        if !self.playback.is_running() {
+                            self.playback.toggle();
+                        }
+                        self.cache.clear();
+                    }
+                    reload::Outcome::Queued
+                    | reload::Outcome::Restarting(_)
+                    | reload::Outcome::Failed(_) => {}
+                }
+                self.editor.reloaded(outcome);
             }
             // Handled at the app level before routing here.
             Message::Continue
@@ -734,7 +779,7 @@ impl Game {
             stat("Transported", stats.transported().to_string()),
             stat("Elapsed", format!("{:.1}s", stats.elapsed())),
             stat("Moves", stats.move_count().to_string()),
-            stat("Seed", self.playback.seed().to_string()),
+            stat("Seed", seed(&self.playback)),
         ]
         .spacing(16);
         let bottom = row![
@@ -838,7 +883,7 @@ impl Game {
             stat("Avg waiting time", format!("{:.1}s", stats.avg_wait_time())),
             stat("Max waiting time", format!("{:.1}s", stats.max_wait_time())),
             stat("Moves", stats.move_count().to_string()),
-            stat("Seed", self.playback.seed().to_string()),
+            stat("Seed", seed(&self.playback)),
             space::horizontal(),
             self.tab_bar(&[Tab::Player, Tab::Api]),
         ]
@@ -870,6 +915,16 @@ fn card(content: Element<'_, Message>) -> Element<'_, Message> {
         .padding(8)
         .style(theme::container::pane)
         .into()
+}
+
+/// The seed readout, marked once code changed under the attempt: the
+/// seed alone no longer reproduces it, and Restart is the clean path.
+fn seed(playback: &Playback) -> String {
+    if playback.edited() {
+        format!("{} (edited)", playback.seed())
+    } else {
+        playback.seed().to_string()
+    }
 }
 
 fn stat(label: &str, value: String) -> Element<'_, Message> {

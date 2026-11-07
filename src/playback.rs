@@ -13,6 +13,10 @@
 //! any single run is reproducible from (challenge, seed, program). The
 //! app displays the seed in its stats bar so a run can be referenced.
 //!
+//! An edit that reaches the program mid-run breaks that: the run is
+//! then [`Playback::edited`], and the app marks its seed so. A restart
+//! is the clean path back, booting the program as it now stands.
+//!
 //! # Timescale
 //!
 //! An integer in `[1, 39]`, default 2, stepped by the original's
@@ -139,6 +143,8 @@ pub struct Playback {
     running: bool,
     run: Option<Box<dyn Run>>,
     error: Option<simulation::Error>,
+    /// Whether code changed under the running attempt.
+    edited: bool,
 }
 
 impl Playback {
@@ -155,6 +161,7 @@ impl Playback {
             running: false,
             run: None,
             error: None,
+            edited: false,
         };
         playback.rebuild();
         playback
@@ -208,6 +215,19 @@ impl Playback {
         self.error.as_ref()
     }
 
+    /// Whether the program's code changed while this attempt ran, so
+    /// the seed and the program on disk no longer reproduce it.
+    pub fn edited(&self) -> bool {
+        self.edited
+    }
+
+    /// Records that new code took over the running attempt.
+    pub fn edit(&mut self) {
+        if self.run.is_some() {
+            self.edited = true;
+        }
+    }
+
     /// Read access to the world, for rendering.
     pub fn world(&self) -> Option<&World> {
         self.run.as_deref().map(Run::world)
@@ -225,8 +245,8 @@ impl Playback {
 
     /// Tears the attempt down and starts a fresh one on the same
     /// challenge with the next seed, auto-started like the original's
-    /// restart flow. Apply restarts too: the program as it now stands
-    /// boots on a fresh world.
+    /// restart flow. The program boots as it now stands, so the fresh
+    /// attempt is reproducible again.
     pub fn restart(&mut self) {
         self.seed += 1;
         self.rebuild();
@@ -305,6 +325,7 @@ impl Playback {
     /// the error.
     fn rebuild(&mut self) {
         self.error = None;
+        self.edited = false;
         self.run = None;
         match self.program.boot(&self.roster[self.challenge], self.seed) {
             Ok(run) => self.run = Some(run),
@@ -431,6 +452,21 @@ mod tests {
         assert!(playback.is_running(), "a restart auto-starts the attempt");
         assert_eq!(playback.stats().elapsed(), 0.0, "the world is fresh");
         assert!(playback.error().is_none());
+    }
+
+    #[test]
+    fn an_edit_marks_the_attempt_until_a_restart() {
+        let mut playback = Playback::new(shuttle());
+        assert!(!playback.edited());
+        playback.edit();
+        assert!(playback.edited());
+        playback.tick();
+        assert!(playback.edited(), "the mark lasts the attempt");
+        playback.restart();
+        assert!(!playback.edited(), "a restart is reproducible again");
+        playback.edit();
+        playback.select_challenge(4);
+        assert!(!playback.edited());
     }
 
     #[test]

@@ -1,19 +1,21 @@
-//! Persistence of the player's program and timescale, iced-free. The
-//! public surface is [`load`] and [`save`]; each platform arm supplies
-//! its own implementation behind the `platform` module seam.
+//! Persistence of the player's program, timescale and challenge,
+//! iced-free. The public surface is [`load`] and [`save`]; each
+//! platform arm supplies its own implementation behind the `platform`
+//! module seam.
 //!
 //! Natively the program is the marked file itself, `program/src/main.rs`:
 //! saving writes the file `rawr run` watches and `cargo build` compiles,
-//! and the timescale goes to a file under the platform config dir
-//! (`~/.config/elevato` or the OS equivalent). The wasm arm stores both
-//! in localStorage, mirroring the original game's persistence.
+//! and the timescale and challenge go to files under the platform config
+//! dir (`~/.config/elevato` or the OS equivalent). The wasm arm stores
+//! them in localStorage, mirroring the original game's persistence.
 //!
 //! Saving happens on explicit Save and on Apply - a documented
-//! simplification of the original's debounced autosave.
+//! simplification of the original's debounced autosave. A game rawr
+//! restarts for an edit resumes on the saved challenge.
 
 /// A persisted snapshot: the program's text (which need not compile -
 /// Save stores whatever the player wrote) and, when readable, the
-/// timescale.
+/// timescale and challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Saved {
     /// The program's text as last saved.
@@ -21,6 +23,9 @@ pub struct Saved {
     /// The timescale at save time; `None` when missing or corrupt so
     /// the caller keeps its default.
     pub timescale: Option<usize>,
+    /// The roster index of the challenge at save time; `None` when
+    /// missing or corrupt.
+    pub challenge: Option<usize>,
 }
 
 /// Loads the last-saved snapshot, if one exists and is readable.
@@ -28,10 +33,10 @@ pub fn load() -> Option<Saved> {
     platform::load()
 }
 
-/// Persists `code` and `timescale`. Best-effort: callers treat a
-/// failure as "nothing saved this time", never as fatal.
-pub fn save(code: &str, timescale: usize) -> std::io::Result<()> {
-    platform::save(code, timescale)
+/// Persists `code`, `timescale` and `challenge`. A failure means
+/// nothing was saved this time, never anything fatal.
+pub fn save(code: &str, timescale: usize, challenge: usize) -> std::io::Result<()> {
+    platform::save(code, timescale, challenge)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,13 +53,20 @@ mod platform {
     /// The marked file the game runs: the player's program.
     const PROGRAM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/program/src/main.rs");
     const TIMESCALE_FILE: &str = "timescale";
+    const CHALLENGE_FILE: &str = "challenge";
 
     pub fn load() -> Option<Saved> {
         load_from(Path::new(PROGRAM), directory().as_deref())
     }
 
-    pub fn save(code: &str, timescale: usize) -> io::Result<()> {
-        save_to(Path::new(PROGRAM), directory().as_deref(), code, timescale)
+    pub fn save(code: &str, timescale: usize, challenge: usize) -> io::Result<()> {
+        save_to(
+            Path::new(PROGRAM),
+            directory().as_deref(),
+            code,
+            timescale,
+            challenge,
+        )
     }
 
     /// `~/.config/elevato` (or the OS equivalent).
@@ -64,10 +76,16 @@ mod platform {
 
     fn load_from(program: &Path, directory: Option<&Path>) -> Option<Saved> {
         let code = fs::read_to_string(program).ok()?;
-        let timescale = directory
-            .and_then(|directory| fs::read_to_string(directory.join(TIMESCALE_FILE)).ok())
-            .and_then(|contents| contents.trim().parse().ok());
-        Some(Saved { code, timescale })
+        let read = |name: &str| {
+            directory
+                .and_then(|directory| fs::read_to_string(directory.join(name)).ok())
+                .and_then(|contents| contents.trim().parse().ok())
+        };
+        Some(Saved {
+            code,
+            timescale: read(TIMESCALE_FILE),
+            challenge: read(CHALLENGE_FILE),
+        })
     }
 
     fn save_to(
@@ -75,6 +93,7 @@ mod platform {
         directory: Option<&Path>,
         code: &str,
         timescale: usize,
+        challenge: usize,
     ) -> io::Result<()> {
         fs::write(program, code)?;
         // No resolvable config dir means nowhere to keep the timescale;
@@ -83,7 +102,8 @@ mod platform {
             return Ok(());
         };
         fs::create_dir_all(directory)?;
-        fs::write(directory.join(TIMESCALE_FILE), timescale.to_string())
+        fs::write(directory.join(TIMESCALE_FILE), timescale.to_string())?;
+        fs::write(directory.join(CHALLENGE_FILE), challenge.to_string())
     }
 
     #[cfg(test)]
@@ -108,11 +128,13 @@ mod platform {
                 Some(&directory),
                 "// rawr\npub struct Program;\n",
                 8,
+                4,
             )
             .unwrap();
             let saved = load_from(&program, Some(&directory)).unwrap();
             assert_eq!(saved.code, "// rawr\npub struct Program;\n");
             assert_eq!(saved.timescale, Some(8));
+            assert_eq!(saved.challenge, Some(4));
             let _ = fs::remove_dir_all(&directory);
         }
 
@@ -127,7 +149,7 @@ mod platform {
         fn a_corrupt_timescale_degrades_to_none_without_losing_the_code() {
             let directory = temp_directory("corrupt");
             let program = directory.join("program.rs");
-            save_to(&program, Some(&directory), "let x = 1;", 5).unwrap();
+            save_to(&program, Some(&directory), "let x = 1;", 5, 0).unwrap();
             fs::write(directory.join(TIMESCALE_FILE), "banana").unwrap();
             let saved = load_from(&program, Some(&directory)).unwrap();
             assert_eq!(saved.code, "let x = 1;");
@@ -152,19 +174,26 @@ mod platform {
     // `v1` Rhai, neither of which compiles now; both are left unread.
     const CODE_KEY: &str = "elevato_program_v3";
     const TIMESCALE_KEY: &str = "elevato_timescale";
+    const CHALLENGE_KEY: &str = "elevato_challenge";
 
     pub fn load() -> Option<Saved> {
         let storage = storage()?;
         let code = storage.get_item(CODE_KEY).ok()??;
-        let timescale = storage
-            .get_item(TIMESCALE_KEY)
-            .ok()
-            .flatten()
-            .and_then(|contents| contents.trim().parse().ok());
-        Some(Saved { code, timescale })
+        let read = |key| {
+            storage
+                .get_item(key)
+                .ok()
+                .flatten()
+                .and_then(|contents| contents.trim().parse().ok())
+        };
+        Some(Saved {
+            code,
+            timescale: read(TIMESCALE_KEY),
+            challenge: read(CHALLENGE_KEY),
+        })
     }
 
-    pub fn save(code: &str, timescale: usize) -> io::Result<()> {
+    pub fn save(code: &str, timescale: usize, challenge: usize) -> io::Result<()> {
         // No localStorage (disabled, sandboxed) means nowhere to save;
         // a best-effort miss, like a missing config dir natively.
         let Some(storage) = storage() else {
@@ -177,7 +206,8 @@ mod platform {
                 .map_err(|_| io::Error::other(format!("localStorage rejected `{key}`")))
         };
         write(CODE_KEY, code)?;
-        write(TIMESCALE_KEY, &timescale.to_string())
+        write(TIMESCALE_KEY, &timescale.to_string())?;
+        write(CHALLENGE_KEY, &challenge.to_string())
     }
 
     fn storage() -> Option<web_sys::Storage> {

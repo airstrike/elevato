@@ -283,7 +283,18 @@ pub mod container {
         }
     }
 
-    /// The panic strip under the editor.
+    /// The status strip under the editor: what became of an applied
+    /// edit.
+    pub fn status_panel(theme: &Theme) -> Style {
+        let palette = palette(theme);
+        Style {
+            background: Some(palette.panel.into()),
+            border: border::rounded(4.0).color(palette.floor_line).width(1),
+            ..Style::default()
+        }
+    }
+
+    /// The panic strip under the editor, and a refused edit's.
     pub fn error_panel(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {
