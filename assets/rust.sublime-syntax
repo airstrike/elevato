@@ -1,0 +1,80 @@
+%YAML 1.2
+---
+# A compact Rust grammar for elevato's editor: keywords, comments,
+# strings (raw and byte strings included), char literals, lifetimes,
+# numbers with type suffixes, booleans, CamelCase type names, and
+# operators. Good-enough tokenization for a game program pane, not a
+# full port of the language. Loaded by src/highlight.rs with
+# lines_include_newline set to false - the text editor hands lines
+# over bare.
+name: Rust
+file_extensions:
+  - rs
+scope: source.rust
+
+variables:
+  suffix: '(?:u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64)'
+
+contexts:
+  main:
+    - match: '//.*'
+      scope: comment.line.double-slash.rust
+    - match: '/\*'
+      scope: comment.block.rust
+      push: block_comment
+    - match: '\b(?:b|c)?r(#*)"'
+      scope: string.quoted.raw.rust
+      push: raw_string
+    - match: '\b(?:b|c)?"'
+      scope: string.quoted.double.rust
+      push: double_string
+    - match: '"'
+      scope: string.quoted.double.rust
+      push: double_string
+    # A char literal must win over a lifetime: 'a' is a char, 'a is a
+    # lifetime.
+    - match: '\bb''(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]{1,6}\}|.)|[^''\\])'''
+      scope: string.quoted.single.rust
+    - match: '''(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]{1,6}\}|.)|[^''\\])'''
+      scope: string.quoted.single.rust
+    - match: '''[A-Za-z_][A-Za-z0-9_]*\b'
+      scope: storage.modifier.lifetime.rust
+    - match: '\b0x[0-9a-fA-F_]+{{suffix}}?\b'
+      scope: constant.numeric.hex.rust
+    - match: '\b0o[0-7_]+{{suffix}}?\b'
+      scope: constant.numeric.octal.rust
+    - match: '\b0b[01_]+{{suffix}}?\b'
+      scope: constant.numeric.binary.rust
+    - match: '\b[0-9][0-9_]*(?:\.[0-9][0-9_]*)?(?:[eE][+-]?[0-9_]+)?{{suffix}}?\b'
+      scope: constant.numeric.rust
+    - match: '\b(?:true|false)\b'
+      scope: constant.language.boolean.rust
+    - match: '\b(?:fn|let|mut|const|static|struct|enum|union|impl|trait|type|pub|use|mod|crate|self|Self|super|where|as|dyn|ref|move|unsafe|extern|async|await)\b'
+      scope: keyword.declaration.rust
+    - match: '\b(?:if|else|match|for|in|while|loop|break|continue|return)\b'
+      scope: keyword.control.rust
+    # CamelCase names read as types and variants.
+    - match: '\b[A-Z][A-Za-z0-9_]*\b'
+      scope: constant.language.type.rust
+    - match: '[+\-*/%=!<>&^~?.,;:|@#]+'
+      scope: keyword.operator.rust
+
+  block_comment:
+    - meta_scope: comment.block.rust
+    - match: '/\*'
+      push: block_comment
+    - match: '\*/'
+      pop: true
+
+  double_string:
+    - meta_scope: string.quoted.double.rust
+    - match: '\\.'
+      scope: constant.character.escape.rust
+    - match: '"'
+      pop: true
+
+  raw_string:
+    - meta_scope: string.quoted.raw.rust
+    # Closes on a quote followed by as many hashes as opened it.
+    - match: '"\1'
+      pop: true

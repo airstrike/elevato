@@ -1,6 +1,6 @@
-//! Rhai syntax highlighting for the editor - rung (a) of the plan's
+//! Rust syntax highlighting for the editor - rung (a) of the plan's
 //! ladder: iced's [`highlighter::Highlighter`] trait implemented over
-//! syntect's parser, loading the embedded `assets/rhai.sublime-syntax`
+//! syntect's parser, loading the embedded `assets/rust.sublime-syntax`
 //! grammar. Instead of syntect's theme machinery, each parsed scope is
 //! classified into a [`Kind`] and colored from [`crate::theme`]'s
 //! palette at format time, so tokens follow the app's light/dark theme
@@ -22,9 +22,9 @@ use syntect::parsing::{
 
 use crate::theme;
 
-/// The embedded Rhai grammar, compiled into the binary so the wasm
+/// The embedded Rust grammar, compiled into the binary so the wasm
 /// build needs no asset fetching.
-const GRAMMAR: &str = include_str!("../assets/rhai.sublime-syntax");
+const GRAMMAR: &str = include_str!("../assets/rust.sublime-syntax");
 
 /// Lines per incremental parse snapshot (same rhythm as
 /// `iced_highlighter`): editing line N re-parses from the snapshot at
@@ -39,7 +39,7 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     // `false`: the editor hands lines over without trailing newlines.
     // A malformed grammar degrades to plain text rather than panicking;
     // the tests below pin that it actually loads.
-    if let Ok(definition) = SyntaxDefinition::load_from_str(GRAMMAR, false, Some("Rhai")) {
+    if let Ok(definition) = SyntaxDefinition::load_from_str(GRAMMAR, false, Some("Rust")) {
         builder.add(definition);
     }
     builder.build()
@@ -98,7 +98,7 @@ impl Kind {
     }
 }
 
-/// The Rhai highlighter driven by the text editor via
+/// The Rust highlighter driven by the text editor via
 /// `.highlight_with::<highlight::Highlighter>(...)`.
 #[derive(Debug)]
 pub struct Highlighter {
@@ -163,11 +163,11 @@ impl highlighter::Highlighter for Highlighter {
     }
 }
 
-/// The embedded Rhai syntax, degrading to plain text if the grammar
+/// The embedded Rust syntax, degrading to plain text if the grammar
 /// ever failed to load.
 fn syntax() -> &'static SyntaxReference {
     SYNTAXES
-        .find_syntax_by_name("Rhai")
+        .find_syntax_by_name("Rust")
         .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text())
 }
 
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn the_embedded_grammar_loads() {
-        assert!(SYNTAXES.find_syntax_by_name("Rhai").is_some());
+        assert!(SYNTAXES.find_syntax_by_name("Rust").is_some());
     }
 
     #[test]
@@ -273,7 +273,8 @@ mod tests {
 
         let all: Vec<(String, Kind)> = classified.into_iter().flatten().collect();
         assert!(has(&all, "fn", Kind::Keyword));
-        assert!(has(&all, "switch", Kind::Keyword));
+        assert!(has(&all, "match", Kind::Keyword));
+        assert!(has(&all, "struct", Kind::Keyword));
         // CamelCase reads as a type; the grammar files it under the
         // constant scope.
         assert!(has(&all, "Message", Kind::Constant));
@@ -284,7 +285,7 @@ mod tests {
 
     #[test]
     fn a_line_comment_swallows_the_rest_of_the_line() {
-        let classified = tokens(&["e.go_to_floor(2); // let \"x\" = 5"]);
+        let classified = tokens(&["go_to_floor(e, 2); // let \"x\" = 5"]);
         let line = &classified[0];
         assert!(has(line, "2", Kind::Number));
         // Everything after `//` is one comment token - keywords,
@@ -316,5 +317,28 @@ mod tests {
         let line = &classified[0];
         assert!(has(line, "up", Kind::String));
         assert!(has(line, r"\n", Kind::String));
+    }
+
+    #[test]
+    fn raw_strings_run_to_their_matching_hashes() {
+        let classified = tokens(&[r###"let s = r#"say "hi""#; let n = 3;"###]);
+        let line = &classified[0];
+        assert!(has(line, "say", Kind::String));
+        // The inner quote does not close the raw string...
+        assert!(has(line, "hi", Kind::String));
+        // ...and the closing `"#` does: what follows is code again.
+        assert!(has(line, "3", Kind::Number));
+    }
+
+    #[test]
+    fn suffixed_numbers_are_numbers_and_lifetimes_are_not_chars() {
+        let classified = tokens(&["fn f<'a>(x: &'a str) -> char { let n = 2usize; 'z' }"]);
+        let line = &classified[0];
+        assert!(has(line, "2usize", Kind::Number));
+        assert!(has(line, "'z'", Kind::String));
+        assert!(
+            !line.iter().any(|(token, kind)| token.contains("'a") && *kind == Kind::String),
+            "a lifetime is not a char literal: {line:?}"
+        );
     }
 }
