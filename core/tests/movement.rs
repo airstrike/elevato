@@ -30,13 +30,13 @@ fn substep(world: &mut World, t: f64) -> Vec<(f64, Event)> {
     drained
 }
 
+/// One per-substep `(t, y, velocity_y)` reading.
+type Sample = (f64, f64, f64);
+
 /// Drives the world until an arrival (or `max_substeps` runs out),
 /// returning `(events, samples)` where samples are per-substep
-/// `(t, y, velocity_y)` readings taken after each step.
-fn drive_until_arrival(
-    world: &mut World,
-    max_substeps: usize,
-) -> (Vec<(f64, Event)>, Vec<(f64, f64, f64)>) {
+/// readings taken after each step.
+fn drive_until_arrival(world: &mut World, max_substeps: usize) -> (Vec<(f64, Event)>, Vec<Sample>) {
     let mut events = Vec::new();
     let mut samples = Vec::new();
     for n in 1..=max_substeps {
