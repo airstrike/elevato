@@ -18,7 +18,7 @@ use crate::theme;
 /// One page of the reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
-    /// Program shape: `new`, `update`, the commands, gotchas,
+    /// Program shape: `new`, `update`, the messages, the commands,
     /// determinism.
     Lib,
     /// The `Elevator` snapshot struct and its events.
@@ -353,7 +353,11 @@ mod tests {
         ("UpButtonPressed", Page::Lib),
         ("DownButtonPressed", Page::Lib),
         ("Command", Page::Lib),
+        ("Direction", Page::Lib),
+        ("Up", Page::Lib),
+        ("Down", Page::Lib),
         ("go_to_floor", Page::Lib),
+        ("go_to_floor_first", Page::Lib),
         ("stop", Page::Lib),
         ("check_destination_queue", Page::Lib),
         ("set_destination_queue", Page::Lib),
