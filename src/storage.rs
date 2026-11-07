@@ -33,7 +33,7 @@ pub fn save(code: &str, timescale: usize) -> std::io::Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
-    //! The native arm: `code.rhai` and `timescale` files under the
+    //! The native arm: `code.rs` and `timescale` files under the
     //! platform config dir.
 
     use std::fs;
@@ -42,7 +42,7 @@ mod platform {
 
     use super::Saved;
 
-    const CODE_FILE: &str = "code.rhai";
+    const CODE_FILE: &str = "code.rs";
     const TIMESCALE_FILE: &str = "timescale";
 
     pub fn load() -> Option<Saved> {
@@ -92,9 +92,9 @@ mod platform {
         #[test]
         fn a_saved_snapshot_round_trips() {
             let directory = temp_directory("round-trip");
-            save_to(&directory, "fn init(elevators, floors) {}\n", 8).unwrap();
+            save_to(&directory, "fn new() -> Model {\n    Model {}\n}\n", 8).unwrap();
             let saved = load_from(&directory).unwrap();
-            assert_eq!(saved.code, "fn init(elevators, floors) {}\n");
+            assert_eq!(saved.code, "fn new() -> Model {\n    Model {}\n}\n");
             assert_eq!(saved.timescale, Some(8));
             let _ = fs::remove_dir_all(&directory);
         }
@@ -120,7 +120,7 @@ mod platform {
 
 #[cfg(target_arch = "wasm32")]
 mod platform {
-    //! The wasm arm: the `elevato_code_v1` and `elevato_timescale`
+    //! The wasm arm: the `elevato_code_v2` and `elevato_timescale`
     //! localStorage entries, mirroring the native arm's two files.
     //! Untestable natively, so it stays a thin transliteration of the
     //! same (code, timescale) contract the native tests pin down.
@@ -129,7 +129,9 @@ mod platform {
 
     use super::Saved;
 
-    const CODE_KEY: &str = "elevato_code_v1";
+    // `v2`: Rust programs. The `v1` key held Rhai, which no longer
+    // compiles; it is left unread, so players start from the starter.
+    const CODE_KEY: &str = "elevato_code_v2";
     const TIMESCALE_KEY: &str = "elevato_timescale";
 
     pub fn load() -> Option<Saved> {

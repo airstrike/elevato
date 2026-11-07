@@ -332,7 +332,11 @@ mod tests {
         assert!(playback.stats().elapsed() > 0.0);
 
         playback
-            .apply("fn new() { #{} }\nfn update(message, elevators, floors) {}")
+            .apply(
+                "struct Model {}\nfn new() -> Model { Model {} }\n\
+                 fn update(model: &mut Model, message: Message, elevators: &[Elevator], \
+                 floors: &[Floor]) -> Vec<Command> { vec![] }",
+            )
             .unwrap();
         assert_eq!(playback.challenge_index(), 2);
         assert_eq!(playback.seed(), 3);

@@ -1,4 +1,4 @@
-//! The Rhai editor pane: a self-contained TEA cell owning the text
+//! The Rust editor pane: a self-contained TEA cell owning the text
 //! buffer, the dirty flag, and the Reset backup. The parent owns
 //! everything the buttons *do* - compiling, running, persisting - and
 //! is told about it via [`Instruction`]; the current script error
@@ -255,8 +255,9 @@ impl State {
     }
 }
 
-/// The error strip under the editor. `script::Error`'s display carries
-/// the rhai position (line and column) when one exists.
+/// The error strip under the editor. `script::Error`'s display is
+/// rawr's rustc-style report - code, message, and the offending source
+/// line with a caret - or a runtime error with its line and column.
 fn error_panel<'a>(error: &script::Error) -> Element<'a, Message> {
     container(text(error.to_string()).size(12).style(theme::text::failure))
         .width(Fill)
@@ -277,7 +278,7 @@ mod tests {
 
     #[test]
     fn reset_backs_up_the_current_text_and_restores_the_starter() {
-        let mut state = State::new("fn init(elevators, floors) {}\n");
+        let mut state = State::new("fn new() -> Model {}\n");
         let _ = state.update(Message::Reset);
         assert_eq!(state.text().trim_end(), playback::STARTER.trim_end());
         assert!(state.dirty);
@@ -286,34 +287,34 @@ mod tests {
 
     #[test]
     fn undo_reset_restores_the_backup_exactly_once() {
-        let mut state = State::new("fn init(elevators, floors) {}\n");
+        let mut state = State::new("fn new() -> Model {}\n");
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::UndoReset);
-        assert_eq!(state.text().trim_end(), "fn init(elevators, floors) {}");
+        assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
         assert!(state.backup.is_none());
         // A second undo with no backup changes nothing.
         let _ = state.update(Message::UndoReset);
-        assert_eq!(state.text().trim_end(), "fn init(elevators, floors) {}");
+        assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
     }
 
     #[test]
     fn apply_and_save_emit_the_current_source_as_instructions() {
-        let mut state = State::new("fn init(e, f) {}");
+        let mut state = State::new("fn new() -> Model {}");
         let apply = state.update(Message::Apply);
         assert!(matches!(
             apply.instruction,
-            Some(Instruction::Apply(source)) if source.contains("fn init")
+            Some(Instruction::Apply(source)) if source.contains("fn new")
         ));
         let save = state.update(Message::Save);
         assert!(matches!(
             save.instruction,
-            Some(Instruction::Save(source)) if source.contains("fn init")
+            Some(Instruction::Save(source)) if source.contains("fn new")
         ));
     }
 
     #[test]
     fn an_edit_marks_the_editor_dirty_until_the_parent_confirms_a_save() {
-        let mut state = State::new("fn init(e, f) {}");
+        let mut state = State::new("fn new() -> Model {}");
         assert!(!state.dirty);
         insert(&mut state, 'x');
         assert!(state.dirty);
@@ -325,17 +326,17 @@ mod tests {
 
     #[test]
     fn undo_restores_the_text_before_a_typing_burst() {
-        let mut state = State::new("fn init(e, f) {}");
+        let mut state = State::new("fn new() -> Model {}");
         insert(&mut state, 'a');
         insert(&mut state, 'b');
         insert(&mut state, 'c');
         let _ = state.update(Message::Undo);
-        assert_eq!(state.text().trim_end(), "fn init(e, f) {}");
+        assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
     }
 
     #[test]
     fn redo_reapplies_an_undone_burst_and_dies_on_fresh_edits() {
-        let mut state = State::new("fn init(e, f) {}");
+        let mut state = State::new("fn new() -> Model {}");
         insert(&mut state, 'x');
         let _ = state.update(Message::Undo);
         let _ = state.update(Message::Redo);
@@ -351,9 +352,9 @@ mod tests {
 
     #[test]
     fn a_reset_is_undoable_like_any_other_edit() {
-        let mut state = State::new("fn init(e, f) {}");
+        let mut state = State::new("fn new() -> Model {}");
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::Undo);
-        assert_eq!(state.text().trim_end(), "fn init(e, f) {}");
+        assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
     }
 }

@@ -302,7 +302,7 @@ pub mod text_editor {
 
     use super::palette;
 
-    /// The Rhai code editor: chromeless - its card (the workspace pane
+    /// The Rust code editor: chromeless - its card (the workspace pane
     /// it sits in) provides the surface and border, so the editor and
     /// the world canvas dress identically.
     pub fn code(theme: &Theme, status: Status) -> Style {

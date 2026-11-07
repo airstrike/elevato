@@ -164,7 +164,7 @@ pub enum Message {
     Editor(editor::Message),
 }
 
-/// Boots onto the splash; the game (and the rhai engine underneath it)
+/// Boots onto the splash; the game (and the rawr engine underneath it)
 /// is only built once Continue hands over a measured viewport.
 pub fn boot() -> (App, Task<Message>) {
     (
@@ -288,7 +288,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
 fn splash() -> Element<'static, Message> {
     let content = column![
         text("elevato.rs").size(56).style(theme::text::primary),
-        text("Program a bank of elevators in Rhai. Watch the simulation. Clear the challenges.")
+        text("Program a bank of elevators in Rust. Watch the simulation. Clear the challenges.")
             .size(16)
             .style(theme::text::secondary),
         button(
