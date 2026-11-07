@@ -39,6 +39,7 @@ const DISPATCH_ROUNDS: usize = 128;
 /// world, boots the model via `fn new`, and fires the initial idle
 /// round, so a `Runtime` that exists is already under way -
 /// [`Runtime::frame`] does the rest.
+#[derive(Debug)]
 pub struct Runtime {
     engine: Engine,
     ast: AST,
@@ -53,19 +54,10 @@ pub struct Runtime {
 }
 
 /// The world as `update` sees it, built by the prelude's bridges.
+#[derive(Debug)]
 struct Snapshots {
     elevators: Dynamic,
     floors: Dynamic,
-}
-
-impl std::fmt::Debug for Runtime {
-    // Hand-written because `rawr::Engine` has no `Debug`.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Runtime")
-            .field("world", &self.world)
-            .field("model", &self.model)
-            .finish_non_exhaustive()
-    }
 }
 
 impl Runtime {
