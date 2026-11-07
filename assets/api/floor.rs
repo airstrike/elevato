@@ -1,18 +1,27 @@
-/// One floor of the building, as `update` sees it: a read-only
-/// snapshot in `floors`, rebuilt before every call.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Floor {
-    /// The floor's number; ground is 0.
-    pub floor_num: usize,
+//! A floor of the building, and what riders on it do.
 
-    /// Alias of `floor_num`.
-    pub level: usize,
+/// A floor, by level: the lobby is 0. Your program gets the
+/// building's floors from `new`, and makes floors from integers -
+/// every function that takes one takes `impl Into<Floor>`, so
+/// `elevator.go_to_floor(3)` works. A negative level is the lobby.
+/// `Copy`, comparable, ordered by level, hashable.
+pub struct Floor;
 
-    /// Whether the up call button is lit.
-    pub up_pressed: bool,
+impl From<usize> for Floor;
+impl From<i64> for Floor;
+impl From<i32> for Floor;
 
-    /// Whether the down call button is lit.
-    pub down_pressed: bool,
+impl Floor {
+    /// The level: 0 for the lobby, counting up.
+    pub fn level(self) -> usize;
 }
 
-// Call-button presses arrive as `Message` variants - see lib.rs.
+/// What riders on a floor do. Arrives through `riders()`.
+pub enum Message {
+    /// A rider going up pressed the up button, and it was not lit. A
+    /// rider a full car left behind presses it again.
+    UpButtonPressed,
+
+    /// A rider going down pressed the down button, and it was not lit.
+    DownButtonPressed,
+}

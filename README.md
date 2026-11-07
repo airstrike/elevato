@@ -3,15 +3,16 @@
 A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) -
 Magnus Wolffelt's elevator programming game - in Rust: program a bank of
 elevators in Rust, watch the simulation, and clear the challenges.
-Your program runs on [rawr](https://github.com/airstrike/rawr), a Rust
-interpreter the game embeds, so it is checked as rustc would check it
-and runs without a compiler. Same physics constants, same spawn model, same boarding
-rules, same challenge roster as the original.
+Your program is an iced program of its own, which
+[rawr](https://github.com/airstrike/rawr) interprets and reloads while
+the game runs, and which `cargo` compiles natively. Same physics
+constants, same spawn model, same boarding rules, same challenge
+roster as the original.
 
 Built with [iced](https://iced.rs) as a gift to the Rust world: one
 codebase runs natively and in the browser via WebAssembly, and the repo
-doubles as a working example of iced + canvas + an embedded rawr
-interpreter on wasm.
+doubles as a working example of iced + canvas + a hot-reloaded iced
+program hosted inside another.
 
 ## Screenshots
 
@@ -23,13 +24,22 @@ interpreter on wasm.
 
 ## Playing
 
-Pick a challenge, press **Start**, and watch the default program
-struggle. Then make it yours: edit the Rust program on the right and
-press **Apply** - the world rebuilds from scratch and your new program
-takes over. **Save** persists the code and timescale (config dir
-natively, localStorage in the browser); **Reset** restores the starter
-program (with **Undo reset** as the escape hatch). The −/+ buttons step
-the simulation speed along the original's golden-ratio ladder.
+Run the game under rawr, so your edits reach it as you save:
+
+```sh
+rawr run -p program
+```
+
+Pick a challenge, press **Start**, and watch the starter program
+struggle. Then make it yours: edit the program - in the editor on the
+right, or in [`program/src/main.rs`](program/src/main.rs) in your own
+editor - and save. **Save** writes the file; rawr reloads it, and the
+running program picks the new code up at its next message, keeping
+its state when the new code is compatible with it. **Apply** saves and
+starts a fresh attempt. **Reset** restores the starter program (with
+**Undo reset** as the escape hatch). The −/+ buttons step the
+simulation speed along the original's golden-ratio ladder; the
+timescale is saved under the platform config dir.
 
 Every run is deterministic: the seed shown in the stats bar plus your
 program and timescale reproduce a run exactly. Restarting advances the
@@ -37,10 +47,10 @@ seed, so consecutive attempts still vary like the original's.
 
 ## Building
 
-Natively:
+Natively, with your program compiled in:
 
 ```sh
-cargo run
+cargo run -p program
 ```
 
 In the browser (requires [trunk](https://trunkrs.dev) and the
@@ -51,48 +61,81 @@ trunk serve            # develop at http://localhost:8080
 trunk build --release  # deployable bundle in dist/
 ```
 
-The script crate's tests run natively and, on the same rawr path the
-browser takes, as wasm in Node.js:
+The web build runs the program compiled into the page. Its editor
+keeps a draft in localStorage, but edits don't run in the browser
+until rawr can interpret marked code against dependencies compiled
+into the page's wasm
+([rawr#435](https://github.com/airstrike/rawr/issues/435)).
+
+The solutions and the playback's determinism gate are the game's
+tests:
 
 ```sh
-cargo test -p script
-cargo test -p script --target wasm32-unknown-unknown
+cargo test -p elevato
+cargo test -p elevato-core
 ```
 
-The wasm run needs Node.js and the `wasm-bindgen-test-runner` that
-matches the wasm-bindgen version in `Cargo.lock`
-(`cargo install wasm-bindgen-cli --version 0.2.108`);
-`.cargo/config.toml` names it as the wasm32 runner.
+## Programming
 
-## Scripting
-
-Programs are Rust in the Elm architecture: `fn new()` returns your
-state, and `fn update` folds every world event into it, answering with
-commands:
+Your program is [`program/src/main.rs`](program/src/main.rs), an iced
+program that uses the `elevato` crate:
 
 ```rust
-struct Model {}
+// rawr
+use elevato::{Elevator, Floor, Rider, elevator, floor};
+use iced::{Function, Subscription, Task};
 
-fn new() -> Model {
-    Model {}
+pub fn main() -> iced::Result {
+    elevato::run(Program::new, Program::update, Program::subscription)
 }
 
-fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
-    match message {
-        Message::Idle(elevator) => vec![go_to_floor(elevator, 0), go_to_floor(elevator, 1)],
-        _ => vec![],
+pub struct Program {
+    floors: Vec<Floor>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Elevator(Elevator, elevator::Message),
+    Floor(Floor, floor::Message),
+}
+
+impl Program {
+    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
+        let start = Task::batch(elevators.into_iter().map(|elevator| {
+            elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
+        }));
+        (Self { floors }, start)
+    }
+
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Elevator(elevator, elevator::Message::StoppedAtFloor { floor, .. }) => {
+                let next = if floor == self.floors[0] { self.floors[1] } else { self.floors[0] };
+                elevator.go_to_floor(next).map(Message::Elevator.with(elevator))
+            }
+            Message::Elevator(..) | Message::Floor(..) => Task::none(),
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        elevato::riders().map(|rider| match rider {
+            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
+            Rider::Floor(floor, message) => Message::Floor(floor, message),
+        })
     }
 }
 ```
 
-`go_to_floor`, `stop`, the indicator lamps, `destination_queue`,
-`current_floor`, `load_factor`, floor call buttons, and the full event
-set (`Idle`, `FloorButtonPressed`, `PassingFloor`, `StoppedAtFloor`,
-`UpButtonPressed`, `DownButtonPressed`, plus `Tick` for time) are all
-there - see **[API.md](API.md)** for the complete mapping from the
-original's JS, what rawr's Rust covers, and the documented deviations.
-The in-game API tab has the same reference, a cmd+click away from any
-name in your program.
+`new` gets the challenge's elevators and floors. A car moves when the
+program returns the task `elevator.go_to_floor(n)` gives it; that task
+streams `PassingFloor` as the car travels and ends with
+`StoppedAtFloor`, which says who got off and on. Riders call cars and
+press buttons inside them through `elevato::riders()`. There is no
+world to read: what the program knows, it learned from a message. See
+**[API.md](API.md)** for how each of the original's callbacks maps to
+a task or a rider message, and for the documented deviations. The
+in-game API tab has the same reference, a cmd+click away from any name
+in your program.
 
 ## Challenges
 
@@ -120,14 +163,17 @@ The original's 19, verbatim:
 
 ```
 elevato/
-├── src/       the iced app: canvas, editor, playback, theme
-├── core/      elevato-core - the pure simulation (no iced, no rawr)
-└── script/    the rawr bindings, the Rust game API, and the runtime
+├── src/       the game: the iced app hosting your program - canvas, editor, playback, theme
+├── program/   your program, the marked `src/main.rs` that runs the game
+├── api/       elevato-api - Elevator, Floor, riders(), and the Simulation that runs a program
+└── core/      elevato-core - the pure simulation (no iced, no rawr)
 ```
 
-`core` is exhaustively pinned by integration tests: ported community
-solutions pass - and fail - real challenges headlessly exactly as they
-do in the original, and a live run replays a headless run byte for byte.
+The game re-exports the API at its root, so programs name it
+`elevato`. `core` is exhaustively pinned by integration tests, and the
+ported community solutions in `tests/solutions/` pass - and fail - real
+challenges headlessly, compiled natively against the API, with each
+one's final stats pinned.
 
 ## Development note
 
@@ -142,12 +188,8 @@ that worktree to exist and stay on that branch until the dependency flip
 to git sources lands - the prepared patch block and the exact steps live
 in [PUBLISHING.md](PUBLISHING.md) and the root `Cargo.toml`.
 
-rawr needs no local checkout: it is a git dependency on
-[airstrike/rawr](https://github.com/airstrike/rawr), pinned by
-`Cargo.lock`, as rawr's embedding docs tell apps to depend on it. The
-web build turns on its `wasm-bindgen` feature (browser randomness for
-its hash maps, the same setup rawr's own playground uses), so `trunk`
-needs nothing extra.
+Nothing depends on rawr: `rawr run` is a tool, and the `// rawr` line
+is a comment to `cargo`.
 
 ## Credits
 
@@ -155,7 +197,6 @@ needs nothing extra.
   [Magnus Wolffelt](https://github.com/magwo/elevatorsaga) and
   contributors - the original game this is a loving rewrite of, down to
   its physics constants and challenge configs.
-- [iced](https://iced.rs), [rawr](https://github.com/airstrike/rawr)
-  (whose evaluator began as a fork of [Rhai](https://rhai.rs)), and
+- [iced](https://iced.rs), [rawr](https://github.com/airstrike/rawr), and
   [Fira Code](https://github.com/tonsky/FiraCode) (bundled under the SIL
   Open Font License - `assets/fonts/OFL.txt`).

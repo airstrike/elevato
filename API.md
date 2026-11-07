@@ -1,164 +1,162 @@
-# elevato scripting API
+# elevato's API
 
-elevato programs are written in Rust and run by
-[rawr](https://github.com/airstrike/rawr), a Rust interpreter the game
-embeds. The API mirrors the original Elevator Saga's JS surface,
-renamed to snake_case and reshaped into the Elm architecture: world
-events arrive as messages, world state arrives as read-only snapshots,
-and the program answers with commands. This document is the full
-mapping; deviations from the original are marked **[deviation]** and
-collected at the end.
+An elevato program is an iced program. It is Rust with real
+dependencies - `iced` and `elevato` - and it lives in
+[`program/src/main.rs`](program/src/main.rs), whose first line is
+`// rawr`. `cargo run -p program` compiles it natively; `rawr run -p
+program` interprets it and reloads it while the game runs.
 
-Everything below is in scope in every program, the way Rust's own
-prelude is: no `use` needed. The definitions themselves are Rust source
-the game appends to your program before rawr checks it
-([`script/prelude.rs`](script/prelude.rs)).
+The original Elevator Saga gave a program live handles and callbacks.
+elevato gives it what an iced program has: its own state, messages in,
+tasks out. This document maps each of the original's callbacks and
+methods to the message or task that replaces it.
 
 ## Program shape
 
 ```rust
-struct Model {
-    // whatever state your program keeps between messages
+// rawr
+use elevato::{Elevator, Floor, Rider, elevator, floor};
+use iced::{Function, Subscription, Task};
+
+pub fn main() -> iced::Result {
+    elevato::run(Program::new, Program::update, Program::subscription)
 }
 
-fn new() -> Model {
-    // called once, when the challenge starts
-    Model {}
+pub struct Program {
+    elevators: Vec<Elevator>,
+    floors: Vec<Floor>,
 }
 
-fn update(model: &mut Model, message: Message, elevators: &[Elevator], floors: &[Floor]) -> Vec<Command> {
-    // called for every message; the returned commands are applied in
-    // order, the moment `update` returns
-    match message {
-        Message::Idle(elevator) => vec![go_to_floor(elevator, 0), go_to_floor(elevator, 1)],
-        _ => vec![],
+#[derive(Debug, Clone)]
+pub enum Message {
+    Elevator(Elevator, elevator::Message),
+    Floor(Floor, floor::Message),
+}
+
+impl Program {
+    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
+        let start = Task::batch(elevators.iter().map(|&elevator| {
+            elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
+        }));
+        (Self { elevators, floors }, start)
+    }
+
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
+                elevator.go_to_floor(floor).map(Message::Elevator.with(elevator))
+            }
+            Message::Elevator(..) | Message::Floor(..) => Task::none(),
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        elevato::riders().map(|rider| match rider {
+            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
+            Rider::Floor(floor, message) => Message::Floor(floor, message),
+        })
     }
 }
 ```
 
-Both functions are **required**, and rawr checks the whole program
-before it runs, as rustc would. `new` takes no parameters; its return
-value is the model, of any type you define. `update` must have exactly
-the signature above, over the type `new` returns - a mismatch refuses
-to Apply, with the error under the editor. Name parameters you don't
-use with a leading underscore (`_floors`), as in any Rust program.
+`elevato::run` opens the game and hosts the program as its child, the
+way an iced app hosts a screen: it holds the program's state, calls
+its `update`, and runs its tasks and subscription. Every attempt - a
+restart, a new challenge, Apply - boots the program afresh with `new`
+on a fresh world.
 
-`model` is your state: mutate it through the `&mut` and the changes
-persist between messages. `elevators` and `floors` are snapshots of the
-world as it stands at that message; index them with the indices
-messages carry. A panic anywhere in your code - `panic!`, a failed
-`assert!`, an out-of-bounds index, a `None.unwrap()` - aborts the frame
-and pauses the game with the message and its line (the original's
-"There is a problem with your code").
+`new` receives the challenge's elevators and floors, and the program
+keeps what it needs. There is no world to read: nothing the program
+calls reads the simulation, and everything it knows arrives as a
+message. A panic anywhere in the program ends the attempt, and its
+message shows under the editor (the original's "There is a problem
+with your code").
 
-## Messages
+## Elevators and floors
 
-| Original (JS) | elevato (Rust) | Fires when |
+`Elevator` and `Floor` are the only types for cars and floors, and
+both are `Copy`, comparable and hashable.
+
+- **Elevators** come only from `new` and from messages, so a program
+  can never name a car the challenge doesn't have.
+- **Floors** come from `new`, from messages, and from integers:
+  `Floor` converts from `usize`, `i64` and `i32` (what an integer
+  literal is when nothing else types it), and every function that
+  takes a floor takes `impl Into<Floor>`. `elevator.go_to_floor(3)`
+  works. `floor.level()` reads the level back. A negative level is the
+  lobby, and a level past the top floor is the top floor once a car
+  is sent there, as the original clamped it.
+
+## Where each message comes from
+
+| Message | Cause | Channel |
 |---|---|---|
-| `update(dt, …)` | `Message::Tick(dt)` | Once per frame, before that frame's physics; `dt` is the frame's simulated seconds (`f64`). |
-| `elevator.on("idle")` | `Message::Idle(elevator)` | The destination queue is checked while empty and the elevator is not mid-dwell. Fired for every elevator at challenge start, and ~1 s after the last queued destination completes. |
-| `elevator.on("floor_button_pressed")` | `Message::FloorButtonPressed(elevator, floor)` | A passenger pressed an unlit destination button (~1 s after boarding). |
-| `elevator.on("passing_floor")` | `Message::PassingFloor(elevator, floor, direction)` | About to pass a floor it is not stopping at; `direction` is `Direction::Up` or `Direction::Down`. Still in time for `go_to_floor_first(elevator, floor)`. |
-| `elevator.on("stopped_at_floor")` | `Message::StoppedAtFloor(elevator, floor)` | Physically arrived and snapped to a floor - before exit/boarding, so indicator changes here affect who boards. |
-| `floor.on("up_button_pressed")` | `Message::UpButtonPressed(floor)` | The up call button went from unlit to lit. Re-fires when overflow passengers re-press after an arrival cleared it. |
-| `floor.on("down_button_pressed")` | `Message::DownButtonPressed(floor)` | Same, for down. |
+| `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders()`, as `Rider::Floor(floor, message)` |
+| `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders()`, as `Rider::Elevator(elevator, message)` |
+| `elevator::Message::PassingFloor(floor, direction)` | A car the program sent is about to pass a floor | Streamed by the task from `go_to_floor` |
+| `elevator::Message::StoppedAtFloor { .. }` | That car arriving | The same task's final message, after riders got off and on |
 
-Every payload is a `usize` index (or the `f64` dt, or a `Direction`).
-A `match` on `message` must cover every variant, as in Rust - end it
-with `_ => vec![]` to ignore the rest.
+Riders are the only source of messages besides the program's own
+tasks. A button already lit stays silent, as in the original.
 
-## Commands
+## The original's callbacks
 
-| Original (JS) | elevato (Rust) | Notes |
+| Original (JS) | elevato | Notes |
 |---|---|---|
-| `goToFloor(n)` | `go_to_floor(elevator, floor)` | Queues a destination, clamped to `[0, floor_count - 1]`. Duplicate-suppressed against the adjacent queue element only. |
-| `goToFloor(n, true)` | `go_to_floor_first(elevator, floor)` | Forces the destination to the front of the queue ("go there first"). |
-| `stop()` | `stop(elevator)` | Clears the queue and halts at the projected stop point - usually *between* floors. Advanced in-transit rescheduling only. |
-| `goingUpIndicator(v)` | `set_going_up_indicator(elevator, on)` | Both indicators start on. Affects boarding and call-button clearing. |
-| `goingDownIndicator(v)` | `set_going_down_indicator(elevator, on)` | |
-| `destinationQueue = […]` | `set_destination_queue(elevator, queue)` | Replaces the queue (`Vec<usize>`). Entries are clamped to the building **[deviation]**. Follow with `check_destination_queue`. |
-| `checkDestinationQueue()` | `check_destination_queue(elevator)` | Non-empty queue: start moving to its front. Empty queue (and not mid-dwell): fire `Message::Idle`. |
+| `init(elevators, floors)` | `Program::new(elevators, floors)` | Returns the state and the first tasks. The original's initial `idle` round is gone: the first moves are the tasks `new` returns. |
+| `update(dt, elevators, floors)` | - | No tick. Time isn't a message; the program reacts to riders and to its cars. |
+| `elevator.on("idle")` | - | The program owns its queues. A car is idle when the program has no trip under way for it; the last `StoppedAtFloor` says so. |
+| `elevator.on("floor_button_pressed", f)` | `elevator::Message::FloorButtonPressed(floor)` | From `riders()`. |
+| `elevator.on("passing_floor", f, dir)` | `elevator::Message::PassingFloor(floor, direction)` | Streamed by the trip's task, still in time for `go_to_floor_first` to stop there. |
+| `elevator.on("stopped_at_floor", f)` | `elevator::Message::StoppedAtFloor { floor, exited, boarded, load_factor, full }` | The trip task's last message. **[deviation]** It arrives after riders got off and on, so it says who did; lamps that steer boarding are set when the car is sent, not on arrival. |
+| `floor.on("up_button_pressed")` | `floor::Message::UpButtonPressed` | From `riders()`. |
+| `floor.on("down_button_pressed")` | `floor::Message::DownButtonPressed` | From `riders()`. |
 
-Each function returns a `Command`; `update` returns them as a
-`Vec<Command>`, applied in order before the next message is delivered,
-so a command cascade unfolds in exactly the order the original's
-synchronous callbacks did. An elevator index the challenge does not
-have is a runtime error naming the command; floors are clamped, never
-refused.
+## The original's methods
 
-## Elevator snapshot
+Every command is a `Task<elevator::Message>`; nothing happens until
+the program returns the task from `new` or `update`. The tasks a
+program returns run in the order it returns them, so a
+`Task::batch([elevator.set_going_up_indicator(true),
+elevator.go_to_floor(3)])` sets the lamp before the car leaves.
 
-`elevators[i]` is an `Elevator`:
-
-| Original (JS) | elevato (Rust) | Notes |
+| Original (JS) | elevato | Notes |
 |---|---|---|
-| `currentFloor()` | `current_floor: usize` | Cached rounded floor. Does **not** imply the elevator is stopped. |
-| `goingUpIndicator()` | `going_up_indicator: bool` | Change it with `set_going_up_indicator`. |
-| `goingDownIndicator()` | `going_down_indicator: bool` | |
-| `maxPassengerCount()` | `max_passenger_count: usize` | Capacity in passengers (slots). |
-| `loadFactor()` | `load_factor: f64` | `sum(weights) / (capacity × 100)`; 0 = empty, 1 ≈ full. |
-| `destinationDirection()` | `destination_direction: Option<Direction>` | `Some(Direction::Up)`, `Some(Direction::Down)`, or `None` when stopped. |
-| `destinationQueue` | `destination_queue: Vec<usize>` | A snapshot - see below. |
-| `getPressedFloors()` | `pressed_floors: Vec<usize>` | Lit in-elevator buttons, ascending. |
-| - | `is_full: bool` | **[new]** `true` when every slot is taken. Capacity is slot-count; `load_factor` is weight-based and cannot answer this. |
-| - | `move_count: usize` | **[new]** Floor boundaries this elevator has crossed (what challenges 6 and 7 score). |
-| - | `is_busy: bool` | **[new]** `true` during the 1 s door dwell - the elevator cannot be commanded to move. |
-| - | `is_moving: bool` | **[new]** `true` while under way toward a destination. |
-| - | `is_on_a_floor: bool` | **[new]** `true` when resting exactly on a floor (false after a mid-flight `stop`). |
-
-### The destination-queue idiom
-
-Snapshots are read-only, so the original's `destinationQueue.splice(…)`
-becomes clone → modify → command → apply:
-
-```rust
-let mut queue = elevators[e].destination_queue.clone();
-queue.insert(0, 3);
-vec![set_destination_queue(e, queue), check_destination_queue(e)]   // changes take effect now
-```
-
-## Floor snapshot
-
-`floors[i]` is a `Floor`:
-
-| Original (JS) | elevato (Rust) | Notes |
-|---|---|---|
-| `floorNum()` | `floor_num: usize` | |
-| `level` | `level: usize` | Alias of the same value, as in the original. |
-| `buttonStates.up == "activated"` | `up_pressed: bool` | `true` while the up call button is lit. |
-| `buttonStates.down == "activated"` | `down_pressed: bool` | `true` while the down call button is lit. |
+| `goToFloor(n)` | `elevator.go_to_floor(n)` | A trip queued after the car's others. Its task streams `PassingFloor` and ends with `StoppedAtFloor`. Asking for the floor the car already goes to last adds no stop: both trips end at that one arrival. |
+| `goToFloor(n, true)` | `elevator.go_to_floor_first(n)` | Ahead of the car's other trips; the ones it overtakes resume after it. |
+| `stop()` | `elevator.stop()` | Halts the car where it can, usually between floors, and aborts its trips: their tasks end with no more messages. |
+| `goingUpIndicator(v)` | `elevator.set_going_up_indicator(on)` | Both lamps start on. A car stopping with a lamp lit takes riders going that way and clears that call. |
+| `goingDownIndicator(v)` | `elevator.set_going_down_indicator(on)` | |
+| `destinationQueue`, `checkDestinationQueue()` | - | The program owns its queues: it sends a car its next trip when the last one ends, or overtakes with `go_to_floor_first`. |
+| `currentFloor()`, `destinationDirection()`, `getPressedFloors()` | - | No reads. The program learns where its cars are from `PassingFloor` and `StoppedAtFloor`, and which buttons are lit from `riders()`. |
+| `loadFactor()` | `StoppedAtFloor { load_factor, full, .. }` | As the car leaves the stop. `full` is the slot-count test the weight-based load factor can't answer. |
+| `maxPassengerCount()` | - | Not exposed; `full` says when a car can take no one. |
+| `floor.buttonStates`, `floorNum()` | `riders()`, `floor.level()` | The program keeps its own record of lit calls. |
 
 ## Rust as rawr runs it
 
-rawr supports a large part of Rust - structs, enums, traits, generics,
-closures, iterators, `Vec`, `HashMap` and most of the std a game program
-wants - and rejects the rest with an error that names the construct. Its
+The program is Rust, checked by rustc. Under `rawr run` it is also
+interpreted: rawr checks names, types, traits and `match` arms before
+anything runs, and a save that passes reaches the running game at its
+next message, keeping the program's state when the new code is
+compatible with it. A save that changes the shape of `Program` or
+`Message` restarts the game. rawr's
 [Supported Rust](https://rawr.airstrike.fyi/docs/language) page lists
-what works. In elevato specifically:
-
-- **The prelude's names are taken.** Define your own `Model`, helper
-  functions and types, but not a second `Message`, `Elevator` or
-  `go_to_floor`.
-- **One file, no modules.** A program is a single file of items; `mod`
-  blocks are not supported there.
-- **No I/O.** The engine grants no file, environment or process access.
-  `println!` writes to the native app's stdout (nowhere, in the
-  browser).
+what works.
 
 ## Deviations from the original
 
-1. The Elm architecture replaces callbacks: events arrive as `Message`
-   variants in one `update`, and effects are returned commands instead
-   of method calls on live handles. `update` receives every message,
-   so the original's separate `update(dt, …)` is `Message::Tick(dt)`.
-2. `set_destination_queue` replaces raw `destinationQueue` assignment,
-   and clamps entries to valid floor range (the original clamped only
-   `goToFloor`).
-3. Floors and elevators are `usize` indices. The original's
-   `Number()` coercion accepted fractional floors; Rust's types make
-   every destination a whole floor.
-4. Mistakes the original found at run time - an unknown event name, a
-   wrong return value, a missing handler argument - are type errors,
-   refused before the program runs.
-5. The simulation is deterministic: seeded RNG and fixed-timestep
+1. The Elm architecture replaces callbacks and handles: events arrive
+   as messages, effects are tasks the program returns, and the program
+   keeps its own state instead of reading the world's.
+2. There is no tick and no idle event: the program reacts to riders and
+   to its own trips.
+3. `StoppedAtFloor` arrives after riders got off and on (and says how
+   many did); the original called `stopped_at_floor` before boarding.
+4. Destinations are whole floors. The original's `Number()` coercion
+   accepted fractional ones.
+5. Mistakes the original found at run time - an unknown event name, a
+   missing handler argument - are type errors, refused before the
+   program runs.
+6. The simulation is deterministic: seeded RNG and fixed-timestep
    playback (see the README) - same seed, same program, same result.

@@ -1,9 +1,8 @@
 //! The API reference: three Rust-voiced pages (`lib.rs`,
 //! `elevator.rs`, `floor.rs`) rendered read-only through the same
 //! highlighter as the code pane, plus the jump registry behind
-//! cmd+click - struct fields, `Message` variants, command
-//! constructors, and entry points all navigate, from the reference or
-//! from the editor.
+//! cmd+click - types, `Message` variants, commands, and the program's
+//! entry points all navigate, from the reference or from the editor.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -18,12 +17,12 @@ use crate::theme;
 /// One page of the reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Page {
-    /// Program shape: `new`, `update`, the messages, the commands,
+    /// Program shape: `run`, `new`, `update`, `subscription`, riders,
     /// determinism.
     Lib,
-    /// The `Elevator` snapshot struct and its events.
+    /// `Elevator`, its commands, and its messages.
     Elevator,
-    /// The `Floor` snapshot struct and its events.
+    /// `Floor`, and its riders' messages.
     Floor,
 }
 
@@ -50,8 +49,8 @@ impl Page {
     }
 }
 
-/// Name → every definition site carrying it. `Event` and `on` exist on
-/// two pages; [`resolve`] picks by preference.
+/// Name → every definition site carrying it. `Message` exists on two
+/// pages; [`resolve`] picks by preference.
 static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|| {
     let mut registry: HashMap<String, Vec<(Page, usize)>> = HashMap::new();
     let mut insert = |name: String, page, line| {
@@ -67,21 +66,22 @@ static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|
                 continue;
             };
             insert(name.to_string(), page, line);
-            // Enum variants are CamelCase; scripts name the same event
-            // in snake_case inside `on("…")` - register both.
-            if name.starts_with(|c: char| c.is_ascii_uppercase()) {
+            // Enum variants are bare CamelCase lines; the original's JS
+            // named the same events in snake_case - register both.
+            let variant = text
+                .trim_start()
+                .starts_with(|c: char| c.is_ascii_uppercase());
+            if variant {
                 insert(snake_case(name), page, line);
             }
         }
     }
-    // Entry-point parameters read like globals in scripts; point them
-    // at their declaring signature - `update` receives all three
-    // (`new` has no parameters).
+    // Entry-point parameters read like names of their own in a program;
+    // point them at their declaring signature.
     for (alias, target) in [
         ("message", "update"),
-        ("dt", "update"),
-        ("elevators", "update"),
-        ("floors", "update"),
+        ("elevators", "new"),
+        ("floors", "new"),
     ] {
         if let Some(&(page, line)) = registry.get(target).and_then(|sites| sites.first()) {
             registry
@@ -334,54 +334,35 @@ impl Default for State {
 mod tests {
     use super::*;
 
-    /// The API contract: every name a script can touch, and the page
-    /// its documentation lives on. A rename or addition in `script/`
-    /// that forgets the reference fails here.
+    /// The API contract: every name a program can touch, and the page
+    /// its documentation lives on. A rename or addition in `api/` that
+    /// forgets the reference fails here.
     const CONTRACT: &[(&str, Page)] = &[
+        ("run", Page::Lib),
         ("new", Page::Lib),
         ("update", Page::Lib),
+        ("subscription", Page::Lib),
         ("message", Page::Lib),
-        ("dt", Page::Lib),
         ("elevators", Page::Lib),
         ("floors", Page::Lib),
-        ("Message", Page::Lib),
-        ("Tick", Page::Lib),
-        ("Idle", Page::Lib),
-        ("FloorButtonPressed", Page::Lib),
-        ("PassingFloor", Page::Lib),
-        ("StoppedAtFloor", Page::Lib),
-        ("UpButtonPressed", Page::Lib),
-        ("DownButtonPressed", Page::Lib),
-        ("Command", Page::Lib),
+        ("riders", Page::Lib),
+        ("Rider", Page::Lib),
         ("Direction", Page::Lib),
         ("Up", Page::Lib),
         ("Down", Page::Lib),
-        ("go_to_floor", Page::Lib),
-        ("go_to_floor_first", Page::Lib),
-        ("stop", Page::Lib),
-        ("check_destination_queue", Page::Lib),
-        ("set_destination_queue", Page::Lib),
-        ("set_going_up_indicator", Page::Lib),
-        ("set_going_down_indicator", Page::Lib),
         ("Elevator", Page::Elevator),
-        ("destination_queue", Page::Elevator),
-        ("current_floor", Page::Elevator),
-        ("max_passenger_count", Page::Elevator),
-        ("load_factor", Page::Elevator),
-        ("is_full", Page::Elevator),
-        ("destination_direction", Page::Elevator),
-        ("pressed_floors", Page::Elevator),
-        ("move_count", Page::Elevator),
-        ("is_busy", Page::Elevator),
-        ("is_moving", Page::Elevator),
-        ("is_on_a_floor", Page::Elevator),
-        ("going_up_indicator", Page::Elevator),
-        ("going_down_indicator", Page::Elevator),
+        ("go_to_floor", Page::Elevator),
+        ("go_to_floor_first", Page::Elevator),
+        ("stop", Page::Elevator),
+        ("set_going_up_indicator", Page::Elevator),
+        ("set_going_down_indicator", Page::Elevator),
+        ("FloorButtonPressed", Page::Elevator),
+        ("PassingFloor", Page::Elevator),
+        ("StoppedAtFloor", Page::Elevator),
         ("Floor", Page::Floor),
-        ("floor_num", Page::Floor),
         ("level", Page::Floor),
-        ("up_pressed", Page::Floor),
-        ("down_pressed", Page::Floor),
+        ("UpButtonPressed", Page::Floor),
+        ("DownButtonPressed", Page::Floor),
     ];
 
     #[test]
@@ -395,26 +376,29 @@ mod tests {
 
     #[test]
     fn page_preference_falls_back_when_the_name_lives_elsewhere() {
-        // Clicking `Idle` inside elevator.rs still lands on the
-        // `Message` variant in lib.rs - preference only applies when
-        // the clicked page actually defines the name.
-        let (page, _) = resolve("Idle", Some(Page::Elevator)).unwrap();
+        // Clicking `riders` inside elevator.rs still lands on lib.rs -
+        // preference only applies when the clicked page actually
+        // defines the name.
+        let (page, _) = resolve("riders", Some(Page::Elevator)).unwrap();
         assert_eq!(page, Page::Lib);
+        // `Message` is on two pages; the preferred one wins.
+        let (page, _) = resolve("Message", Some(Page::Floor)).unwrap();
+        assert_eq!(page, Page::Floor);
     }
 
     #[test]
     fn camel_case_variants_register_their_snake_case_names_too() {
         let (page, camel) = resolve("StoppedAtFloor", None).unwrap();
         let (_, snake) = resolve("stopped_at_floor", None).unwrap();
-        assert_eq!(page, Page::Lib);
+        assert_eq!(page, Page::Elevator);
         assert_eq!(camel, snake, "both spellings share the variant line");
     }
 
     #[test]
     fn definitions_resolve_to_their_own_lines() {
-        let (page, line) = resolve("load_factor", None).unwrap();
+        let (page, line) = resolve("go_to_floor", None).unwrap();
         let text = page.source().lines().nth(line).unwrap();
-        assert!(text.contains("load_factor"));
+        assert!(text.contains("go_to_floor"));
         assert!(!text.trim_start().starts_with("//"));
     }
 
@@ -431,7 +415,7 @@ mod tests {
         let mut state = State::new();
         let (page, line) = resolve("go_to_floor", None).unwrap();
         state.open(page, line);
-        let (page, line) = resolve("floor_num", None).unwrap();
+        let (page, line) = resolve("level", None).unwrap();
         state.open(page, line);
         state.back();
         assert!(state.can_go_forward());
@@ -447,9 +431,9 @@ mod tests {
     fn back_returns_through_the_jump_history() {
         let mut state = State::new();
         assert!(!state.can_go_back());
-        let (page, line) = resolve("load_factor", None).unwrap();
+        let (page, line) = resolve("stop", None).unwrap();
         state.open(page, line);
-        let (page, line) = resolve("floor_num", None).unwrap();
+        let (page, line) = resolve("level", None).unwrap();
         state.open(page, line);
         assert_eq!(state.page(), Page::Floor);
         state.back();
@@ -464,7 +448,7 @@ mod tests {
         let mut state = State::new();
         let (page, line) = resolve("StoppedAtFloor", None).unwrap();
         state.open(page, line);
-        assert_eq!(state.page(), Page::Lib);
+        assert_eq!(state.page(), Page::Elevator);
         assert_eq!(state.content.cursor().position.line, line);
     }
 }

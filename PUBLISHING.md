@@ -29,7 +29,10 @@ git -C ~/projects/cosmic-text push origin span-padding
 In the root `Cargo.toml`:
 
 1. Replace the `iced` entry in `[workspace.dependencies]` with
-   `iced = { version = "0.15.0-dev", features = ["canvas", "tokio", "advanced"] }`.
+   `iced = { version = "0.15.0-dev", features = ["canvas", "tokio", "advanced", "selector"] }`,
+   and the `iced_futures` / `iced_runtime` entries the API crate uses
+   with `version = "0.15.0-dev"` entries, so the patch block below
+   resolves all three from the same source.
 2. Delete the live `[patch.crates-io]` block (the local cosmic-text
    path patch) and uncomment the prepared git-patch block below it.
 3. `cargo update`, then `cargo test --workspace` and
@@ -69,7 +72,7 @@ Deferred items that only a human in front of real browsers can check:
 - **Playthrough** - clear challenges 1–6 by hand in the deployed build;
   confirm stats match a native run with the same seed and timescale.
 - **Persistence** - reload the page after Save; code and timescale
-  should come back (localStorage keys `elevato_code_v1`,
+  should come back (localStorage keys `elevato_program_v3`,
   `elevato_timescale`).
 - **Screenshots** - capture light- and dark-theme shots for the
   README's screenshots section (placeholders are marked there).
