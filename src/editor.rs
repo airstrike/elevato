@@ -375,15 +375,20 @@ fn describe(status: &Status) -> (String, Tone) {
             format!("Fresh attempt with your new code. Its state couldn't carry over: {reason}."),
             Tone::Quiet,
         ),
-        Status::Reloaded(reload::Outcome::Failed(failure)) => (
-            format!(
-                "Line {}:{}: {}. The last good program keeps running.",
-                failure.line(),
-                failure.column(),
-                failure.message().trim_end_matches('.')
-            ),
-            Tone::Bad,
-        ),
+        Status::Reloaded(reload::Outcome::Failed(failure)) => {
+            let message = match failure.message().trim_end_matches('.') {
+                "" => "The edit doesn't compile",
+                message => message,
+            };
+            let line = match failure.at() {
+                Some(at) => format!("Line {}:{}: {message}", at.line, at.column),
+                None => message.to_string(),
+            };
+            (
+                format!("{line}. The last good program keeps running."),
+                Tone::Bad,
+            )
+        }
         Status::Compiled if cfg!(target_arch = "wasm32") => (
             "Saved as a draft: the page runs the program it was built with.".to_string(),
             Tone::Quiet,
@@ -555,8 +560,10 @@ mod tests {
         let mut state = State::new("");
         state.reloaded(reload::Outcome::Failed(reload::Failure::new(
             "cannot find value `nxt` in this scope",
-            42,
-            17,
+            Some(reload::Position {
+                line: 42,
+                column: 17,
+            }),
         )));
         let (line, tone) = strip_line(&state).unwrap();
         assert!(

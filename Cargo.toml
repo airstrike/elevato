@@ -13,6 +13,7 @@ syntect = { workspace = true }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dirs = { workspace = true }
 open = "5"
+rawr-reload = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { workspace = true, features = ["webgl", "fira-sans"] }
@@ -50,6 +51,9 @@ thiserror = "2"
 # itself); fancy-regex backend - wasm-clean, never onig.
 syntect = { version = "5", default-features = false, features = ["parsing", "yaml-load", "regex-fancy"] }
 dirs = "6"
+# What `rawr run` says about each reload of the player's program; inert
+# (no socket, no outcomes) under `cargo run`. Dependency-free.
+rawr-reload = { git = "https://github.com/airstrike/rawr" }
 
 # The iced checkout patches cosmic-text to a sibling path in its own
 # workspace; a path dependency on that iced must mirror the patch or
