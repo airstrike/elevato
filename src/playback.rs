@@ -27,13 +27,14 @@
 //! fixed-timestep deviation that makes a live run replay a headless run
 //! byte for byte.
 
-use std::sync::Arc;
+use std::any::Any;
+use std::fmt;
+use std::sync::{Arc, Mutex};
 
-use elevato_api::Elevator;
+use elevato_api::Building;
 use elevato_api::simulation::{self, Simulation};
-use iced::{Subscription, Task};
+use iced::{Element, Subscription, Task};
 
-use crate::core::World;
 use crate::core::challenge::{self, Challenge, Outcome};
 use crate::core::stats::Stats;
 
@@ -52,7 +53,8 @@ const TIMESCALE_MIN: usize = 1;
 const TIMESCALE_MAX: usize = 39;
 
 /// The player's program, ready to boot on any challenge: its `new`,
-/// `update` and `subscription`, whatever its state and message types.
+/// `update`, `view` and `subscription`, whatever its state and message
+/// types.
 #[derive(Clone)]
 pub struct Program {
     boot: Arc<Boot>,
@@ -60,8 +62,8 @@ pub struct Program {
 
 type Boot = dyn Fn(&Challenge, u64) -> Result<Box<dyn Run>, simulation::Error>;
 
-/// A [`Simulation`] of the player's program, seen without its state and
-/// message types.
+/// A [`Simulation`] of the player's program and its view, seen without
+/// its state and message types.
 pub trait Run {
     /// Advances one frame of `substeps` substeps.
     fn frame(&mut self, substeps: usize) -> Result<(), simulation::Error>;
@@ -71,52 +73,96 @@ pub trait Run {
     fn outcome(&self) -> Outcome;
     /// Whether the challenge has decided.
     fn ended(&self) -> bool;
-    /// The world, for drawing.
-    fn world(&self) -> &World;
+    /// The program's view of the building.
+    fn view(&self) -> Element<'_, Input>;
+    /// Hands the program a message its view produced.
+    fn send(&mut self, input: Input);
 }
 
-impl<P, M> Run for Simulation<P, M>
+/// A message the program's view produced, its type erased so the game's
+/// own messages can carry it back to the program.
+#[derive(Clone)]
+pub struct Input(Arc<Mutex<Option<Box<dyn Any + Send>>>>);
+
+impl Input {
+    fn new<M: Send + 'static>(message: M) -> Self {
+        Self(Arc::new(Mutex::new(Some(Box::new(message)))))
+    }
+
+    /// The message, once, as the program's message type.
+    fn take<M: 'static>(&self) -> Option<M> {
+        let mut message = self.0.lock().ok()?;
+        let message = message.take()?.downcast::<M>().ok()?;
+        Some(*message)
+    }
+}
+
+impl fmt::Debug for Input {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Input")
+    }
+}
+
+/// A simulation together with the program's `view`.
+struct Live<P, M, V> {
+    simulation: Simulation<P, M>,
+    view: V,
+}
+
+impl<P, M, V> Run for Live<P, M, V>
 where
     M: Send + 'static,
+    V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M>,
 {
     fn frame(&mut self, substeps: usize) -> Result<(), simulation::Error> {
-        Simulation::frame(self, substeps)
+        self.simulation.frame(substeps)
     }
 
     fn stats(&self) -> Stats {
-        Simulation::stats(self)
+        self.simulation.stats()
     }
 
     fn outcome(&self) -> Outcome {
-        Simulation::outcome(self)
+        self.simulation.outcome()
     }
 
     fn ended(&self) -> bool {
-        Simulation::ended(self)
+        self.simulation.ended()
     }
 
-    fn world(&self) -> &World {
-        Simulation::world(self)
+    fn view(&self) -> Element<'_, Input> {
+        (self.view)(self.simulation.program(), self.simulation.building()).map(Input::new)
+    }
+
+    fn send(&mut self, input: Input) {
+        if let Some(message) = input.take::<M>() {
+            self.simulation.send(message);
+        }
     }
 }
 
 impl Program {
-    /// A program from its three functions, as iced takes an
+    /// A program from its four functions, as iced takes an
     /// application's.
-    pub fn new<P, M>(
-        new: impl Fn(Vec<Elevator>, usize) -> (P, Task<M>) + 'static,
-        update: impl Fn(&mut P, M) -> Task<M> + Clone + 'static,
+    pub fn new<P, M, V>(
+        new: impl Fn(usize) -> (P, Task<M>) + 'static,
+        update: impl Fn(&mut P, M, &Building) -> Task<M> + Clone + 'static,
+        view: V,
         subscription: impl Fn(&P) -> Subscription<M> + Clone + 'static,
     ) -> Self
     where
         P: 'static,
         M: Send + 'static,
+        V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M> + Clone + 'static,
     {
         Self {
             boot: Arc::new(move |challenge: &Challenge, seed| {
                 let simulation =
                     Simulation::new(challenge, seed, &new, update.clone(), subscription.clone())?;
-                Ok(Box::new(simulation) as Box<dyn Run>)
+                Ok(Box::new(Live {
+                    simulation,
+                    view: view.clone(),
+                }) as Box<dyn Run>)
             }),
         }
     }
@@ -228,9 +274,16 @@ impl Playback {
         }
     }
 
-    /// Read access to the world, for rendering.
-    pub fn world(&self) -> Option<&World> {
-        self.run.as_deref().map(Run::world)
+    /// The program's view of the building, while an attempt runs.
+    pub fn view(&self) -> Option<Element<'_, Input>> {
+        self.run.as_deref().map(Run::view)
+    }
+
+    /// Hands the program a message its view produced.
+    pub fn send(&mut self, input: Input) {
+        if let Some(run) = &mut self.run {
+            run.send(input);
+        }
     }
 
     /// Starts or pauses playback. Ignored once the attempt has decided
@@ -346,37 +399,42 @@ fn step(timescale: usize, factor: f64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elevato_api::elevator;
+    use elevato_api::{Elevator, elevator};
 
     /// A program that shuttles every car between the lobby and the top.
-    struct Shuttle {
-        floors: usize,
-    }
+    struct Shuttle;
+
+    type Message = (Elevator, elevator::Message);
 
     fn shuttle() -> Program {
+        fn view<'a>(_: &'a Shuttle, building: &'a Building) -> Element<'a, Message> {
+            crate::view(building)
+        }
+
         Program::new(
-            |elevators: Vec<Elevator>, floors: usize| {
-                let top = floors - 1;
-                let task = Task::batch(elevators.into_iter().map(|elevator| {
+            |elevators: usize| {
+                let news = (0..elevators).map(|_| {
+                    let (elevator, news) = Elevator::new();
+                    news.map(move |message| (elevator, message))
+                });
+                (Shuttle, Task::batch(news))
+            },
+            |_: &mut Shuttle, (elevator, message): Message, building: &Building| match message {
+                elevator::Message::Idle => {
+                    let next = if building.floor_of(elevator) == 0 {
+                        building.floors() - 1
+                    } else {
+                        0
+                    };
                     elevator
-                        .go_to_floor(top)
+                        .go_to_floor(next)
                         .map(move |message| (elevator, message))
-                }));
-                (Shuttle { floors }, task)
-            },
-            |shuttle: &mut Shuttle, (elevator, message): (Elevator, elevator::Message)| {
-                match message {
-                    elevator::Message::StoppedAtFloor { floor, .. } => {
-                        let next = if floor == 0 { shuttle.floors - 1 } else { 0 };
-                        elevator
-                            .go_to_floor(next)
-                            .map(move |message| (elevator, message))
-                    }
-                    elevator::Message::Idle
-                    | elevator::Message::FloorButtonPressed(_)
-                    | elevator::Message::PassingFloor(..) => Task::none(),
                 }
+                elevator::Message::FloorButtonPressed(_)
+                | elevator::Message::PassingFloor(..)
+                | elevator::Message::StoppedAtFloor { .. } => Task::none(),
             },
+            view,
             |_: &Shuttle| Subscription::none(),
         )
     }

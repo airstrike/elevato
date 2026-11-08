@@ -1,16 +1,17 @@
 //! The host's side of the API: a program running against a challenge's
 //! world, one frame at a time.
 //!
-//! A [`Simulation`] holds the program's state and calls its `update` and
-//! `subscription` the way an iced runtime does, but it runs the
+//! A [`Simulation`] holds the program's state and the [`Building`], and
+//! calls the program's `update` and `subscription` the way an iced
+//! runtime does, but it runs the
 //! program's tasks itself, on its own thread, at fixed points of each
 //! physics substep. That keeps a run deterministic - the same seed and
 //! program replay the same run - and it delivers every message at the
 //! moment the original game called its handlers:
 //!
 //! 1. physics steps the world;
-//! 2. riders' presses and passing floors are delivered, and the tasks
-//!    they lead to run until none can make progress;
+//! 2. riders' presses, passing floors and idle cars are delivered, and
+//!    the tasks they lead to run until none can make progress;
 //! 3. riders get off and on at the cars that arrived;
 //! 4. each arrival ends its trip's task with
 //!    [`StoppedAtFloor`](elevator::Message::StoppedAtFloor), and the
@@ -34,6 +35,7 @@ use iced_futures::subscription::{self, Tracker};
 use iced_futures::{BoxFuture, BoxStream, MaybeSend, Subscription};
 use iced_runtime::{Action, Task, task};
 
+use crate::building::Building;
 use crate::elevator::{self, Elevator};
 use crate::floor;
 use crate::hub::{self, Command, Hub};
@@ -47,8 +49,8 @@ const DISPATCH_ROUNDS: usize = 128;
 ///
 /// Minted from a challenge, a seed and the program's `new`, `update` and
 /// `subscription` (`transformation-method`): construction builds the
-/// world, hands the program its elevators and floors, and runs the tasks
-/// `new` returns, so a simulation that exists is under way.
+/// building, tells the program how many cars its bank holds, and runs the
+/// tasks `new` returns, so a simulation that exists is under way.
 pub struct Simulation<P, M> {
     hub: Hub,
     run: Run<P, M>,
@@ -63,14 +65,14 @@ pub enum Error {
 }
 
 /// The program's `update`.
-type Update<P, M> = dyn Fn(&mut P, M) -> Task<M>;
+type Update<P, M> = dyn Fn(&mut P, M, &Building) -> Task<M>;
 
 /// The program's `subscription`.
 type Subscribe<P, M> = dyn Fn(&P) -> Subscription<M>;
 
 /// Everything a simulation runs, apart from its hub.
 struct Run<P, M> {
-    world: World,
+    building: Building,
     program: P,
     update: Box<Update<P, M>>,
     subscription: Box<Subscribe<P, M>>,
@@ -79,22 +81,25 @@ struct Run<P, M> {
     listeners: Vec<Live<BoxFuture<()>>>,
     sender: mpsc::UnboundedSender<M>,
     receiver: mpsc::UnboundedReceiver<M>,
-    /// Each car's trips, in the order of its destination queue.
-    queues: Vec<Vec<Stop>>,
+    /// Each powered car's news and current trip, by its bank index.
+    cars: Vec<Car>,
     /// Cars that stopped this substep, waiting for riders to get off and
     /// on before their trips end.
     arrivals: Vec<Arrival>,
     failure: Option<Error>,
 }
 
-/// One entry of a car's destination queue, and the trips that end there.
-struct Stop {
-    floor: usize,
-    trips: Vec<Trip>,
+/// A powered car: where its news goes, and the trip it is on.
+#[derive(Default)]
+struct Car {
+    news: Option<mpsc::UnboundedSender<elevator::Message>>,
+    trip: Option<Trip>,
 }
 
-/// A trip's task: where its messages go, and how to abort it.
+/// A trip's task: the floor it goes to, where its messages go, and how
+/// to abort it.
 struct Trip {
+    floor: usize,
     sender: mpsc::UnboundedSender<elevator::Message>,
     handle: task::Handle,
 }
@@ -107,8 +112,8 @@ struct Arrival {
     aboard: usize,
     /// Riders aboard who were going here.
     leaving: usize,
-    /// The queue entry it reached, when it reached one of the program's.
-    stop: Option<Stop>,
+    /// The trip it ended, when it reached the program's floor.
+    trip: Option<Trip>,
 }
 
 /// A stream or future the simulation polls, and whether it has been
@@ -155,28 +160,26 @@ impl<P, M> Simulation<P, M>
 where
     M: MaybeSend + 'static,
 {
-    /// Builds the world for `challenge` and boots the program on it:
-    /// `new` gets the bank's elevators and the building's floors, the
-    /// tasks it returns run, and every car left without a trip reports
-    /// [`Idle`](elevator::Message::Idle), all before this returns.
+    /// Builds the building for `challenge` and boots the program on it:
+    /// `new` learns how many cars the bank holds and powers on the ones it
+    /// wants, and its tasks run (each powered car reporting
+    /// [`Idle`](elevator::Message::Idle)), all before this returns.
     pub fn new(
         challenge: &Challenge,
         seed: u64,
-        new: impl FnOnce(Vec<Elevator>, usize) -> (P, Task<M>),
-        update: impl Fn(&mut P, M) -> Task<M> + 'static,
+        new: impl FnOnce(usize) -> (P, Task<M>),
+        update: impl Fn(&mut P, M, &Building) -> Task<M> + 'static,
         subscription: impl Fn(&P) -> Subscription<M> + 'static,
     ) -> Result<Self, Error> {
         let world = World::new(challenge, seed);
-        let elevators = (0..world.elevators().len()).map(Elevator::new).collect();
-        let floors = world.floors().len();
-        let queues = world.elevators().iter().map(|_| Vec::new()).collect();
+        let bank = world.bank_size();
         let mut hub = Hub::default();
-        let (program, task) = hub::enter(&mut hub, || guard(|| new(elevators, floors)))?;
+        let (program, task) = hub::enter(&mut hub, || guard(|| new(bank)))?;
         let (sender, receiver) = mpsc::unbounded();
         let mut simulation = Self {
             hub,
             run: Run {
-                world,
+                building: Building::new(world),
                 program,
                 update: Box::new(update),
                 subscription: Box::new(subscription),
@@ -185,7 +188,7 @@ where
                 listeners: Vec::new(),
                 sender,
                 receiver,
-                queues,
+                cars: Vec::new(),
                 arrivals: Vec::new(),
                 failure: None,
             },
@@ -193,14 +196,9 @@ where
         let run = &mut simulation.run;
         hub::enter(&mut simulation.hub, || {
             run.guarded(|run| {
+                run.apply();
                 run.spawn(task);
                 run.subscribe();
-                run.dispatch();
-                // The original's first round: every car `new` left without
-                // a trip says it is idle.
-                for elevator in 0..run.world.elevators().len() {
-                    run.world.check_destination_queue(elevator);
-                }
                 run.dispatch();
             })
         })?;
@@ -215,12 +213,12 @@ where
         hub::enter(&mut self.hub, || {
             run.guarded(|run| {
                 for _ in 0..substeps {
-                    if run.world.ended() {
+                    if run.building.world().ended() {
                         break;
                     }
-                    run.world.step(DT_MAX);
+                    run.building.world_mut().step(DT_MAX);
                     run.dispatch();
-                    run.world.process_arrivals();
+                    run.building.world_mut().process_arrivals();
                     run.arrive();
                     run.dispatch();
                 }
@@ -228,24 +226,30 @@ where
         })
     }
 
+    /// Hands the program a message from outside its tasks (its view's,
+    /// say); it arrives at the next dispatch point.
+    pub fn send(&self, message: M) {
+        let _ = self.run.sender.unbounded_send(message);
+    }
+
     /// The live statistics.
     pub fn stats(&self) -> Stats {
-        *self.run.world.stats()
+        *self.run.building.world().stats()
     }
 
     /// How the challenge stands.
     pub fn outcome(&self) -> Outcome {
-        self.run.world.outcome()
+        self.run.building.world().outcome()
     }
 
     /// Whether the challenge has decided.
     pub fn ended(&self) -> bool {
-        self.run.world.ended()
+        self.run.building.world().ended()
     }
 
-    /// The world, for drawing.
-    pub fn world(&self) -> &World {
-        &self.run.world
+    /// The building as it stands.
+    pub fn building(&self) -> &Building {
+        &self.run.building
     }
 
     /// The program's state.
@@ -272,7 +276,7 @@ where
     fn dispatch(&mut self) {
         self.settle();
         for _ in 0..DISPATCH_ROUNDS {
-            let events = self.world.drain_events();
+            let events = self.building.world_mut().drain_events();
             if events.is_empty() {
                 return;
             }
@@ -287,10 +291,9 @@ where
     fn route(&mut self, event: Event) {
         match event {
             Event::Idle { elevator } => {
-                hub::broadcast(hub::Rider::Elevator(
-                    Elevator::new(elevator),
-                    elevator::Message::Idle,
-                ));
+                if let Some(news) = &self.cars[elevator].news {
+                    let _ = news.unbounded_send(elevator::Message::Idle);
+                }
             }
             Event::UpButtonPressed { floor } => {
                 hub::broadcast(hub::Rider::Floor(floor, floor::Message::UpButtonPressed));
@@ -300,7 +303,7 @@ where
             }
             Event::FloorButtonPressed { elevator, floor } => {
                 hub::broadcast(hub::Rider::Elevator(
-                    Elevator::new(elevator),
+                    Elevator::at(elevator),
                     elevator::Message::FloorButtonPressed(floor),
                 ));
             }
@@ -309,32 +312,28 @@ where
                 floor,
                 direction,
             } => {
-                let heading = self.world.elevators()[elevator]
-                    .destination_queue()
-                    .first()
-                    .map(|&level| level.round() as usize);
-                if let Some(stop) = self.queues[elevator].first()
-                    && Some(stop.floor) == heading
+                let heading = self.building.world().elevators()[elevator]
+                    .destination()
+                    .map(|level| level.round() as usize);
+                if let Some(trip) = &self.cars[elevator].trip
+                    && Some(trip.floor) == heading
                 {
-                    for trip in &stop.trips {
-                        let _ = trip
-                            .sender
-                            .unbounded_send(elevator::Message::PassingFloor(floor, direction));
-                    }
+                    let _ = trip
+                        .sender
+                        .unbounded_send(elevator::Message::PassingFloor(floor, direction));
                 }
             }
             Event::StoppedAtFloor { elevator, floor } => {
-                let queue = &mut self.queues[elevator];
-                let stop =
-                    (queue.first().map(|stop| stop.floor) == Some(floor)).then(|| queue.remove(0));
+                let car = &mut self.cars[elevator];
+                let trip = car.trip.take_if(|trip| trip.floor == floor);
                 let aboard = self.riders(elevator, |_| true);
                 let leaving = self.riders(elevator, |destination| destination == floor);
                 self.arrivals.push(Arrival {
-                    elevator: Elevator::new(elevator),
+                    elevator: Elevator::at(elevator),
                     floor,
                     aboard,
                     leaving,
-                    stop,
+                    trip,
                 });
             }
         }
@@ -345,7 +344,7 @@ where
     fn arrive(&mut self) {
         for arrival in std::mem::take(&mut self.arrivals) {
             let index = arrival.elevator.index();
-            let car = &self.world.elevators()[index];
+            let car = &self.building.world().elevators()[index];
             let message = elevator::Message::StoppedAtFloor {
                 floor: arrival.floor,
                 exited: arrival.leaving,
@@ -353,7 +352,7 @@ where
                 load_factor: car.load_factor(),
                 full: car.is_full(),
             };
-            for trip in arrival.stop.into_iter().flat_map(|stop| stop.trips) {
+            if let Some(trip) = arrival.trip {
                 let _ = trip.sender.unbounded_send(message);
             }
         }
@@ -361,7 +360,8 @@ where
 
     /// How many riders aboard `elevator` are going where `going` accepts.
     fn riders(&self, elevator: usize, going: impl Fn(usize) -> bool) -> usize {
-        self.world
+        self.building
+            .world()
             .passengers()
             .iter()
             .filter(|passenger| {
@@ -440,7 +440,8 @@ where
 
     /// Folds one message into the program and starts what it answers.
     fn deliver(&mut self, message: M) {
-        let task = (self.update)(&mut self.program, message);
+        let task = (self.update)(&mut self.program, message, &self.building);
+        self.apply();
         self.spawn(task);
         self.subscribe();
     }
@@ -461,62 +462,56 @@ where
         self.listeners.extend(started.into_iter().map(Live::new));
     }
 
-    /// Applies the commands the program's tasks submitted, in order.
+    /// Applies the commands the program submitted, in order. A car past
+    /// the bank never enters the building, so its commands do nothing.
     fn apply(&mut self) {
         for command in hub::commands() {
+            if command.elevator().index() >= self.cars.len()
+                && !matches!(command, Command::PowerOn { .. })
+            {
+                continue;
+            }
             match command {
+                Command::PowerOn { news, .. } => {
+                    if self.building.world_mut().add_elevator().is_some() {
+                        self.cars.push(Car { news, trip: None });
+                    }
+                }
                 Command::GoToFloor {
                     elevator,
                     floor,
-                    first,
                     sender,
                     handle,
                 } => {
                     let index = elevator.index();
+                    let world = self.building.world_mut();
                     // A floor past the top is the top floor, as in the original.
-                    let floor = floor.min(self.world.floors().len().saturating_sub(1));
-                    let before = self.world.elevators()[index].destination_queue().len();
-                    self.world.go_to_floor(index, floor as f64, first);
-                    let queued = self.world.elevators()[index].destination_queue().len() > before;
-                    let trip = Trip { sender, handle };
-                    let queue = &mut self.queues[index];
-                    let adjacent = if first {
-                        queue.first_mut()
-                    } else {
-                        queue.last_mut()
+                    let floor = floor.min(world.floors().len().saturating_sub(1));
+                    world.go_to_floor(index, floor as f64);
+                    let trip = Trip {
+                        floor,
+                        sender,
+                        handle,
                     };
-                    match adjacent {
-                        // The car already stops there next (or last): the
-                        // trip ends at that same arrival.
-                        Some(stop) if !queued && stop.floor == floor => stop.trips.push(trip),
-                        _ => {
-                            let stop = Stop {
-                                floor,
-                                trips: vec![trip],
-                            };
-                            if first {
-                                queue.insert(0, stop);
-                            } else {
-                                queue.push(stop);
-                            }
-                        }
+                    if let Some(replaced) = self.cars[index].trip.replace(trip) {
+                        replaced.handle.abort();
                     }
                 }
                 Command::Stop { elevator } => {
-                    self.world.stop(elevator.index());
-                    for stop in self.queues[elevator.index()].drain(..) {
-                        for trip in stop.trips {
-                            trip.handle.abort();
-                        }
+                    self.building.world_mut().stop(elevator.index());
+                    if let Some(trip) = self.cars[elevator.index()].trip.take() {
+                        trip.handle.abort();
                     }
                 }
                 Command::GoingUpIndicator { elevator, on } => {
-                    self.world
+                    self.building
+                        .world_mut()
                         .elevator_mut(elevator.index())
                         .set_going_up_indicator(on);
                 }
                 Command::GoingDownIndicator { elevator, on } => {
-                    self.world
+                    self.building
+                        .world_mut()
                         .elevator_mut(elevator.index())
                         .set_going_down_indicator(on);
                 }

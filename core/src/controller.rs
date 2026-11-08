@@ -13,10 +13,9 @@ use crate::event::Event;
 /// User-strategy hooks, mirroring the original's `{ init, update }` code
 /// object plus its event subscriptions.
 pub trait Controller {
-    /// Called once before the first frame. Right after it returns, the
-    /// driver checks every elevator's destination queue, firing the
-    /// initial [`Event::Idle`] round exactly like the original's
-    /// `world.init()`.
+    /// Called once before the first frame, with every car of the bank
+    /// standing in the world; each car's [`Event::Idle`] is delivered
+    /// right after it returns.
     fn init(&mut self, world: &mut World);
 
     /// Called once per frame with the *whole* frame dt, before that

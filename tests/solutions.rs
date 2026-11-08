@@ -24,7 +24,7 @@ mod twentyliner;
 
 use elevato::core::challenge::{self, Outcome};
 use elevato::core::stats::Stats;
-use elevato::{Direction, Elevator, elevator, floor};
+use elevato::{Building, Direction, Elevator, elevator, floor};
 use elevato_api::Simulation;
 use elevato_api::simulation::Error;
 use iced::{Subscription, Task};
@@ -73,31 +73,31 @@ fn the_starter_runs_challenge_one_to_its_time_limit() {
     // Shuttling floors 0 and 1 cannot clear a 3-floor challenge; the
     // point is a clean run to the time limit, moving somebody.
     assert_eq!(run.outcome(), Outcome::Failed);
-    assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3689));
+    assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3372));
 }
 
 #[test]
 fn the_naive_port_passes_challenge_one() {
     let run = run!(naive, 0, SEED, 3700);
     assert_eq!(run.outcome(), Outcome::Succeeded);
-    assert_eq!(pin(run.stats()), (15, 28, 51167, 10400, 6126));
+    assert_eq!(pin(run.stats()), (16, 27, 59300, 12633, 6536));
 }
 
 #[test]
 fn the_naive_port_fails_challenge_five() {
     let run = run!(naive, 4, SEED, 4200);
     assert_eq!(run.outcome(), Outcome::Failed);
-    assert_eq!(pin(run.stats()), (97, 182, 68017, 22833, 9012));
+    assert_eq!(pin(run.stats()), (92, 182, 68017, 42133, 9993));
 }
 
 #[test]
 fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
     // Challenge 4 (8 floors, 2 elevators) is where routing calls and
     // steering boarding with the lamps first beat blind dispatch. Over
-    // seeds 1 to 10 the indicator port passes 7 and the naive 4; seed
-    // 6 is decisive both ways.
+    // seeds 1 to 10 the indicator port passes 7 and the naive 1; seed
+    // 1 is decisive both ways.
     const CHALLENGE_FOUR: usize = 3;
-    const DECISIVE_SEED: u64 = 6;
+    const DECISIVE_SEED: u64 = 1;
 
     let naive = run!(naive, CHALLENGE_FOUR, DECISIVE_SEED, 3700);
     assert_eq!(naive.outcome(), Outcome::Failed, "{:?}", naive.stats());
@@ -109,7 +109,7 @@ fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
         "{:?}",
         indicator.stats()
     );
-    assert_eq!(pin(indicator.stats()), (28, 92, 52650, 22650, 10479));
+    assert_eq!(pin(indicator.stats()), (28, 87, 53983, 43600, 10999));
 }
 
 #[test]
@@ -131,22 +131,20 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
 /// What a car told a test program, in order.
 type Log = Vec<(Elevator, elevator::Message)>;
 
-/// A program that runs `start` once and records every car message.
+/// A program that powers on one car without listening to its news, runs
+/// `start` with it once, and records every message its trips send.
 fn recorder(
     challenge: usize,
-    start: impl FnOnce(&[Elevator]) -> Task<elevator::Message>,
+    start: impl FnOnce(Elevator) -> Task<elevator::Message>,
 ) -> Simulation<Log, (Elevator, elevator::Message)> {
     Simulation::new(
         &challenge::roster()[challenge],
         SEED,
-        |elevators: Vec<Elevator>, _floors: usize| {
-            let car = elevators[0];
-            (
-                Log::new(),
-                start(&elevators).map(move |message| (car, message)),
-            )
+        |_: usize| {
+            let car = Elevator::default();
+            (Log::new(), start(car).map(move |message| (car, message)))
         },
-        |log: &mut Log, entry: (Elevator, elevator::Message)| {
+        |log: &mut Log, entry: (Elevator, elevator::Message), _: &Building| {
             log.push(entry);
             Task::none()
         },
@@ -162,9 +160,22 @@ fn drive<P, M: Send + 'static>(simulation: &mut Simulation<P, M>, frames: usize)
     }
 }
 
+/// The floors a log's trips stopped at, in order.
+fn stops(simulation: &Simulation<Log, (Elevator, elevator::Message)>) -> Vec<usize> {
+    simulation_log(simulation)
+        .into_iter()
+        .filter_map(|message| match message {
+            elevator::Message::StoppedAtFloor { floor, .. } => Some(floor),
+            elevator::Message::Idle
+            | elevator::Message::FloorButtonPressed(_)
+            | elevator::Message::PassingFloor(..) => None,
+        })
+        .collect()
+}
+
 #[test]
 fn a_trip_streams_the_floors_it_passes_and_ends_where_it_stops() {
-    let mut simulation = recorder(0, |elevators| elevators[0].go_to_floor(2));
+    let mut simulation = recorder(0, |car| car.go_to_floor(2));
     drive(&mut simulation, 600);
     let messages: Vec<elevator::Message> = simulation_log(&simulation);
     assert_eq!(
@@ -175,53 +186,40 @@ fn a_trip_streams_the_floors_it_passes_and_ends_where_it_stops() {
         messages.last(),
         Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == 2
     ));
-    assert_eq!(simulation.world().elevators()[0].current_floor(), 2);
+    assert_eq!(
+        simulation.building().world().elevators()[0].current_floor(),
+        2
+    );
 }
 
 #[test]
 fn a_floor_past_the_top_is_the_top_floor() {
-    let mut simulation = recorder(0, |elevators| elevators[0].go_to_floor(99));
+    let mut simulation = recorder(0, |car| car.go_to_floor(99));
     drive(&mut simulation, 600);
-    assert!(matches!(
-        simulation_log(&simulation).last(),
-        Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == 2
-    ));
+    assert_eq!(stops(&simulation), vec![2]);
 }
 
 #[test]
-fn asking_twice_for_the_last_queued_floor_ends_both_trips_at_one_stop() {
-    let mut simulation = recorder(0, |elevators| {
-        Task::batch([elevators[0].go_to_floor(2), elevators[0].go_to_floor(2)])
-    });
-    drive(&mut simulation, 600);
-    let stops = simulation_log(&simulation)
-        .into_iter()
-        .filter(|message| matches!(message, elevator::Message::StoppedAtFloor { .. }))
-        .count();
-    assert_eq!(stops, 2);
-    assert_eq!(simulation.world().elevators()[0].move_count(), 2);
-}
-
-#[test]
-fn going_to_a_floor_first_from_passing_floor_stops_there() {
-    // Sent to floor 2, the car hears it is passing floor 1 and goes
-    // there first; the trip to 2 resumes after.
+fn a_new_trip_replaces_the_one_under_way() {
+    // Sent to floor 2, the car hears it is passing floor 1 and is sent
+    // there instead: the trip to 2 ends with no message, and only the
+    // trip to 1 stops.
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: usize| {
-            let car = elevators[0];
+        |_: usize| {
+            let car = Elevator::default();
             (
                 Log::new(),
                 car.go_to_floor(2).map(move |message| (car, message)),
             )
         },
-        |log: &mut Log, (car, message): (Elevator, elevator::Message)| {
+        |log: &mut Log, (car, message): (Elevator, elevator::Message), _: &Building| {
             log.push((car, message));
             match message {
-                elevator::Message::PassingFloor(floor, _) => car
-                    .go_to_floor_first(floor)
-                    .map(move |message| (car, message)),
+                elevator::Message::PassingFloor(floor, _) => {
+                    car.go_to_floor(floor).map(move |message| (car, message))
+                }
                 elevator::Message::Idle
                 | elevator::Message::FloorButtonPressed(_)
                 | elevator::Message::StoppedAtFloor { .. } => Task::none(),
@@ -231,17 +229,89 @@ fn going_to_a_floor_first_from_passing_floor_stops_there() {
     )
     .expect("the program boots");
     drive(&mut simulation, 900);
-    let stops: Vec<usize> = simulation_log(&simulation)
-        .into_iter()
-        .filter_map(|message| match message {
-            elevator::Message::StoppedAtFloor { floor, .. } => Some(floor),
-            elevator::Message::Idle
-            | elevator::Message::FloorButtonPressed(_)
-            | elevator::Message::PassingFloor(..) => None,
-        })
-        .collect();
-    assert_eq!(stops, vec![1, 2]);
-    assert_eq!(simulation.world().elevators()[0].move_count(), 2);
+    assert_eq!(stops(&simulation), vec![1]);
+    assert_eq!(simulation.building().world().elevators()[0].move_count(), 1);
+}
+
+#[test]
+fn asking_twice_for_the_same_floor_makes_one_trip() {
+    let mut simulation = recorder(0, |car| {
+        Task::batch([car.go_to_floor(2), car.go_to_floor(2)])
+    });
+    drive(&mut simulation, 600);
+    assert_eq!(stops(&simulation), vec![2]);
+    assert_eq!(simulation.building().world().elevators()[0].move_count(), 2);
+}
+
+#[test]
+fn a_car_says_it_is_idle_when_powered_on_and_after_each_trip() {
+    let mut simulation = Simulation::new(
+        &challenge::roster()[0],
+        SEED,
+        |_: usize| {
+            let (car, start) = Elevator::new();
+            (Log::new(), start.map(move |message| (car, message)))
+        },
+        |log: &mut Log, (car, message): (Elevator, elevator::Message), _: &Building| {
+            log.push((car, message));
+            match message {
+                // The first time only: one trip, then idle again.
+                elevator::Message::Idle if log.len() == 1 => {
+                    car.go_to_floor(1).map(move |message| (car, message))
+                }
+                elevator::Message::Idle
+                | elevator::Message::FloorButtonPressed(_)
+                | elevator::Message::PassingFloor(..)
+                | elevator::Message::StoppedAtFloor { .. } => Task::none(),
+            }
+        },
+        |_: &Log| Subscription::none(),
+    )
+    .expect("the program boots");
+    drive(&mut simulation, 600);
+    let messages = simulation_log(&simulation);
+    assert_eq!(messages.first(), Some(&elevator::Message::Idle));
+    let trip = messages
+        .iter()
+        .position(|message| matches!(message, elevator::Message::StoppedAtFloor { .. }))
+        .expect("the trip ends");
+    assert_eq!(messages.get(trip + 1), Some(&elevator::Message::Idle));
+    assert_eq!(messages.len(), trip + 2, "idle once more, then quiet");
+}
+
+#[test]
+fn a_car_past_the_bank_never_enters_the_building() {
+    // Challenge 1 has one elevator: the second car says nothing and its
+    // trip does nothing, and the run goes on.
+    let mut simulation = Simulation::new(
+        &challenge::roster()[0],
+        SEED,
+        |_: usize| {
+            let _first = Elevator::default();
+            let (second, start) = Elevator::new();
+            (
+                Log::new(),
+                Task::batch([start, second.go_to_floor(2)]).map(move |message| (second, message)),
+            )
+        },
+        |log: &mut Log, entry: (Elevator, elevator::Message), _: &Building| {
+            log.push(entry);
+            Task::none()
+        },
+        |_: &Log| Subscription::none(),
+    )
+    .expect("the program boots");
+    drive(&mut simulation, 600);
+    assert!(simulation_log(&simulation).is_empty());
+    assert_eq!(simulation.building().world().elevators().len(), 1);
+    assert_eq!(simulation.building().world().elevators()[0].move_count(), 0);
+}
+
+#[test]
+fn only_powered_cars_stand_in_the_building() {
+    let simulation = recorder(4, |_| Task::none());
+    assert_eq!(simulation.building().world().elevators().len(), 1);
+    assert_eq!(simulation.building().world().bank_size(), 4);
 }
 
 #[test]
@@ -250,14 +320,14 @@ fn stop_aborts_the_trip_it_interrupts() {
     let mut stopping = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: usize| {
-            let car = elevators[0];
+        |_: usize| {
+            let car = Elevator::default();
             (
                 (car, Log::new()),
                 car.go_to_floor(2).map(move |message| (car, message)),
             )
         },
-        |(car, log): &mut (Elevator, Log), entry: (Elevator, elevator::Message)| {
+        |(car, log): &mut (Elevator, Log), entry: (Elevator, elevator::Message), _: &Building| {
             let passing = matches!(entry.1, elevator::Message::PassingFloor(..));
             log.push(entry);
             if passing {
@@ -271,33 +341,33 @@ fn stop_aborts_the_trip_it_interrupts() {
     )
     .expect("the program boots");
     drive(&mut stopping, 600);
-    let car = &stopping.world().elevators()[0];
+    let car = &stopping.building().world().elevators()[0];
     assert!(!car.is_on_a_floor(), "the car halts between floors");
-    assert!(car.destination_queue().is_empty());
+    assert_eq!(car.destination(), None);
 }
 
 #[test]
 fn indicator_commands_reach_the_car() {
-    let mut simulation = recorder(0, |elevators| {
+    let mut simulation = recorder(0, |car| {
         Task::batch([
-            elevators[0].set_going_up_indicator(false),
-            elevators[0].set_going_down_indicator(true),
+            car.set_going_up_indicator(false),
+            car.set_going_down_indicator(true),
         ])
     });
     drive(&mut simulation, 1);
-    let car = &simulation.world().elevators()[0];
+    let car = &simulation.building().world().elevators()[0];
     assert!(!car.going_up_indicator());
     assert!(car.going_down_indicator());
 }
 
 #[test]
 fn a_task_does_nothing_until_the_program_returns_it() {
-    let mut simulation = recorder(0, |elevators| {
-        let _forgotten = elevators[0].go_to_floor(2);
+    let mut simulation = recorder(0, |car| {
+        let _forgotten = car.go_to_floor(2);
         Task::none()
     });
     drive(&mut simulation, 600);
-    assert_eq!(simulation.world().elevators()[0].move_count(), 0);
+    assert_eq!(simulation.building().world().elevators()[0].move_count(), 0);
 }
 
 #[test]
@@ -311,18 +381,18 @@ fn riders_call_cars_and_press_their_buttons() {
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: usize| (elevators, Task::none()),
-        |elevators: &mut Vec<Elevator>, call: Call| match call {
+        |_: usize| (Elevator::default(), Task::none()),
+        |car: &mut Elevator, call: Call, _: &Building| match call {
             Call::Floor(
                 floor,
                 floor::Message::UpButtonPressed | floor::Message::DownButtonPressed,
-            ) => elevators[0].go_to_floor(floor).discard(),
+            ) => car.go_to_floor(floor).discard(),
             Call::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
                 elevator.go_to_floor(floor).discard()
             }
             Call::Elevator(..) => Task::none(),
         },
-        |_: &Vec<Elevator>| elevato::riders(Call::Elevator, Call::Floor),
+        |_: &Elevator| elevato::riders(Call::Elevator, Call::Floor),
     )
     .expect("the program boots");
     drive(&mut simulation, 3700);
@@ -334,11 +404,11 @@ fn a_panicking_program_ends_the_run_with_its_message() {
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: usize| {
-            let car = elevators[0];
+        |_: usize| {
+            let car = Elevator::default();
             ((), car.go_to_floor(1))
         },
-        |_: &mut (), message: elevator::Message| match message {
+        |_: &mut (), message: elevator::Message, _: &Building| match message {
             elevator::Message::StoppedAtFloor { .. } => panic!("kaboom"),
             elevator::Message::Idle
             | elevator::Message::FloorButtonPressed(_)

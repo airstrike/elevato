@@ -43,12 +43,10 @@ pub fn run(
     frames: usize,
     substeps_per_frame: usize,
 ) -> Report {
+    // Every car of the bank stands in the world from the start, each
+    // reporting it is idle, as the original's initial idle round did.
+    while world.add_elevator().is_some() {}
     controller.init(world);
-    // The initial idle round: the original's `world.init()` checks every
-    // elevator's queue right after user init runs.
-    for elevator in 0..world.elevators().len() {
-        world.check_destination_queue(elevator);
-    }
     dispatch(world, controller);
 
     let frame_dt = substeps_per_frame as f64 * DT_MAX;

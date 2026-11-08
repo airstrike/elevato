@@ -28,11 +28,11 @@ pub const MAXSPEED: f64 = floor::HEIGHT * 2.6;
 /// every on-floor arrival before checking its queue again.
 pub const DWELL: f64 = 1.0;
 
-/// Float-compare tolerance used for queue matching, duplicate suppression,
-/// and the on-a-floor test (original `epsilonEquals`).
+/// Float-compare tolerance used for destination matching and the
+/// on-a-floor test (original `epsilonEquals`).
 const EPSILON: f64 = 1e-8;
 
-/// One elevator: physics state, destination queue, dwell timer, and
+/// One elevator: physics state, its one destination, dwell timer, and
 /// per-elevator bookkeeping. Minted by the world; commands go through
 /// [`crate::World`] so emitted events land in the world's queue.
 #[derive(Debug, Clone)]
@@ -43,7 +43,12 @@ pub struct Elevator {
     velocity_y: f64,
     destination_y: f64,
     is_moving: bool,
-    destination_queue: Vec<f64>,
+    /// The floor the current trip goes to; `None` once the car arrived or
+    /// stopped. One trip at a time: a new one replaces it.
+    destination: Option<f64>,
+    /// A re-arrival at the floor the car stands on is due: a rider
+    /// re-pressed a call the standing car can answer.
+    reopen: bool,
     /// Seconds spent so far in the current dwell, if one is running.
     dwell_spent: Option<f64>,
     /// Cached rounded floor; [`Self::move_count`] increments when it changes.
@@ -73,7 +78,8 @@ impl Elevator {
             velocity_y: 0.0,
             destination_y: y,
             is_moving: false,
-            destination_queue: Vec::new(),
+            destination: None,
+            reopen: false,
             dwell_spent: None,
             current_floor: 0,
             previous_trunc_future_floor: 0,
@@ -106,23 +112,9 @@ impl Elevator {
         self.current_floor.max(0) as usize
     }
 
-    /// Queued destination floor levels, front first.
-    pub fn destination_queue(&self) -> &[f64] {
-        &self.destination_queue
-    }
-
-    /// Replaces the destination queue wholesale - the scripting API's
-    /// `destinationQueue` reassignment idiom. Entries are clamped to the
-    /// building exactly like [`Self::go_to_floor`]; the queue is *not*
-    /// re-checked (callers follow with
-    /// [`crate::World::check_destination_queue`], as the original
-    /// documents).
-    pub fn set_destination_queue(&mut self, queue: Vec<f64>) {
-        let top = (self.floor_count - 1) as f64;
-        self.destination_queue = queue
-            .into_iter()
-            .map(|level| level.clamp(0.0, top))
-            .collect();
+    /// The floor level the current trip goes to, if the car has one.
+    pub fn destination(&self) -> Option<f64> {
+        self.destination
     }
 
     /// Direction of travel toward the current physical destination, or
@@ -222,49 +214,53 @@ impl Elevator {
             .collect()
     }
 
-    /// Queues a destination. `floor` is clamped to `[0, floor_count - 1]`.
-    /// Duplicate suppression checks only the *adjacent* queue element:
-    /// front if `force`, back otherwise (epsilon compare). `force`
-    /// unshifts, default pushes; then the queue is checked.
-    pub(crate) fn go_to_floor(&mut self, floor: f64, force: bool, events: &mut Vec<Event>) {
+    /// Starts a trip to `floor`, clamped to `[0, floor_count - 1]`,
+    /// replacing the current one. Asking again for the floor the trip
+    /// already goes to changes nothing. A dwelling car leaves when its
+    /// doors close.
+    pub(crate) fn go_to_floor(&mut self, floor: f64, events: &mut Vec<Event>) {
         let floor = floor.clamp(0.0, (self.floor_count - 1) as f64);
-        let adjacent = if force {
-            self.destination_queue.first()
-        } else {
-            self.destination_queue.last()
-        };
-        if let Some(&adjacent) = adjacent
-            && epsilon_equals(adjacent, floor)
+        if self
+            .destination
+            .is_some_and(|destination| epsilon_equals(destination, floor))
         {
             return;
         }
-        if force {
-            self.destination_queue.insert(0, floor);
-        } else {
-            self.destination_queue.push(floor);
-        }
-        self.check_destination_queue(events);
+        self.destination = Some(floor);
+        self.proceed(events);
     }
 
-    /// Clears the queue. If not busy, commands a halt at the projected
-    /// stop point - generally *between* floors, so no arrival events and
-    /// no dwell. During a dwell this only clears the queue.
+    /// Ends the current trip. If not busy, commands a halt at the
+    /// projected stop point - generally *between* floors, so no arrival
+    /// events and no dwell. During a dwell this only drops the trip.
     pub(crate) fn stop(&mut self) {
-        self.destination_queue.clear();
+        self.destination = None;
+        self.reopen = false;
         if !self.is_busy() {
             let target = self.exact_future_floor_if_stopped();
             self.move_to_level(target);
         }
     }
 
-    /// If not busy: a non-empty queue starts movement to its front; an
-    /// empty queue emits [`Event::Idle`].
-    pub(crate) fn check_destination_queue(&mut self, events: &mut Vec<Event>) {
+    /// Asks the standing car for a re-arrival at its floor, ahead of its
+    /// trip: the original's forced `goToFloor` of the current floor.
+    pub(crate) fn reopen(&mut self, events: &mut Vec<Event>) {
+        self.reopen = true;
+        self.proceed(events);
+    }
+
+    /// If not busy: a due re-arrival, else the trip, starts movement;
+    /// with neither, the car emits [`Event::Idle`].
+    fn proceed(&mut self, events: &mut Vec<Event>) {
         if self.is_busy() {
             return;
         }
-        match self.destination_queue.first() {
-            Some(&level) => self.move_to_level(level),
+        if self.reopen {
+            self.move_to_level(self.current_floor() as f64);
+            return;
+        }
+        match self.destination {
+            Some(level) => self.move_to_level(level),
             None => events.push(Event::Idle { elevator: self.id }),
         }
     }
@@ -316,14 +312,14 @@ impl Elevator {
 
     /// Advances the dwell timer (the original's movable task update, run
     /// each substep *before* physics). Completion - strictly past
-    /// [`DWELL`] - re-checks the queue, so the next destination or an
-    /// [`Event::Idle`] follows in this same substep.
+    /// [`DWELL`] - proceeds, so the next trip or an [`Event::Idle`]
+    /// follows in this same substep.
     pub(crate) fn update_tasks(&mut self, dt: f64, events: &mut Vec<Event>) {
         if let Some(spent) = &mut self.dwell_spent {
             *spent += dt;
             if *spent > DWELL {
                 self.dwell_spent = None;
-                self.check_destination_queue(events);
+                self.proceed(events);
             }
         }
     }
@@ -431,8 +427,8 @@ impl Elevator {
         self.previous_trunc_future_floor = trunc_future;
     }
 
-    /// Snaps onto the destination and runs the arrival sequence: the
-    /// queue-head shift and dwell start happen *here*, synchronously -
+    /// Snaps onto the destination and runs the arrival sequence: ending
+    /// the trip and starting the dwell happen *here*, synchronously -
     /// before the driver ever sees [`Event::StoppedAtFloor`] - matching
     /// the original's `stopped` reaction firing ahead of
     /// `stopped_at_floor`. Exit/boarding stay staged for
@@ -444,17 +440,18 @@ impl Elevator {
         self.is_moving = false;
 
         let stopped_at = self.exact_floor();
-        if let Some(&head) = self.destination_queue.first()
-            && epsilon_equals(head, stopped_at)
+        if self.reopen {
+            self.reopen = false;
+            self.dwell_spent = Some(0.0);
+        } else if self
+            .destination
+            .is_some_and(|destination| epsilon_equals(destination, stopped_at))
         {
-            self.destination_queue.remove(0);
-            if self.is_on_a_floor() {
-                self.dwell_spent = Some(0.0);
-            } else {
-                // A user-inserted fractional destination: no dwell,
-                // check the queue immediately.
-                self.check_destination_queue(events);
-            }
+            self.destination = None;
+            self.dwell_spent = Some(0.0);
+        } else {
+            // A halt after `stop`: the car has nothing left to do.
+            self.proceed(events);
         }
 
         if self.is_on_a_floor() {

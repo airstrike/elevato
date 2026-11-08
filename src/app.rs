@@ -1,6 +1,7 @@
 //! The application: a splash screen that hands off - via a measured
 //! viewport width - to the game screen: challenge toolbar, stats bar,
-//! sim canvas, and the editor pane, a thin TEA shell over
+//! the program's view of the building, and the editor pane, a thin TEA
+//! shell over
 //! [`crate::playback::Playback`] composed with the [`crate::editor`]
 //! cell.
 
@@ -9,13 +10,13 @@ use iced::keyboard::{self, key::Named};
 use iced::mouse;
 use iced::time::{self, milliseconds};
 use iced::widget::{
-    Id, button, canvas, center, column, container, pick_list, row, selector, space, stack, text,
+    Id, button, center, column, container, pick_list, row, selector, space, stack, text,
     text_editor,
 };
 use iced::window;
 use iced::{Center, Element, Fill, Length, Pixels, Subscription, Task};
 
-use elevato_api::Elevator;
+use elevato_api::Building;
 
 use crate::core::challenge::{Condition, Outcome};
 use crate::docs;
@@ -23,7 +24,6 @@ use crate::editor;
 use crate::icon;
 use crate::playback::{self, Playback, Program};
 use crate::reload;
-use crate::sim;
 use crate::storage;
 use crate::theme;
 use crate::widget::pointer::pointer;
@@ -58,8 +58,6 @@ struct Game {
     editor: editor::State,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
-    /// Cached world geometry; cleared whenever the world changes.
-    cache: canvas::Cache,
     /// The divider position of the workspace split, in pixels from the
     /// left; seeded from the measured viewport, `None` splits in half.
     divider: Option<Pixels>,
@@ -170,23 +168,27 @@ pub enum Message {
     Resized(f32),
     /// An editor pane message.
     Editor(editor::Message),
+    /// A message the program's view produced, for the program.
+    Program(playback::Input),
     /// rawr reported what it did with a save of the program.
     Reloaded(reload::Outcome),
 }
 
-/// Opens the game with the player's program steering the elevators:
-/// the program's `new`, `update` and `subscription`, as
+/// Opens the game with the player's program running the elevators:
+/// the program's `new`, `update`, `view` and `subscription`, as
 /// [`iced::application`] takes an application's. Every attempt boots the
-/// program afresh on the challenge's world, and the game hosts it as
-/// its child.
-pub fn run<P, M>(
-    new: impl Fn(Vec<Elevator>, usize) -> (P, Task<M>) + 'static,
-    update: impl Fn(&mut P, M) -> Task<M> + Clone + 'static,
+/// program afresh on the challenge's building, and the game hosts it as
+/// its child, its view where the building shows.
+pub fn run<P, M, V>(
+    new: impl Fn(usize) -> (P, Task<M>) + 'static,
+    update: impl Fn(&mut P, M, &Building) -> Task<M> + Clone + 'static,
+    view: V,
     subscription: impl Fn(&P) -> Subscription<M> + Clone + 'static,
 ) -> iced::Result
 where
     P: 'static,
     M: Send + 'static,
+    V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M> + Clone + 'static,
 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -203,8 +205,8 @@ where
         ..iced::Settings::default()
     };
 
-    let program = Program::new(new, update, subscription);
-    iced::application(move || boot(program.clone()), self::update, view)
+    let program = Program::new(new, update, view, subscription);
+    iced::application(move || boot(program.clone()), self::update, self::view)
         .settings(settings)
         .subscription(self::subscription)
         .theme(theme)
@@ -276,13 +278,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             (Screen::Splash, _) => {}
             (Screen::Game(game), outcome) => return game.update(Message::Reloaded(outcome)),
         },
-        Message::ToggleMode => {
-            app.mode = app.mode.toggle();
-            // Cached geometry bakes the old palette in; force a redraw.
-            if let Screen::Game(game) = &mut app.screen {
-                game.cache.clear();
-            }
-        }
+        Message::ToggleMode => app.mode = app.mode.toggle(),
         message => {
             if let Screen::Game(game) = &mut app.screen {
                 return game.update(message);
@@ -433,7 +429,6 @@ impl Game {
             playback,
             editor: editor::State::new(&code),
             choices,
-            cache: canvas::Cache::default(),
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
             tab: Tab::Player,
             docs: docs::State::new(),
@@ -447,27 +442,23 @@ impl Game {
         match message {
             Message::Tick => {
                 self.playback.tick();
-                self.cache.clear();
             }
             Message::Toggle => self.playback.toggle(),
             Message::Restart => {
                 self.playback.restart();
-                self.cache.clear();
             }
             Message::NextChallenge => {
                 self.playback.next_challenge();
-                self.cache.clear();
             }
             Message::ChallengePicked(choice) => {
                 self.playback.select_challenge(choice.index);
-                self.cache.clear();
             }
             Message::SpeedUp => self.playback.speed_up(),
             Message::SlowDown => self.playback.slow_down(),
             Message::PreviousChallenge => {
                 self.playback.previous_challenge();
-                self.cache.clear();
             }
+            Message::Program(input) => self.playback.send(input),
             Message::SplitResized(position) => self.divider = Some(position),
             Message::Tab(tab) => self.tab = tab,
             Message::DocsBack => {
@@ -556,7 +547,6 @@ impl Game {
                         if !self.playback.is_running() {
                             self.playback.toggle();
                         }
-                        self.cache.clear();
                     }
                     reload::Outcome::Queued
                     | reload::Outcome::Restarting(_)
@@ -681,16 +671,17 @@ impl Game {
         .into()
     }
 
-    /// The running world: the sim canvas with the end-of-run banner
-    /// stacked over it once the challenge decides.
+    /// The running world: the program's view of the building, with the
+    /// end-of-run banner stacked over it once the challenge decides.
     fn player_face(&self) -> Element<'_, Message> {
-        let world = canvas(sim::View::new(&self.playback, &self.cache))
-            .width(Fill)
-            .height(Fill);
+        let world: Element<'_, Message> = match self.playback.view() {
+            Some(view) => view.map(Message::Program),
+            None => space().into(),
+        };
         if self.playback.ended() {
             stack![world, center(banner(&self.playback))].into()
         } else {
-            world.into()
+            world
         }
     }
 

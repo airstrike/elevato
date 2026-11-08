@@ -6,10 +6,12 @@
 //!
 //! Each car is its own small iced component: [`Car`] owns its stops and
 //! its `update` takes an [`elevator::Message`]; the program routes each
-//! car's messages to it and maps its tasks back.
+//! car's messages to it and maps its tasks back. A car makes one trip at
+//! a time, to its first stop; a stop it should make on the way replaces
+//! that trip.
 
-use elevato::{Direction, Elevator, elevator, floor};
-use iced::{Function, Subscription, Task};
+use elevato::{Building, Direction, Elevator, elevator, floor};
+use iced::{Element, Function, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -23,31 +25,35 @@ pub enum Message {
     Floor(usize, floor::Message),
 }
 
-/// One car: where it is, the stops it will make in order, and how many
-/// of them it has already been sent toward.
+/// One car: where it is, the stops it will make in order, and the stop
+/// it is on its way to.
 struct Car {
     elevator: Elevator,
     at: usize,
     stops: Vec<usize>,
-    sent: usize,
+    heading: Option<usize>,
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
-        let lobby = 0;
-        let cars = elevators
-            .into_iter()
-            .map(|elevator| Car::new(elevator, lobby))
-            .collect();
+    pub fn new(elevators: usize) -> (Self, Task<Message>) {
+        let (cars, starts): (Vec<Car>, Vec<Task<Message>>) = (0..elevators)
+            .map(|_| {
+                let (elevator, start) = Elevator::new();
+                (
+                    Car::new(elevator),
+                    start.map(Message::Elevator.with(elevator)),
+                )
+            })
+            .unzip();
         let program = Self {
             cars,
             ups: Vec::new(),
             downs: Vec::new(),
         };
-        (program, Task::none())
+        (program, Task::batch(starts))
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message, _building: &Building) -> Task<Message> {
         match message {
             Message::Floor(floor, floor::Message::UpButtonPressed) => {
                 insert_sorted(&mut self.ups, floor);
@@ -65,6 +71,10 @@ impl Program {
                 Task::batch([task, self.claim()])
             }
         }
+    }
+
+    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+        elevato::view(building)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -92,18 +102,21 @@ impl Program {
 }
 
 impl Car {
-    fn new(elevator: Elevator, at: usize) -> Self {
+    fn new(elevator: Elevator) -> Self {
         Self {
             elevator,
-            at,
+            at: 0,
             stops: Vec::new(),
-            sent: 0,
+            heading: None,
         }
     }
 
     fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
         match message {
-            elevator::Message::Idle => Task::none(),
+            elevator::Message::Idle => {
+                self.heading = None;
+                self.next()
+            }
             elevator::Message::FloorButtonPressed(floor) => self.drop_off(floor),
             elevator::Message::PassingFloor(floor, _) => {
                 self.at = floor;
@@ -111,9 +124,9 @@ impl Car {
             }
             elevator::Message::StoppedAtFloor { floor, .. } => {
                 self.at = floor;
-                if let Some(index) = self.stops.iter().position(|&stop| stop == floor) {
-                    let _ = self.stops.remove(index);
-                    self.sent -= 1;
+                if self.heading == Some(floor) {
+                    self.heading = None;
+                    self.stops.retain(|&stop| stop != floor);
                 }
                 self.next()
             }
@@ -137,12 +150,12 @@ impl Car {
             return Task::none();
         }
         let between = |a: usize, b: usize| (a <= floor && floor <= b) || (b <= floor && floor <= a);
-        match self.stops.first() {
-            Some(&next) if self.sent > 0 && between(self.at, next) => {
+        match self.heading {
+            Some(next) if between(self.at, next) => {
                 // On the way to the stop it was sent to: stop here first.
                 self.stops.insert(0, floor);
-                self.sent += 1;
-                Task::batch([self.indicate(), self.elevator.go_to_floor_first(floor)])
+                self.heading = Some(floor);
+                Task::batch([self.indicate(), self.elevator.go_to_floor(floor)])
             }
             _ => {
                 let mut from = self.stops.first().copied().unwrap_or(self.at);
@@ -163,7 +176,7 @@ impl Car {
     /// Sends the car toward its first stop when it is not on its way to
     /// one, lamps lit for the way it goes from there.
     fn next(&mut self) -> Task<elevator::Message> {
-        if self.sent > 0 {
+        if self.heading.is_some() {
             return self.indicate();
         }
         let Some(&stop) = self.stops.first() else {
@@ -172,7 +185,7 @@ impl Car {
                 self.elevator.set_going_down_indicator(true),
             ]);
         };
-        self.sent = 1;
+        self.heading = Some(stop);
         Task::batch([self.indicate(), self.elevator.go_to_floor(stop)])
     }
 

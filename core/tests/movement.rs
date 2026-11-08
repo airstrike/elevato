@@ -10,10 +10,14 @@ use elevato_core::floor;
 use elevato_core::world::DT_MAX;
 
 /// A spawnless world (spawn rate 0, perpetual condition) so trajectories
-/// stay free of passenger noise.
+/// stay free of passenger noise, with every car added and their first
+/// `Idle`s drained.
 fn quiet_world(floors: usize, elevators: usize) -> World {
     let challenge = Challenge::new(floors, elevators, vec![4], 0.0, Condition::Demo).unwrap();
-    World::new(&challenge, 0)
+    let mut world = World::new(&challenge, 0);
+    while world.add_elevator().is_some() {}
+    let _ = world.drain_events();
+    world
 }
 
 /// One driver iteration: step, drain, process arrivals, drain again.
@@ -58,7 +62,7 @@ fn drive_until_arrival(world: &mut World, max_substeps: usize) -> (Vec<(f64, Eve
 #[test]
 fn a_zero_to_three_trip_matches_analytic_kinematics_with_three_moves_and_a_one_second_dwell() {
     let mut world = quiet_world(4, 1);
-    world.go_to_floor(0, 3.0, false);
+    world.go_to_floor(0, 3.0);
     let start_y = world.elevators()[0].y();
     assert_eq!(start_y, 150.0);
 
@@ -118,9 +122,9 @@ fn a_zero_to_three_trip_matches_analytic_kinematics_with_three_moves_and_a_one_s
         "trip took {t_arrival:.4} s"
     );
 
-    // Dwell: a destination queued during the dwell departs only after
-    // 1.0 s of doors-open time.
-    world.go_to_floor(0, 0.0, false);
+    // Dwell: a trip started during the dwell departs only after 1.0 s of
+    // doors-open time.
+    world.go_to_floor(0, 0.0);
     assert!(world.elevators()[0].is_busy());
     let mut t_departure = None;
     for n in 1..=120 {
@@ -147,7 +151,7 @@ fn a_zero_to_three_trip_matches_analytic_kinematics_with_three_moves_and_a_one_s
 #[test]
 fn passing_floor_fires_for_intermediate_floors_only() {
     let mut world = quiet_world(4, 1);
-    world.go_to_floor(0, 3.0, false);
+    world.go_to_floor(0, 3.0);
 
     let (events, _) = drive_until_arrival(&mut world, 6 * 60);
     let passings: Vec<(usize, Direction)> = events
@@ -168,18 +172,19 @@ fn passing_floor_fires_for_intermediate_floors_only() {
 
 #[test]
 fn go_to_floor_issued_while_draining_idle_takes_effect_in_the_same_iteration() {
-    let mut world = quiet_world(4, 1);
+    let challenge = Challenge::new(4, 1, vec![4], 0.0, Condition::Demo).unwrap();
+    let mut world = World::new(&challenge, 0);
 
-    // The driver fires the initial queue check (world.init in the original).
-    world.check_destination_queue(0);
+    // A new car says it is idle.
+    assert_eq!(world.add_elevator(), Some(0));
     let drained = world.drain_events();
     assert_eq!(drained, vec![Event::Idle { elevator: 0 }]);
 
     // Responding to Idle mid-drain starts movement synchronously...
-    world.go_to_floor(0, 2.0, false);
+    world.go_to_floor(0, 2.0);
     let elevator = &world.elevators()[0];
     assert!(elevator.is_moving());
-    assert_eq!(elevator.destination_queue(), &[2.0]);
+    assert_eq!(elevator.destination(), Some(2.0));
 
     // ...so the very next substep accelerates it (velocity integrates
     // into position one substep later - velocity-before-acceleration
@@ -193,9 +198,9 @@ fn go_to_floor_issued_while_draining_idle_takes_effect_in_the_same_iteration() {
 }
 
 #[test]
-fn stop_mid_flight_halts_between_floors_with_no_arrival_events_and_no_dwell() {
+fn stop_mid_flight_halts_between_floors_idle_with_no_arrival_and_no_dwell() {
     let mut world = quiet_world(4, 1);
-    world.go_to_floor(0, 3.0, false);
+    world.go_to_floor(0, 3.0);
 
     // Reach cruising speed, then stop.
     let mut t = 0.0;
@@ -204,9 +209,9 @@ fn stop_mid_flight_halts_between_floors_with_no_arrival_events_and_no_dwell() {
         substep(&mut world, t);
     }
     world.stop(0);
-    assert!(world.elevators()[0].destination_queue().is_empty());
+    assert_eq!(world.elevators()[0].destination(), None);
 
-    // Run well past the halt: it must settle between floors, silently.
+    // Run well past the halt: it must settle between floors, then idle.
     let mut post_stop_events = Vec::new();
     for _ in 0..(3 * 60) {
         t += DT_MAX;
@@ -224,35 +229,48 @@ fn stop_mid_flight_halts_between_floors_with_no_arrival_events_and_no_dwell() {
         (exact - exact.round()).abs() > 0.05,
         "halted at {exact:.4}, which is on a floor"
     );
-    assert_eq!(post_stop_events, vec![], "a stop() halt emits nothing");
+    let post_stop_events: Vec<Event> = post_stop_events
+        .into_iter()
+        .map(|(_, event)| event)
+        .collect();
+    assert_eq!(
+        post_stop_events,
+        vec![Event::Idle { elevator: 0 }],
+        "a stop() halt arrives nowhere and leaves the car idle"
+    );
 }
 
 #[test]
-fn duplicate_suppression_checks_only_the_adjacent_queue_element() {
+fn a_new_trip_replaces_the_current_one() {
     let mut world = quiet_world(4, 1);
 
-    world.go_to_floor(0, 2.0, false);
-    world.go_to_floor(0, 2.0, false);
-    assert_eq!(world.elevators()[0].destination_queue(), &[2.0]);
+    world.go_to_floor(0, 2.0);
+    world.go_to_floor(0, 2.0);
+    assert_eq!(world.elevators()[0].destination(), Some(2.0));
 
-    world.go_to_floor(0, 3.0, false);
-    world.go_to_floor(0, 2.0, false);
-    assert_eq!(world.elevators()[0].destination_queue(), &[2.0, 3.0, 2.0]);
+    world.go_to_floor(0, 3.0);
+    assert_eq!(world.elevators()[0].destination(), Some(3.0));
 
-    // Forced entries compare against the queue front instead.
-    world.go_to_floor(0, 2.0, true);
-    assert_eq!(world.elevators()[0].destination_queue(), &[2.0, 3.0, 2.0]);
-    world.go_to_floor(0, 1.0, true);
-    assert_eq!(
-        world.elevators()[0].destination_queue(),
-        &[1.0, 2.0, 3.0, 2.0]
+    let (events, _) = drive_until_arrival(&mut world, 6 * 60);
+    assert!(events.iter().any(|(_, event)| *event
+        == Event::StoppedAtFloor {
+            elevator: 0,
+            floor: 3
+        }));
+    assert!(
+        !events.iter().any(|(_, event)| *event
+            == Event::StoppedAtFloor {
+                elevator: 0,
+                floor: 2
+            }),
+        "the replaced trip's floor is passed, not stopped at"
     );
 }
 
 #[test]
 fn idle_fires_one_second_after_the_last_arrival() {
     let mut world = quiet_world(4, 1);
-    world.go_to_floor(0, 1.0, false);
+    world.go_to_floor(0, 1.0);
 
     let (_, samples) = drive_until_arrival(&mut world, 6 * 60);
     let (t_arrival, _, _) = *samples.last().unwrap();
@@ -269,26 +287,26 @@ fn idle_fires_one_second_after_the_last_arrival() {
             break;
         }
     }
-    let after = t_idle.expect("an empty queue must go idle after the dwell") - t_arrival;
+    let after = t_idle.expect("a car with no trip must go idle after the dwell") - t_arrival;
     assert!((0.98..=1.06).contains(&after), "idle after {after:.4} s");
 }
 
 #[test]
-fn stop_during_a_dwell_only_clears_the_queue() {
+fn stop_during_a_dwell_only_drops_the_trip() {
     let mut world = quiet_world(4, 1);
-    world.go_to_floor(0, 1.0, false);
+    world.go_to_floor(0, 1.0);
     let (_, samples) = drive_until_arrival(&mut world, 6 * 60);
     let (t_arrival, _, _) = *samples.last().unwrap();
 
-    world.go_to_floor(0, 3.0, false);
-    assert_eq!(world.elevators()[0].destination_queue(), &[3.0]);
+    world.go_to_floor(0, 3.0);
+    assert_eq!(world.elevators()[0].destination(), Some(3.0));
 
     world.stop(0);
     let elevator = &world.elevators()[0];
-    assert!(elevator.destination_queue().is_empty());
+    assert_eq!(elevator.destination(), None);
     assert!(elevator.is_busy(), "stop() during a dwell keeps the dwell");
 
-    // With nothing queued, the dwell ends in idleness, still on floor 1.
+    // With no trip, the dwell ends in idleness, still on floor 1.
     let mut saw_idle = false;
     for n in 1..=120 {
         let t = t_arrival + n as f64 * DT_MAX;
@@ -304,13 +322,12 @@ fn stop_during_a_dwell_only_clears_the_queue() {
 }
 
 #[test]
-fn a_forced_go_to_floor_at_the_current_floor_causes_a_re_arrival() {
+fn reopening_a_standing_car_causes_a_re_arrival() {
     let mut world = quiet_world(4, 1);
 
-    // Standing at floor 0; the world's Phase 3 re-arrival rule issues
-    // exactly this command when a call button is pressed beside a parked
-    // elevator.
-    world.go_to_floor(0, 0.0, true);
+    // Standing at floor 0; the world's re-arrival rule does this when a
+    // call button is pressed beside a parked elevator.
+    world.reopen(0);
     let events = substep(&mut world, DT_MAX);
     assert!(
         events.iter().any(|(_, event)| *event
@@ -338,7 +355,7 @@ fn pressing_an_in_elevator_button_emits_once_and_arrival_clears_it() {
     );
     assert_eq!(world.elevators()[0].pressed_floors(), vec![2]);
 
-    world.go_to_floor(0, 2.0, false);
+    world.go_to_floor(0, 2.0);
     drive_until_arrival(&mut world, 6 * 60);
     assert_eq!(world.elevators()[0].pressed_floors(), Vec::<usize>::new());
 }

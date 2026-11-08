@@ -22,6 +22,13 @@
 //! events they raise (e.g. an immediate `Idle`) land in the queue for the
 //! next drain.
 //!
+//! # Cars
+//!
+//! A world starts with no cars. [`World::add_elevator`] adds the next car
+//! of the challenge's bank, standing idle at the lobby, until the bank is
+//! used up. Each car makes one trip at a time: a new trip replaces the
+//! current one.
+//!
 //! # Step order
 //!
 //! [`World::step`] mirrors the original `world.update`: advance elapsed →
@@ -34,10 +41,10 @@
 //!
 //! # Staged arrivals
 //!
-//! When a step lands an elevator exactly on a floor, the queue-head shift
-//! and the 1 s dwell start happen synchronously inside the step (the
+//! When a step lands an elevator exactly on a floor, the trip's end and
+//! the 1 s dwell start happen synchronously inside the step (the
 //! original's `stopped` reaction runs *before* `stopped_at_floor` fires),
-//! so `StoppedAtFloor` handlers observe a busy, already-shifted elevator -
+//! so `StoppedAtFloor` handlers observe a busy elevator with no trip -
 //! but the arrival stays staged until [`World::process_arrivals`], which
 //! clears matching floor call buttons, lets riders exit, and boards
 //! waiting passengers, strictly after `StoppedAtFloor` handlers ran.
@@ -47,8 +54,8 @@
 //! `PassingFloor` is emitted during a step but dispatched at the next
 //! drain, one substep after detection. That delay is tolerated by design:
 //! the 5% braking-engage margin at top speed (~3.25 px) exceeds one
-//! substep's drift (~2.2 px), so a `go_to_floor(floor, force)` issued from
-//! the handler still stops in time.
+//! substep's drift (~2.2 px), so a `go_to_floor(floor)` issued from the
+//! handler still stops in time.
 
 use crate::challenge::{Challenge, Condition, Outcome};
 use crate::elevator::Elevator;
@@ -66,10 +73,13 @@ pub const DT_MAX: f64 = 1.0 / 60.0;
 /// A deterministic, headless elevator world, minted from a validated
 /// [`Challenge`] and a seed (`transformation-method`: the challenge is
 /// the proof bundle, so construction cannot fail).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct World {
     floors: Vec<Floor>,
     elevators: Vec<Elevator>,
+    /// The capacity of each car the challenge's bank can still add, in
+    /// order.
+    bank: Vec<usize>,
     passengers: Vec<Passenger>,
     events: Vec<Event>,
     pending_arrivals: Vec<usize>,
@@ -85,9 +95,10 @@ pub struct World {
 }
 
 impl World {
-    /// Mints a world from a challenge: floors, elevators standing at
-    /// floor 0 with capacities cycling `capacities[i % len]`, the seeded
-    /// spawn stream, and the challenge's condition ready to evaluate.
+    /// Mints a world from a challenge: floors, the bank of cars
+    /// [`World::add_elevator`] adds from (capacities cycling
+    /// `capacities[i % len]`), the seeded spawn stream, and the
+    /// challenge's condition ready to evaluate. No car stands in it yet.
     pub fn new(challenge: &Challenge, seed: u64) -> Self {
         let floor_count = challenge.floor_count();
         let spawn_rate = challenge.spawn_rate();
@@ -95,8 +106,9 @@ impl World {
             floors: (0..floor_count)
                 .map(|level| Floor::new(level, floor_count))
                 .collect(),
-            elevators: (0..challenge.elevator_count())
-                .map(|id| Elevator::new(id, floor_count, challenge.capacity(id)))
+            elevators: Vec::new(),
+            bank: (0..challenge.elevator_count())
+                .map(|id| challenge.capacity(id))
                 .collect(),
             passengers: Vec::new(),
             events: Vec::new(),
@@ -208,18 +220,37 @@ impl World {
         }
     }
 
-    /// Queues a destination for an elevator; see
-    /// [`Elevator::destination_queue`] for the resulting queue. `force`
-    /// puts it at the front of the queue.
-    pub fn go_to_floor(&mut self, elevator: usize, floor: f64, force: bool) {
+    /// How many cars the challenge's bank holds, added or not.
+    pub fn bank_size(&self) -> usize {
+        self.elevators.len() + self.bank.len()
+    }
+
+    /// Adds the bank's next car, standing idle at the lobby, and raises
+    /// its [`Event::Idle`]. `None` once every car of the bank stands in
+    /// the world.
+    pub fn add_elevator(&mut self) -> Option<usize> {
+        if self.bank.is_empty() {
+            return None;
+        }
+        let capacity = self.bank.remove(0);
+        let id = self.elevators.len();
+        self.elevators
+            .push(Elevator::new(id, self.floors.len(), capacity));
+        self.events.push(Event::Idle { elevator: id });
+        Some(id)
+    }
+
+    /// Starts a trip for an elevator, replacing its current one; see
+    /// [`Elevator::destination`].
+    pub fn go_to_floor(&mut self, elevator: usize, floor: f64) {
         let elevator = self
             .elevators
             .get_mut(elevator)
             .expect("invariant: elevator index from this world");
-        elevator.go_to_floor(floor, force, &mut self.events);
+        elevator.go_to_floor(floor, &mut self.events);
     }
 
-    /// Clears an elevator's queue and, unless it is dwelling, halts it at
+    /// Ends an elevator's trip and, unless it is dwelling, halts it at
     /// the projected stop point (generally between floors - no arrival
     /// events, no dwell).
     pub fn stop(&mut self, elevator: usize) {
@@ -230,16 +261,14 @@ impl World {
         elevator.stop();
     }
 
-    /// Re-checks an elevator's destination queue: starts movement toward
-    /// the front, or emits [`Event::Idle`] if the queue is empty (and the
-    /// elevator is not busy). The driver calls this for every elevator at
-    /// challenge start to fire the initial idle round.
-    pub fn check_destination_queue(&mut self, elevator: usize) {
+    /// Asks a standing car for a re-arrival at its floor, ahead of its
+    /// trip, so a rider who re-pressed the call beside it can board.
+    pub fn reopen(&mut self, elevator: usize) {
         let elevator = self
             .elevators
             .get_mut(elevator)
             .expect("invariant: elevator index from this world");
-        elevator.check_destination_queue(&mut self.events);
+        elevator.reopen(&mut self.events);
     }
 
     /// Presses an in-elevator destination button (passengers do this
@@ -331,7 +360,7 @@ impl World {
     /// The re-arrival rule (original `handleButtonRepressing`): scan the
     /// elevators in a random-rotation order for one standing still on
     /// this exact floor, not full, with the matching direction indicator
-    /// on - and issue it a forced `go_to_floor`, causing a re-arrival the
+    /// on - and reopen it, causing a re-arrival the
     /// presser can board. The rotation offset is drawn once per scan.
     fn dispatch_standing_elevator(&mut self, level: usize, direction: Direction) {
         let count = self.elevators.len();
@@ -349,7 +378,7 @@ impl World {
                 && !elevator.is_moving()
                 && !elevator.is_full()
             {
-                self.elevators[id].go_to_floor(level as f64, true, &mut self.events);
+                self.reopen(id);
                 return;
             }
         }

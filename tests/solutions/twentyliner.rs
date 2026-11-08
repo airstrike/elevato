@@ -4,11 +4,11 @@
 //! lobby up call, +0, has sign 0 and only a car with no direction takes
 //! it - a faithful quirk). A car under half load considers the calls
 //! along its direction; the nearest useful floor wins, the call is
-//! claimed, and the car is stopped and sent there with its lamps set to
-//! match.
+//! claimed, and the car is sent there with its lamps set to match: its
+//! one trip, replacing whatever trip it was on.
 
-use elevato::{Elevator, elevator, floor};
-use iced::{Function, Subscription, Task};
+use elevato::{Building, Elevator, elevator, floor};
+use iced::{Element, Function, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -36,26 +36,29 @@ struct Car {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
-        let cars = elevators
-            .into_iter()
-            .map(|elevator| Car {
-                elevator,
-                at: 0,
-                pressed: Vec::new(),
-                load_factor: 0.0,
-                target: None,
-                lamps: (true, true),
+    pub fn new(elevators: usize) -> (Self, Task<Message>) {
+        let (cars, starts): (Vec<Car>, Vec<Task<Message>>) = (0..elevators)
+            .map(|_| {
+                let (elevator, start) = Elevator::new();
+                let car = Car {
+                    elevator,
+                    at: 0,
+                    pressed: Vec::new(),
+                    load_factor: 0.0,
+                    target: None,
+                    lamps: (true, true),
+                };
+                (car, start.map(Message::Elevator.with(elevator)))
             })
-            .collect();
+            .unzip();
         let program = Self {
             cars,
             calls: Vec::new(),
         };
-        (program, Task::none())
+        (program, Task::batch(starts))
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message, _building: &Building) -> Task<Message> {
         match message {
             Message::Floor(floor, floor::Message::UpButtonPressed) => {
                 self.calls.push(level(floor));
@@ -68,7 +71,7 @@ impl Program {
                     return Task::none();
                 };
                 match message {
-                    elevator::Message::Idle => {}
+                    elevator::Message::Idle => car.target = None,
                     elevator::Message::FloorButtonPressed(floor) => car.pressed.push(level(floor)),
                     elevator::Message::PassingFloor(floor, _) => car.at = level(floor),
                     elevator::Message::StoppedAtFloor {
@@ -92,6 +95,10 @@ impl Program {
         self.plan()
     }
 
+    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+        elevato::view(building)
+    }
+
     pub fn subscription(&self) -> Subscription<Message> {
         elevato::riders(Message::Elevator, Message::Floor)
     }
@@ -100,12 +107,13 @@ impl Program {
         let mut calls = self.calls.clone();
         let mut tasks = Vec::new();
         for car in &mut self.cars {
+            let at = car.at;
             // Direction: toward the last pressed floor that is not the
             // current one (the original's `.pop()`); 0 when none is.
             let mut direction = 0;
             for &pressed in &car.pressed {
-                if pressed != car.at {
-                    direction = (pressed - car.at).signum();
+                if pressed != at {
+                    direction = (pressed - at).signum();
                 }
             }
 
@@ -114,7 +122,7 @@ impl Program {
             let mut options = Vec::new();
             if car.load_factor < 0.5 {
                 for &call in &calls {
-                    let along = (call.abs() - car.at).signum();
+                    let along = (call.abs() - at).signum();
                     if direction == 0
                         || (call.signum() == direction && (along == direction || along == 0))
                     {
@@ -126,7 +134,7 @@ impl Program {
 
             // The nearest useful floor wins; later entries win ties, like
             // the original's reduce.
-            let distance = |call: i64| (call.abs() - car.at).abs();
+            let distance = |call: i64| (call.abs() - at).abs();
             let mut best: Option<i64> = None;
             for &option in &options {
                 if best.is_none_or(|best| distance(best) >= distance(option)) {
@@ -147,7 +155,6 @@ impl Program {
             let elevator = car.elevator;
             tasks.push(
                 Task::batch([
-                    elevator.stop(),
                     elevator.set_going_down_indicator(lamps.1),
                     elevator.set_going_up_indicator(lamps.0),
                     elevator.go_to_floor(best.unsigned_abs() as usize),

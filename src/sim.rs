@@ -1,12 +1,9 @@
-//! The world canvas: floor strips, elevators, and passengers drawn from
-//! the playback's world snapshot in the original's layout geometry
-//! (research §3) - floors are 50 px strips, elevators start at x = 200
-//! spaced `20 + width` apart with `width = 10 px × capacity` - uniformly
-//! scaled down to fit the canvas when the building outgrows it.
-//!
-//! The [`canvas::Cache`] lives in the app and is cleared on every tick
-//! (and on any world-replacing message); between clears the cached
-//! geometry is reused. Solid colors only - gradients no-op on wasm.
+//! The building canvas: floor strips, elevators, and passengers drawn
+//! in the original's layout geometry (research §3) - floors are 50 px
+//! strips, elevators start at x = 200 spaced `20 + width` apart with
+//! `width = 10 px × capacity` - uniformly scaled down to fit the canvas
+//! when the building outgrows it. Solid colors only - gradients no-op on
+//! wasm.
 
 use iced::widget::{canvas, text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, alignment, mouse};
@@ -14,7 +11,6 @@ use iced::{Color, Point, Rectangle, Renderer, Size, Theme, alignment, mouse};
 use crate::core::World;
 use crate::core::elevator::Elevator;
 use crate::core::floor;
-use crate::playback::Playback;
 use crate::theme;
 
 /// Left edge of the first elevator, world px (original layout).
@@ -29,58 +25,20 @@ const SLOT_WIDTH: f64 = 10.0;
 /// Screen padding around the drawn building, px.
 const MARGIN: f32 = 16.0;
 
-/// The canvas program: borrows the playback (whose world it reads only
-/// inside `draw`) and the app-owned geometry cache.
-pub struct View<'a> {
-    playback: &'a Playback,
-    cache: &'a canvas::Cache,
+/// The canvas program: a copy of the world as it stood when the view was
+/// built, drawn afresh every frame.
+pub struct View {
+    world: World,
 }
 
-impl<'a> View<'a> {
-    /// Bundles the borrows the canvas draws from.
-    pub fn new(playback: &'a Playback, cache: &'a canvas::Cache) -> Self {
-        Self { playback, cache }
-    }
-}
-
-impl<Message> canvas::Program<Message> for View<'_> {
-    type State = ();
-
-    fn draw(
-        &self,
-        _state: &Self::State,
-        renderer: &Renderer,
-        theme: &Theme,
-        bounds: Rectangle,
-        _cursor: mouse::Cursor,
-    ) -> Vec<canvas::Geometry> {
-        let geometry = self.cache.draw(renderer, bounds.size(), |frame| {
-            // No background fill: the workspace card underneath paints
-            // the (rounded) surface both panes share.
-            let palette = theme::palette(theme);
-            if let Some(world) = self.playback.world() {
-                draw_world(frame, world, palette);
-            }
-        });
-        vec![geometry]
-    }
-}
-
-/// A cacheless sibling of [`View`] that borrows a bare [`World`] -
-/// previews and tests render frozen worlds without a `Playback` or a
-/// long-lived cache (a fresh frame per draw is fine for still frames).
-pub struct Still<'a> {
-    world: &'a World,
-}
-
-impl<'a> Still<'a> {
-    /// Wraps a world to draw as-is.
-    pub fn new(world: &'a World) -> Self {
+impl View {
+    /// Draws `world` as it stands.
+    pub fn new(world: World) -> Self {
         Self { world }
     }
 }
 
-impl<Message> canvas::Program<Message> for Still<'_> {
+impl<Message> canvas::Program<Message> for View {
     type State = ();
 
     fn draw(
@@ -91,9 +49,10 @@ impl<Message> canvas::Program<Message> for Still<'_> {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        // No background fill: the workspace card underneath paints the
+        // (rounded) surface both panes share.
         let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let palette = theme::palette(theme);
-        draw_world(&mut frame, self.world, palette);
+        draw_world(&mut frame, &self.world, theme::palette(theme));
         vec![frame.into_geometry()]
     }
 }

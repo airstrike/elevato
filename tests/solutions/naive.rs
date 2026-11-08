@@ -3,12 +3,15 @@
 //! and every floor's call goes to the first car. No direction or load
 //! awareness: it clears the first few challenges only.
 //!
-//! Each car is its own small iced component: [`Car`] owns its state,
-//! its `update` takes an [`elevator::Message`], and the program routes
-//! each car's messages to it and maps its tasks back.
+//! Each car is its own small iced component: [`Car`] owns the floors it
+//! has to visit, its `update` takes an [`elevator::Message`], and the
+//! program routes each car's messages to it and maps its tasks back. A
+//! car makes one trip at a time, the next one whenever it is idle.
 
-use elevato::{Elevator, elevator, floor};
-use iced::{Function, Subscription, Task};
+use std::collections::VecDeque;
+
+use elevato::{Building, Elevator, elevator, floor};
+use iced::{Element, Function, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -20,23 +23,27 @@ pub enum Message {
     Floor(usize, floor::Message),
 }
 
-/// One car and the trips it has under way.
+/// One car and the floors it still has to visit, in the order asked.
 struct Car {
     elevator: Elevator,
-    trips: usize,
+    stops: VecDeque<usize>,
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
-        let mut cars: Vec<Car> = elevators.into_iter().map(Car::new).collect();
-        let start = Task::batch(cars.iter_mut().map(|car| {
-            let elevator = car.elevator;
-            car.go_to_floor(0).map(Message::Elevator.with(elevator))
-        }));
-        (Self { cars }, start)
+    pub fn new(elevators: usize) -> (Self, Task<Message>) {
+        let (cars, starts): (Vec<Car>, Vec<Task<Message>>) = (0..elevators)
+            .map(|_| {
+                let (elevator, start) = Elevator::new();
+                (
+                    Car::new(elevator),
+                    start.map(Message::Elevator.with(elevator)),
+                )
+            })
+            .unzip();
+        (Self { cars }, Task::batch(starts))
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message, _building: &Building) -> Task<Message> {
         match message {
             Message::Elevator(elevator, message) => {
                 let Some(car) = self.cars.iter_mut().find(|car| car.elevator == elevator) else {
@@ -45,11 +52,14 @@ impl Program {
                 car.update(message).map(Message::Elevator.with(elevator))
             }
             Message::Floor(floor, _) => {
-                let car = &mut self.cars[0];
-                let elevator = car.elevator;
-                car.go_to_floor(floor).map(Message::Elevator.with(elevator))
+                self.cars[0].visit(floor);
+                Task::none()
             }
         }
+    }
+
+    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+        elevato::view(building)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -59,25 +69,31 @@ impl Program {
 
 impl Car {
     fn new(elevator: Elevator) -> Self {
-        Self { elevator, trips: 0 }
+        Self {
+            elevator,
+            stops: VecDeque::new(),
+        }
     }
 
-    fn go_to_floor(&mut self, floor: usize) -> Task<elevator::Message> {
-        self.trips += 1;
-        self.elevator.go_to_floor(floor)
+    /// Adds a floor to visit, unless it is already the last one.
+    fn visit(&mut self, floor: usize) {
+        if self.stops.back() != Some(&floor) {
+            self.stops.push_back(floor);
+        }
     }
 
     fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
         match message {
-            elevator::Message::FloorButtonPressed(floor) => self.go_to_floor(floor),
-            elevator::Message::Idle | elevator::Message::PassingFloor(..) => Task::none(),
-            elevator::Message::StoppedAtFloor { .. } => {
-                self.trips -= 1;
-                if self.trips == 0 {
-                    self.go_to_floor(0)
-                } else {
-                    Task::none()
-                }
+            elevator::Message::Idle => {
+                let next = self.stops.pop_front().unwrap_or(0);
+                self.elevator.go_to_floor(next)
+            }
+            elevator::Message::FloorButtonPressed(floor) => {
+                self.visit(floor);
+                Task::none()
+            }
+            elevator::Message::PassingFloor(..) | elevator::Message::StoppedAtFloor { .. } => {
+                Task::none()
             }
         }
     }

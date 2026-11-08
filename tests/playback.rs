@@ -14,6 +14,7 @@ fn starter() -> Program {
     Program::new(
         starter::Program::new,
         starter::Program::update,
+        starter::Program::view,
         starter::Program::subscription,
     )
 }

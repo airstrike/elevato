@@ -1,34 +1,37 @@
-//! elevato's API: what a player's program uses to steer a bank of
+//! elevato's API: what a player's program uses to run a bank of
 //! elevators. The game re-exports it at its root, so programs name it
 //! `elevato`.
 //!
-//! A program is an iced program. Its `new` receives the challenge's
-//! elevators and floors and keeps them; its `update` folds each
-//! [`Message`](elevator::Message) into its own state and answers with
-//! [`Task`]s; its `subscription` listens to [`riders()`]. Nothing a
-//! program calls reads the simulation: everything it knows arrives as a
-//! message.
+//! A program is an iced program. Its `new` learns how many cars the
+//! challenge's bank holds and powers on the ones it wants with
+//! [`Elevator::new`]; its `update` folds each
+//! [`Message`](elevator::Message) into its own state, reading the
+//! [`Building`] as it stands, and answers with [`Task`]s; its `view`
+//! draws the building; its `subscription` listens to [`riders()`].
 //!
+//! - A car's own task, from [`Elevator::new`], says
+//!   [`elevator::Message::Idle`] whenever the car has nothing to do.
 //! - A car moves when the program runs the [`Task`] that
-//!   [`Elevator::go_to_floor`] returns. The task streams
-//!   [`elevator::Message::PassingFloor`] while the car travels and ends
-//!   with [`elevator::Message::StoppedAtFloor`], which says who got off
-//!   and who got on.
-//! - Riders are the only other source of messages: a rider calling a car
-//!   from a floor arrives as a [`floor::Message`], a rider pressing a
-//!   button inside a car as an [`elevator::Message`], both through
-//!   [`riders()`].
+//!   [`Elevator::go_to_floor`] returns: one trip at a time. The task
+//!   streams [`elevator::Message::PassingFloor`] while the car travels and
+//!   ends with [`elevator::Message::StoppedAtFloor`], which says who got
+//!   off and who got on.
+//! - Riders are the other source of messages: a rider calling a car from
+//!   a floor arrives as a [`floor::Message`], a rider pressing a button
+//!   inside a car as an [`elevator::Message`], both through [`riders()`].
 //!
 //! [`Simulation`] is the host's side: it runs a program against a
 //! challenge's world, deterministically, one frame at a time. The
-//! starter program in the game's `src/main.rs` shows a whole program.
+//! starter program in `program/src/main.rs` shows a whole program.
 
+pub mod building;
 pub mod elevator;
 pub mod floor;
 pub mod simulation;
 
 mod hub;
 
+pub use building::Building;
 pub use elevato_core::event::Direction;
 pub use elevator::Elevator;
 pub use simulation::Simulation;

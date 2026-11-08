@@ -18,9 +18,8 @@ pub enum Direction {
 /// [`crate::World::drain_events`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    /// The elevator's destination queue was checked while empty and not
-    /// busy. Fired by an explicit queue check and ~1 s after the last
-    /// arrival's dwell completes with nothing queued.
+    /// The elevator has nothing to do: fired when it is added, when its
+    /// dwell completes with no trip, and when a `stop` halts it.
     Idle { elevator: usize },
     /// The elevator is about to pass a floor it is not stopping at.
     /// Detected from the braking-distance projection: fired when

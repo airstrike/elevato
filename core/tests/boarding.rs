@@ -30,7 +30,7 @@ impl Controller for UpSweeper {
             Event::Idle { elevator } => {
                 let floors = world.floors().len();
                 let next = (world.elevators()[elevator].current_floor() + 1) % floors;
-                world.go_to_floor(elevator, next as f64, false);
+                world.go_to_floor(elevator, next as f64);
             }
             Event::PassingFloor { .. }
             | Event::FloorButtonPressed { .. }
@@ -110,7 +110,7 @@ impl Controller for Choreographer {
         for elevator in 0..world.elevators().len() {
             world.elevator_mut(elevator).set_going_up_indicator(false);
             world.elevator_mut(elevator).set_going_down_indicator(false);
-            world.go_to_floor(elevator, top, false);
+            world.go_to_floor(elevator, top);
         }
     }
 
@@ -123,7 +123,7 @@ impl Controller for Choreographer {
                     .filter(|passenger| passenger.is_waiting() && passenger.current_floor() == 0)
                     .count();
                 if waiting >= 2 {
-                    world.go_to_floor(1, 0.0, false);
+                    world.go_to_floor(1, 0.0);
                     self.stage = Stage::Park;
                 }
             }
@@ -133,11 +133,11 @@ impl Controller for Choreographer {
                     && big.is_on_a_floor()
                     && !big.is_moving()
                     && !big.is_busy()
-                    && big.destination_queue().is_empty();
+                    && big.destination().is_none();
                 if parked {
                     world.elevator_mut(0).set_going_up_indicator(true);
                     world.elevator_mut(1).set_going_up_indicator(true);
-                    world.go_to_floor(0, 0.0, false);
+                    world.go_to_floor(0, 0.0);
                     self.stage = Stage::Descend;
                 }
             }
@@ -303,10 +303,10 @@ impl Controller for Ferry {
     fn on_event(&mut self, world: &mut World, event: Event) {
         match event {
             Event::FloorButtonPressed { elevator, floor } => {
-                world.go_to_floor(elevator, floor as f64, false)
+                world.go_to_floor(elevator, floor as f64)
             }
             Event::UpButtonPressed { floor } | Event::DownButtonPressed { floor } => {
-                world.go_to_floor(0, floor as f64, false)
+                world.go_to_floor(0, floor as f64)
             }
             Event::Idle { .. } | Event::PassingFloor { .. } | Event::StoppedAtFloor { .. } => {}
         }

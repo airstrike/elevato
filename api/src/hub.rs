@@ -2,8 +2,9 @@
 //!
 //! A [`Simulation`](crate::Simulation) enters its hub around everything
 //! it runs of the program, on the thread that runs it. A command's task
-//! submits the command here when the simulation first polls it, and
-//! [`riders`] streams subscribe here when the simulation starts them.
+//! submits the command here when the simulation first polls it, a new
+//! car is handed out here, and [`riders`] streams subscribe here when the
+//! simulation starts them.
 
 use std::cell::RefCell;
 
@@ -14,42 +15,61 @@ use iced_runtime::{Task, task};
 use crate::elevator::{self, Elevator};
 use crate::floor;
 
-/// The commands submitted and the riders' subscribers.
+/// The commands submitted, the cars handed out, and the riders'
+/// subscribers.
 #[derive(Debug, Default)]
 pub(crate) struct Hub {
     commands: Vec<Command>,
+    cars: usize,
     riders: Vec<mpsc::UnboundedSender<Rider>>,
 }
 
-/// What the building tells the program unasked: a rider's press on a
-/// floor, or a car's news (a rider's press inside it, or that it is idle).
+/// Something a rider did: pressed a call button on a floor, or a
+/// destination button inside a car.
 #[derive(Debug, Clone)]
 pub(crate) enum Rider {
     /// A rider at this floor pressed a call button that was not lit.
     Floor(usize, floor::Message),
-    /// A rider in this car pressed a destination button that was not
-    /// lit, or the car has no trip left.
+    /// A rider in this car pressed a destination button that was not lit.
     Elevator(Elevator, elevator::Message),
 }
 
 /// An instruction to one car, submitted by the task that carries it.
 #[derive(Debug)]
 pub(crate) enum Command {
-    /// Queue a trip, at the front when `first`. The trip's messages go
-    /// to `sender`; `handle` aborts its task.
+    /// Put the bank's next car in the building. Its news (`Idle`) goes to
+    /// `news`, when the program listens.
+    PowerOn {
+        elevator: Elevator,
+        news: Option<mpsc::UnboundedSender<elevator::Message>>,
+    },
+    /// Start a trip, replacing the car's current one. The trip's messages
+    /// go to `sender`; `handle` aborts its task.
     GoToFloor {
         elevator: Elevator,
         floor: usize,
-        first: bool,
         sender: mpsc::UnboundedSender<elevator::Message>,
         handle: task::Handle,
     },
-    /// Halt and abort every trip.
+    /// Halt and abort the trip.
     Stop { elevator: Elevator },
     /// Set the up indicator.
     GoingUpIndicator { elevator: Elevator, on: bool },
     /// Set the down indicator.
     GoingDownIndicator { elevator: Elevator, on: bool },
+}
+
+impl Command {
+    /// The car it is for.
+    pub(crate) fn elevator(&self) -> Elevator {
+        match self {
+            Self::PowerOn { elevator, .. }
+            | Self::GoToFloor { elevator, .. }
+            | Self::Stop { elevator }
+            | Self::GoingUpIndicator { elevator, .. }
+            | Self::GoingDownIndicator { elevator, .. } => *elevator,
+        }
+    }
 }
 
 thread_local! {
@@ -89,6 +109,20 @@ where
         });
     })
     .discard()
+}
+
+/// Hands out the next car of the bank and submits its power-on, so the
+/// simulation puts it in the building before the program runs again.
+pub(crate) fn power_on(news: Option<mpsc::UnboundedSender<elevator::Message>>) -> Elevator {
+    CURRENT.with_borrow_mut(|hub| {
+        let hub = hub
+            .as_mut()
+            .expect("invariant: elevato's elevators are made inside a Simulation");
+        let elevator = Elevator::at(hub.cars);
+        hub.cars += 1;
+        hub.commands.push(Command::PowerOn { elevator, news });
+        elevator
+    })
 }
 
 /// The commands submitted since the last call, oldest first.
