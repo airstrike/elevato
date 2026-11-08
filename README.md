@@ -33,8 +33,9 @@ rawr run -p program
 Pick a challenge, press **Start**, and watch the starter program
 struggle. Then make it yours: edit the program - in the editor on the
 left, or in [`program/src/main.rs`](program/src/main.rs) in your own
-editor - and save. **Apply** (or Cmd+Enter, Ctrl+Enter off macOS)
-applies the edit to the running game. **Save** writes the file.
+editor - and save. **Save** (Cmd+S or Cmd+Enter; Ctrl elsewhere)
+writes the file, and under `rawr run` the running game picks the edit
+up.
 **Restore starter** restores the starter program (with **Undo restore** as the
 escape hatch). **Restart** starts a fresh attempt. The −/+ buttons step the
 simulation speed along the original's golden-ratio ladder; the

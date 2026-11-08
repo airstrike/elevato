@@ -341,7 +341,7 @@ pub mod button {
 
     use super::palette;
 
-    /// Filled accent - the surface's main action (Start, Apply).
+    /// Filled accent - the surface's main action (Start, Save).
     pub fn primary(theme: &Theme, status: Status) -> Style {
         let ladder = theme.palette();
         let base = Style {

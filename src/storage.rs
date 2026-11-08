@@ -9,7 +9,7 @@
 //! dir (`~/.config/elevato` or the OS equivalent). The wasm arm stores
 //! them in localStorage, mirroring the original game's persistence.
 //!
-//! Saving happens on explicit Save and on Apply - a documented
+//! Saving happens on explicit Save - a documented
 //! simplification of the original's debounced autosave. A game rawr
 //! restarts for an edit resumes on the saved challenge.
 

@@ -39,7 +39,7 @@ pub struct App {
     mode: theme::Mode,
     /// The player's program, booted afresh for every attempt.
     program: Program,
-    /// Whether rawr runs the program, and so reloads it on Apply.
+    /// Whether rawr runs the program, and so reports each save's reload.
     host: reload::Host,
     screen: Screen,
 }
@@ -256,7 +256,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
                 .map(|bounds| bounds.width);
-            let mut game = Box::new(Game::new(app.program.clone(), app.host, width));
+            let mut game = Box::new(Game::new(app.program.clone(), width));
             let task = match restarted {
                 Some(reason) => game.update(Message::Reloaded(reload::Outcome::Restarted(reason))),
                 None => Task::none(),
@@ -407,7 +407,7 @@ impl Game {
     /// until Start is pressed (the original's flow), its last-saved text
     /// in the editor (else the built-in starter) and its last timescale,
     /// with the divider seeded from the measured viewport.
-    fn new(program: Program, host: reload::Host, viewport_width: Option<f32>) -> Self {
+    fn new(program: Program, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
@@ -431,7 +431,7 @@ impl Game {
             .collect();
         Game {
             playback,
-            editor: editor::State::new(&code, host),
+            editor: editor::State::new(&code),
             choices,
             cache: canvas::Cache::default(),
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
@@ -527,14 +527,6 @@ impl Game {
                 }
                 if let Some(instruction) = action.instruction {
                     match instruction {
-                        editor::Instruction::Apply(source) => {
-                            let written = storage::save(
-                                &source,
-                                self.playback.timescale(),
-                                self.playback.challenge_index(),
-                            );
-                            self.editor.saved(written);
-                        }
                         editor::Instruction::Save(source) => {
                             let written = storage::save(
                                 &source,

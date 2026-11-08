@@ -1,13 +1,13 @@
 //! The Rust editor pane: a self-contained TEA cell owning the text
 //! buffer, the dirty flag, the Reset backup, and the strip that shows
-//! an applied edit's error. The parent owns the writes (it is told via
-//! [`Instruction`] and answers through [`State::saved`]) and passes rawr's verdicts down through
-//! [`State::reloaded`]; the program's panic, when it stopped the run,
-//! is a read-only prop passed into [`State::view`].
+//! a saved edit's error. The parent owns the writes (it is told via
+//! [`Instruction`] and answers through [`State::saved`]) and passes
+//! rawr's verdicts down through [`State::reloaded`]; the program's
+//! panic, when it stopped the run, is a read-only prop passed into
+//! [`State::view`].
 //!
-//! Apply (the button, or Cmd+Enter / Ctrl+Enter) saves the program, and
-//! under `rawr run` the save is the reload. A compiled-in program can't
-//! change while it runs, so there Apply is off.
+//! Save (the button, Cmd+S or Cmd+Enter) writes the program; under
+//! `rawr run` that write is what applies the edit.
 
 use std::io;
 
@@ -28,7 +28,7 @@ use crate::theme;
 pub struct State {
     content: text_editor::Content,
     /// Whether the text has changed since the parent last confirmed a
-    /// save ([`State::saved`]); gates Save and Apply.
+    /// save ([`State::saved`]); gates Save.
     dirty: bool,
     /// The text Reset replaced, kept for Undo reset. `Content` is not
     /// `Clone`, so backups travel as text snapshots.
@@ -41,8 +41,6 @@ pub struct State {
     redo: Vec<String>,
     /// The kind of the previous edit, for coalescing.
     last_edit: Option<Edit>,
-    /// How the program runs: Apply is off for a compiled-in program.
-    host: reload::Host,
     /// What the strip shows, when anything went wrong.
     status: Option<Status>,
 }
@@ -87,10 +85,8 @@ fn edit_kind(action: &text_editor::Action) -> Edit {
 pub enum Message {
     /// The text editor performed an action (edit, cursor move, …).
     Edited(text_editor::Action),
-    /// Apply was pressed, or Cmd+Enter typed: save the current text and
-    /// hand it to the running game.
-    Apply,
-    /// Save was pressed: persist the current text.
+    /// Save was pressed, or Cmd+S / Cmd+Enter typed: write the current
+    /// text as the program.
     Save,
     /// Reset was pressed: back the current text up, restore the
     /// starter program.
@@ -105,18 +101,14 @@ pub enum Message {
 
 /// What the parent must do on the editor's behalf.
 pub enum Instruction {
-    /// Save this source as the program, for the running game to take up;
-    /// answer with [`State::saved`].
-    Apply(String),
     /// Save this source as the program (whether or not it compiles);
     /// answer with [`State::saved`].
     Save(String),
 }
 
 impl State {
-    /// An editor holding `code`, clean and with nothing to undo, for a
-    /// program `host` runs.
-    pub fn new(code: &str, host: reload::Host) -> Self {
+    /// An editor holding `code`, clean and with nothing to undo.
+    pub fn new(code: &str) -> Self {
         Self {
             content: text_editor::Content::with_text(code),
             dirty: false,
@@ -124,7 +116,6 @@ impl State {
             undo: Vec::new(),
             redo: Vec::new(),
             last_edit: None,
-            host,
             status: None,
         }
     }
@@ -134,8 +125,8 @@ impl State {
         self.content.text()
     }
 
-    /// The parent's answer to [`Instruction::Apply`] and
-    /// [`Instruction::Save`]: whether the text was written.
+    /// The parent's answer to [`Instruction::Save`]: whether the text
+    /// was written.
     /// A write clears only a write error: rawr's own outcomes clear the
     /// rest, and a save rawr sees no change in brings none.
     pub fn saved(&mut self, written: io::Result<()>) {
@@ -160,11 +151,6 @@ impl State {
                 None
             }
         };
-    }
-
-    /// Whether Apply has anything to do: an edit to hand to rawr.
-    fn appliable(&self) -> bool {
-        self.dirty && self.host == reload::Host::Rawr
     }
 
     /// The identifier under the cursor (just set by a click), for the
@@ -192,13 +178,12 @@ impl State {
                 self.content.perform(action);
                 Action::none()
             }
-            Message::Apply => {
-                if !self.appliable() {
+            Message::Save => {
+                if !self.dirty {
                     return Action::none();
                 }
-                Action::instruction(Instruction::Apply(self.text()))
+                Action::instruction(Instruction::Save(self.text()))
             }
-            Message::Save => Action::instruction(Instruction::Save(self.text())),
             Message::Reset => {
                 self.record(Edit::Other);
                 self.backup = Some(self.text());
@@ -251,7 +236,7 @@ impl State {
 
     /// The pane: editor, the strip (when there is something to show),
     /// the error panel (when `error` is present), and the
-    /// Apply/Save/Reset/Undo-reset row. `error` is the program's panic
+    /// Save/Reset/Undo-reset row. `error` is the program's panic
     /// that stopped the run, owned by the parent.
     pub fn view<'a>(&'a self, error: Option<&'a simulation::Error>) -> Element<'a, Message> {
         let editor = text_editor(&self.content)
@@ -261,8 +246,10 @@ impl State {
             .on_action(Message::Edited)
             .key_binding(|press| {
                 let command = press.modifiers.command();
-                if command && press.key == keyboard::Key::Named(Named::Enter) {
-                    return Some(text_editor::Binding::Custom(Message::Apply));
+                let save = press.key == keyboard::Key::Named(Named::Enter)
+                    || matches!(press.key.as_ref(), keyboard::Key::Character("s"));
+                if command && save {
+                    return Some(text_editor::Binding::Custom(Message::Save));
                 }
                 let z = matches!(press.key.as_ref(), keyboard::Key::Character("z"));
                 if z && command {
@@ -280,19 +267,12 @@ impl State {
 
         let buttons = row![
             button(
-                row![icon::check().size(13), text("Apply").size(13)]
-                    .spacing(6)
-                    .align_y(iced::Center)
-            )
-            .on_press_maybe(self.appliable().then_some(Message::Apply))
-            .style(theme::button::primary),
-            button(
                 row![icon::save().size(13), text("Save").size(13)]
                     .spacing(6)
                     .align_y(iced::Center)
             )
             .on_press_maybe(self.dirty.then_some(Message::Save))
-            .style(theme::button::outline),
+            .style(theme::button::primary),
             space::horizontal(),
             button(
                 row![icon::eraser().size(13), text("Restore starter").size(13)]
@@ -377,7 +357,7 @@ mod tests {
 
     #[test]
     fn reset_backs_up_the_current_text_and_restores_the_starter() {
-        let mut state = State::new("fn new() -> Model {}\n", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}\n");
         let _ = state.update(Message::Reset);
         assert_eq!(state.text().trim_end(), playback::STARTER.trim_end());
         assert!(state.dirty);
@@ -386,7 +366,7 @@ mod tests {
 
     #[test]
     fn undo_reset_restores_the_backup_exactly_once() {
-        let mut state = State::new("fn new() -> Model {}\n", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}\n");
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::UndoReset);
         assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
@@ -397,14 +377,9 @@ mod tests {
     }
 
     #[test]
-    fn apply_and_save_emit_the_current_source_as_instructions() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
+    fn save_emits_the_current_source_as_an_instruction() {
+        let mut state = State::new("fn new() -> Model {}");
         insert(&mut state, 'x');
-        let apply = state.update(Message::Apply);
-        assert!(matches!(
-            apply.instruction,
-            Some(Instruction::Apply(source)) if source.contains("fn new")
-        ));
         let save = state.update(Message::Save);
         assert!(matches!(
             save.instruction,
@@ -414,7 +389,7 @@ mod tests {
 
     #[test]
     fn an_edit_marks_the_editor_dirty_until_the_parent_confirms_a_save() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}");
         assert!(!state.dirty);
         insert(&mut state, 'x');
         assert!(state.dirty);
@@ -426,7 +401,7 @@ mod tests {
 
     #[test]
     fn undo_restores_the_text_before_a_typing_burst() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}");
         insert(&mut state, 'a');
         insert(&mut state, 'b');
         insert(&mut state, 'c');
@@ -436,7 +411,7 @@ mod tests {
 
     #[test]
     fn redo_reapplies_an_undone_burst_and_dies_on_fresh_edits() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}");
         insert(&mut state, 'x');
         let _ = state.update(Message::Undo);
         let _ = state.update(Message::Redo);
@@ -452,7 +427,7 @@ mod tests {
 
     #[test]
     fn a_reset_is_undoable_like_any_other_edit() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
+        let mut state = State::new("fn new() -> Model {}");
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::Undo);
         assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
@@ -464,23 +439,18 @@ mod tests {
     }
 
     #[test]
-    fn apply_needs_an_edit_and_rawr() {
-        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
-        assert!(state.update(Message::Apply).instruction.is_none());
+    fn save_needs_an_unsaved_edit() {
+        let mut state = State::new("fn new() -> Model {}");
+        assert!(state.update(Message::Save).instruction.is_none());
         insert(&mut state, 'x');
-        assert!(state.update(Message::Apply).instruction.is_some());
+        assert!(state.update(Message::Save).instruction.is_some());
         state.saved(Ok(()));
-        assert!(state.update(Message::Apply).instruction.is_none());
-
-        let mut compiled = State::new("fn new() -> Model {}", reload::Host::Compiled);
-        insert(&mut compiled, 'x');
-        assert!(compiled.update(Message::Apply).instruction.is_none());
-        assert!(compiled.update(Message::Save).instruction.is_some());
+        assert!(state.update(Message::Save).instruction.is_none());
     }
 
     #[test]
-    fn a_successful_apply_shows_nothing() {
-        let mut state = State::new("", reload::Host::Rawr);
+    fn a_successful_save_shows_nothing() {
+        let mut state = State::new("");
         state.reloaded(reload::Outcome::Restarted("`Program` changed".to_string()));
         insert(&mut state, 'x');
         state.saved(Ok(()));
@@ -496,7 +466,7 @@ mod tests {
 
     #[test]
     fn a_restart_says_the_edit_restarted_the_run() {
-        let mut state = State::new("", reload::Host::Rawr);
+        let mut state = State::new("");
         state.reloaded(reload::Outcome::Restarted(
             "`Program` changed its fields".to_string(),
         ));
@@ -508,7 +478,7 @@ mod tests {
 
     #[test]
     fn a_refused_save_shows_its_error_at_its_position() {
-        let mut state = State::new("", reload::Host::Rawr);
+        let mut state = State::new("");
         state.reloaded(reload::Outcome::Failed(reload::Failure::new(
             "cannot find value `nxt` in this scope",
             Some(reload::Position {
@@ -529,7 +499,7 @@ mod tests {
 
     #[test]
     fn a_failed_write_shows_the_error_and_keeps_the_edit_dirty() {
-        let mut state = State::new("", reload::Host::Rawr);
+        let mut state = State::new("");
         insert(&mut state, 'x');
         state.saved(Err(io::Error::other("disk full")));
         assert_eq!(
