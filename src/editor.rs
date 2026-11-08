@@ -50,8 +50,6 @@ pub struct State {
 enum Status {
     /// rawr refused a save.
     Failed(reload::Failure),
-    /// rawr restarted the run for an edit.
-    Restarted,
     /// Writing the program failed.
     Unsaved(io::Error),
 }
@@ -142,14 +140,14 @@ impl State {
     }
 
     /// rawr's verdict on a save, from this editor or any other. Only a
-    /// refusal or a restart shows.
+    /// refusal shows.
     pub fn reloaded(&mut self, outcome: reload::Outcome) {
         self.status = match outcome {
             reload::Outcome::Failed(failure) => Some(Status::Failed(failure)),
-            reload::Outcome::Restarted(_) => Some(Status::Restarted),
-            reload::Outcome::Queued | reload::Outcome::Swapped | reload::Outcome::Restarting(_) => {
-                None
-            }
+            reload::Outcome::Restarted(_)
+            | reload::Outcome::Queued
+            | reload::Outcome::Swapped
+            | reload::Outcome::Restarting(_) => None,
         };
     }
 
@@ -304,21 +302,14 @@ impl State {
     }
 }
 
-/// The strip under the editor: a refused edit's error, a restart's
-/// reason, or a failed write.
+/// The strip under the editor: a refused edit's error, or a failed
+/// write.
 fn strip<'a>(status: &Status) -> Element<'a, Message> {
-    let line = text(describe(status)).size(12);
-    let (line, panel): (_, fn(&iced::Theme) -> container::Style) = match status {
-        Status::Restarted => (
-            line.style(theme::text::secondary),
-            theme::container::status_panel,
-        ),
-        Status::Failed(_) | Status::Unsaved(_) => (
-            line.style(theme::text::failure),
-            theme::container::error_panel,
-        ),
-    };
-    container(line).width(Fill).padding(8).style(panel).into()
+    container(text(describe(status)).size(12).style(theme::text::failure))
+        .width(Fill)
+        .padding(8)
+        .style(theme::container::error_panel)
+        .into()
 }
 
 /// The strip's line for `status`.
@@ -328,7 +319,6 @@ fn describe(status: &Status) -> String {
             Some(at) => format!("Line {}:{}: {}", at.line, at.column, failure.message()),
             None => failure.message().to_string(),
         },
-        Status::Restarted => "Run restarted after your edit.".to_string(),
         Status::Unsaved(_) if cfg!(target_arch = "wasm32") => {
             "Couldn't save your code.".to_string()
         }
@@ -451,10 +441,11 @@ mod tests {
     #[test]
     fn a_successful_save_shows_nothing() {
         let mut state = State::new("");
-        state.reloaded(reload::Outcome::Restarted("`Program` changed".to_string()));
         insert(&mut state, 'x');
         state.saved(Ok(()));
+        assert_eq!(strip_line(&state), None);
         for outcome in [
+            reload::Outcome::Restarted("`Program` changed its fields".to_string()),
             reload::Outcome::Queued,
             reload::Outcome::Swapped,
             reload::Outcome::Restarting("`Program` changed its fields".to_string()),
@@ -462,18 +453,6 @@ mod tests {
             state.reloaded(outcome);
             assert_eq!(strip_line(&state), None);
         }
-    }
-
-    #[test]
-    fn a_restart_says_the_edit_restarted_the_run() {
-        let mut state = State::new("");
-        state.reloaded(reload::Outcome::Restarted(
-            "`Program` changed its fields".to_string(),
-        ));
-        assert_eq!(
-            strip_line(&state).as_deref(),
-            Some("Run restarted after your edit.")
-        );
     }
 
     #[test]
