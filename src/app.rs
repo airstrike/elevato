@@ -56,7 +56,6 @@ enum Screen {
 struct Game {
     playback: Playback,
     editor: editor::State,
-    host: reload::Host,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
     /// Cached world geometry; cleared whenever the world changes.
@@ -432,8 +431,7 @@ impl Game {
             .collect();
         Game {
             playback,
-            editor: editor::State::new(&code),
-            host,
+            editor: editor::State::new(&code, host),
             choices,
             cache: canvas::Cache::default(),
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
@@ -535,7 +533,7 @@ impl Game {
                                 self.playback.timescale(),
                                 self.playback.challenge_index(),
                             );
-                            self.editor.applied(written, self.host);
+                            self.editor.applied(written);
                         }
                         editor::Instruction::Save(source) => {
                             let written = storage::save(

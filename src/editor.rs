@@ -1,13 +1,14 @@
 //! The Rust editor pane: a self-contained TEA cell owning the text
-//! buffer, the dirty flag, the Reset backup, and the strip that says
-//! what became of the last applied edit. The parent owns the writes
-//! (it is told via [`Instruction`] and answers through
-//! [`State::applied`] and [`State::saved`]) and passes rawr's verdicts
-//! down through [`State::reloaded`]; the program's panic, when it
-//! stopped the run, is a read-only prop passed into [`State::view`].
+//! buffer, the dirty flag, the Reset backup, and the strip that shows
+//! an applied edit's error. The parent owns the writes (it is told via
+//! [`Instruction`] and answers through [`State::applied`] and
+//! [`State::saved`]) and passes rawr's verdicts down through
+//! [`State::reloaded`]; the program's panic, when it stopped the run,
+//! is a read-only prop passed into [`State::view`].
 //!
-//! Apply (the button, or Cmd+Enter / Ctrl+Enter) saves the program for
-//! whatever runs it: under `rawr run` the save is the reload.
+//! Apply (the button, or Cmd+Enter / Ctrl+Enter) saves the program, and
+//! under `rawr run` the save is the reload. A compiled-in program can't
+//! change while it runs, so there Apply is off.
 
 use std::io;
 
@@ -28,7 +29,8 @@ use crate::theme;
 pub struct State {
     content: text_editor::Content,
     /// Whether the text has changed since the parent last confirmed a
-    /// save ([`State::mark_saved`]); gates the Save button.
+    /// save ([`State::saved`], [`State::applied`]); gates Save and
+    /// Apply.
     dirty: bool,
     /// The text Reset replaced, kept for Undo reset. `Content` is not
     /// `Clone`, so backups travel as text snapshots.
@@ -41,21 +43,20 @@ pub struct State {
     redo: Vec<String>,
     /// The kind of the previous edit, for coalescing.
     last_edit: Option<Edit>,
-    /// What became of the last applied edit, shown in the strip.
+    /// How the program runs: Apply is off for a compiled-in program.
+    host: reload::Host,
+    /// What the strip shows, when anything went wrong.
     status: Option<Status>,
 }
 
-/// What the strip says about the last applied edit.
+/// What the strip shows.
 #[derive(Debug)]
 enum Status {
-    /// Apply wrote the file rawr watches; its verdict hasn't arrived.
-    Sent,
-    /// rawr's verdict on a save.
-    Reloaded(reload::Outcome),
-    /// Saved, but the program is compiled into this binary or page and
-    /// can't change while it runs.
-    Compiled,
-    /// The write failed, so nothing was applied.
+    /// rawr refused a save.
+    Failed(reload::Failure),
+    /// rawr restarted the game for an edit, for this reason.
+    Restarted(String),
+    /// Writing the program failed.
     Unsaved(io::Error),
 }
 
@@ -115,8 +116,9 @@ pub enum Instruction {
 }
 
 impl State {
-    /// An editor holding `code`, clean and with nothing to undo.
-    pub fn new(code: &str) -> Self {
+    /// An editor holding `code`, clean and with nothing to undo, for a
+    /// program `host` runs.
+    pub fn new(code: &str, host: reload::Host) -> Self {
         Self {
             content: text_editor::Content::with_text(code),
             dirty: false,
@@ -124,6 +126,7 @@ impl State {
             undo: Vec::new(),
             redo: Vec::new(),
             last_edit: None,
+            host,
             status: None,
         }
     }
@@ -134,34 +137,38 @@ impl State {
     }
 
     /// The parent's answer to [`Instruction::Apply`]: whether the text
-    /// was written, for a program `host` runs. Under rawr the strip then
-    /// waits for rawr's verdict.
-    pub fn applied(&mut self, written: io::Result<()>, host: reload::Host) {
-        self.status = Some(match written {
-            Ok(()) => {
-                self.dirty = false;
-                match host {
-                    reload::Host::Rawr => Status::Sent,
-                    reload::Host::Compiled => Status::Compiled,
-                }
-            }
-            Err(error) => Status::Unsaved(error),
-        });
+    /// was written.
+    pub fn applied(&mut self, written: io::Result<()>) {
+        self.saved(written);
     }
 
     /// The parent's answer to [`Instruction::Save`]: whether the text was
-    /// written. Only a failure shows; what rawr does with the save
-    /// arrives on its own.
+    /// written.
     pub fn saved(&mut self, written: io::Result<()>) {
-        match written {
-            Ok(()) => self.dirty = false,
-            Err(error) => self.status = Some(Status::Unsaved(error)),
-        }
+        self.status = match written {
+            Ok(()) => {
+                self.dirty = false;
+                None
+            }
+            Err(error) => Some(Status::Unsaved(error)),
+        };
     }
 
-    /// rawr's verdict on a save, from this editor or any other.
+    /// rawr's verdict on a save, from this editor or any other. Only a
+    /// refusal or a restart shows.
     pub fn reloaded(&mut self, outcome: reload::Outcome) {
-        self.status = Some(Status::Reloaded(outcome));
+        self.status = match outcome {
+            reload::Outcome::Failed(failure) => Some(Status::Failed(failure)),
+            reload::Outcome::Restarted(reason) => Some(Status::Restarted(reason)),
+            reload::Outcome::Queued | reload::Outcome::Swapped | reload::Outcome::Restarting(_) => {
+                None
+            }
+        };
+    }
+
+    /// Whether Apply has anything to do: an edit to hand to rawr.
+    fn appliable(&self) -> bool {
+        self.dirty && self.host == reload::Host::Rawr
     }
 
     /// The identifier under the cursor (just set by a click), for the
@@ -190,7 +197,7 @@ impl State {
                 Action::none()
             }
             Message::Apply => {
-                if !self.dirty {
+                if !self.appliable() {
                     return Action::none();
                 }
                 Action::instruction(Instruction::Apply(self.text()))
@@ -281,7 +288,7 @@ impl State {
                     .spacing(6)
                     .align_y(iced::Center)
             )
-            .on_press_maybe(self.dirty.then_some(Message::Apply))
+            .on_press_maybe(self.appliable().then_some(Message::Apply))
             .style(theme::button::primary),
             button(
                 row![icon::save().size(13), text("Save").size(13)]
@@ -321,21 +328,16 @@ impl State {
     }
 }
 
-/// The status strip under the editor: what became of the last applied
-/// edit, in one line.
+/// The strip under the editor: a refused edit's error, a restart's
+/// reason, or a failed write.
 fn strip<'a>(status: &Status) -> Element<'a, Message> {
-    let (line, tone) = describe(status);
-    let line = text(line).size(12);
-    let (line, panel): (_, fn(&iced::Theme) -> container::Style) = match tone {
-        Tone::Quiet => (
+    let line = text(describe(status)).size(12);
+    let (line, panel): (_, fn(&iced::Theme) -> container::Style) = match status {
+        Status::Restarted(_) => (
             line.style(theme::text::secondary),
             theme::container::status_panel,
         ),
-        Tone::Good => (
-            line.style(theme::text::outcome(true)),
-            theme::container::status_panel,
-        ),
-        Tone::Bad => (
+        Status::Failed(_) | Status::Unsaved(_) => (
             line.style(theme::text::failure),
             theme::container::error_panel,
         ),
@@ -343,62 +345,15 @@ fn strip<'a>(status: &Status) -> Element<'a, Message> {
     container(line).width(Fill).padding(8).style(panel).into()
 }
 
-/// How a strip line reads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Tone {
-    Quiet,
-    Good,
-    Bad,
-}
-
-/// The strip's line for `status`, and its tone.
-fn describe(status: &Status) -> (String, Tone) {
+/// The strip's line for `status`.
+fn describe(status: &Status) -> String {
     match status {
-        Status::Sent => (
-            "Applying: rawr is checking your edit.".to_string(),
-            Tone::Quiet,
-        ),
-        Status::Reloaded(reload::Outcome::Queued) => (
-            "Compiled. The new code takes over at the program's next message.".to_string(),
-            Tone::Quiet,
-        ),
-        Status::Reloaded(reload::Outcome::Swapped) => (
-            "Applied. The program kept its state; the new code handles the next message."
-                .to_string(),
-            Tone::Good,
-        ),
-        Status::Reloaded(reload::Outcome::Restarting(reason)) => (
-            format!("Restarting with a fresh world: {reason}."),
-            Tone::Quiet,
-        ),
-        Status::Reloaded(reload::Outcome::Restarted(reason)) => (
-            format!("Fresh attempt with your new code. Its state couldn't carry over: {reason}."),
-            Tone::Quiet,
-        ),
-        Status::Reloaded(reload::Outcome::Failed(failure)) => {
-            let message = match failure.message().trim_end_matches('.') {
-                "" => "The edit doesn't compile",
-                message => message,
-            };
-            let line = match failure.at() {
-                Some(at) => format!("Line {}:{}: {message}", at.line, at.column),
-                None => message.to_string(),
-            };
-            (
-                format!("{line}. The last good program keeps running."),
-                Tone::Bad,
-            )
-        }
-        Status::Compiled if cfg!(target_arch = "wasm32") => (
-            "Saved as a draft: the page runs the program it was built with.".to_string(),
-            Tone::Quiet,
-        ),
-        Status::Compiled => (
-            "Saved for the next build: under cargo run, the program can't change while it runs."
-                .to_string(),
-            Tone::Quiet,
-        ),
-        Status::Unsaved(error) => (format!("Not applied: saving failed ({error})."), Tone::Bad),
+        Status::Failed(failure) => match failure.at() {
+            Some(at) => format!("Line {}:{}: {}", at.line, at.column, failure.message()),
+            None => failure.message().to_string(),
+        },
+        Status::Restarted(reason) => reason.clone(),
+        Status::Unsaved(error) => format!("Couldn't save: {error}"),
     }
 }
 
@@ -423,7 +378,7 @@ mod tests {
 
     #[test]
     fn reset_backs_up_the_current_text_and_restores_the_starter() {
-        let mut state = State::new("fn new() -> Model {}\n");
+        let mut state = State::new("fn new() -> Model {}\n", reload::Host::Rawr);
         let _ = state.update(Message::Reset);
         assert_eq!(state.text().trim_end(), playback::STARTER.trim_end());
         assert!(state.dirty);
@@ -432,7 +387,7 @@ mod tests {
 
     #[test]
     fn undo_reset_restores_the_backup_exactly_once() {
-        let mut state = State::new("fn new() -> Model {}\n");
+        let mut state = State::new("fn new() -> Model {}\n", reload::Host::Rawr);
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::UndoReset);
         assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
@@ -444,7 +399,7 @@ mod tests {
 
     #[test]
     fn apply_and_save_emit_the_current_source_as_instructions() {
-        let mut state = State::new("fn new() -> Model {}");
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         insert(&mut state, 'x');
         let apply = state.update(Message::Apply);
         assert!(matches!(
@@ -460,7 +415,7 @@ mod tests {
 
     #[test]
     fn an_edit_marks_the_editor_dirty_until_the_parent_confirms_a_save() {
-        let mut state = State::new("fn new() -> Model {}");
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         assert!(!state.dirty);
         insert(&mut state, 'x');
         assert!(state.dirty);
@@ -472,7 +427,7 @@ mod tests {
 
     #[test]
     fn undo_restores_the_text_before_a_typing_burst() {
-        let mut state = State::new("fn new() -> Model {}");
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         insert(&mut state, 'a');
         insert(&mut state, 'b');
         insert(&mut state, 'c');
@@ -482,7 +437,7 @@ mod tests {
 
     #[test]
     fn redo_reapplies_an_undone_burst_and_dies_on_fresh_edits() {
-        let mut state = State::new("fn new() -> Model {}");
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         insert(&mut state, 'x');
         let _ = state.update(Message::Undo);
         let _ = state.update(Message::Redo);
@@ -498,66 +453,64 @@ mod tests {
 
     #[test]
     fn a_reset_is_undoable_like_any_other_edit() {
-        let mut state = State::new("fn new() -> Model {}");
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         let _ = state.update(Message::Reset);
         let _ = state.update(Message::Undo);
         assert_eq!(state.text().trim_end(), "fn new() -> Model {}");
     }
 
-    /// The strip's line and tone, as the player reads them.
-    fn strip_line(state: &State) -> Option<(String, Tone)> {
+    /// The strip's line, as the player reads it.
+    fn strip_line(state: &State) -> Option<String> {
         state.status.as_ref().map(describe)
     }
 
     #[test]
-    fn a_clean_editor_has_nothing_to_apply() {
-        let mut state = State::new("fn new() -> Model {}");
+    fn apply_needs_an_edit_and_rawr() {
+        let mut state = State::new("fn new() -> Model {}", reload::Host::Rawr);
         assert!(state.update(Message::Apply).instruction.is_none());
         insert(&mut state, 'x');
         assert!(state.update(Message::Apply).instruction.is_some());
-        state.applied(Ok(()), reload::Host::Rawr);
+        state.applied(Ok(()));
         assert!(state.update(Message::Apply).instruction.is_none());
+
+        let mut compiled = State::new("fn new() -> Model {}", reload::Host::Compiled);
+        insert(&mut compiled, 'x');
+        assert!(compiled.update(Message::Apply).instruction.is_none());
+        assert!(compiled.update(Message::Save).instruction.is_some());
     }
 
     #[test]
-    fn an_edit_applied_under_rawr_waits_for_its_verdict() {
-        let mut state = State::new("");
+    fn a_successful_apply_shows_nothing() {
+        let mut state = State::new("", reload::Host::Rawr);
+        state.reloaded(reload::Outcome::Restarted("`Program` changed".to_string()));
         insert(&mut state, 'x');
-        state.applied(Ok(()), reload::Host::Rawr);
-        let (line, tone) = strip_line(&state).unwrap();
-        assert!(line.contains("rawr is checking"), "{line}");
-        assert_eq!(tone, Tone::Quiet);
-        assert!(!state.dirty);
+        state.applied(Ok(()));
+        assert_eq!(strip_line(&state), None);
+        for outcome in [
+            reload::Outcome::Queued,
+            reload::Outcome::Swapped,
+            reload::Outcome::Restarting("`Program` changed its fields".to_string()),
+        ] {
+            state.reloaded(outcome);
+            assert_eq!(strip_line(&state), None);
+        }
     }
 
     #[test]
-    fn a_swap_says_the_state_was_kept() {
-        let mut state = State::new("");
-        state.reloaded(reload::Outcome::Queued);
-        assert!(strip_line(&state).unwrap().0.contains("next message"));
-        state.reloaded(reload::Outcome::Swapped);
-        let (line, tone) = strip_line(&state).unwrap();
-        assert!(line.contains("kept its state"), "{line}");
-        assert_eq!(tone, Tone::Good);
+    fn a_restart_shows_its_reason_alone() {
+        let mut state = State::new("", reload::Host::Rawr);
+        state.reloaded(reload::Outcome::Restarted(
+            "`Program` changed its fields".to_string(),
+        ));
+        assert_eq!(
+            strip_line(&state).as_deref(),
+            Some("`Program` changed its fields")
+        );
     }
 
     #[test]
-    fn a_restart_says_why_in_one_line() {
-        let reason = "`Program` gained a field".to_string();
-        let mut state = State::new("");
-        state.reloaded(reload::Outcome::Restarting(reason.clone()));
-        assert!(strip_line(&state).unwrap().0.contains("gained a field"));
-        state.reloaded(reload::Outcome::Restarted(reason));
-        let (line, tone) = strip_line(&state).unwrap();
-        assert!(line.starts_with("Fresh attempt"), "{line}");
-        assert!(line.contains("gained a field"), "{line}");
-        assert!(!line.contains('\n'));
-        assert_eq!(tone, Tone::Quiet);
-    }
-
-    #[test]
-    fn a_refused_save_shows_its_error_and_position() {
-        let mut state = State::new("");
+    fn a_refused_save_shows_its_error_at_its_position() {
+        let mut state = State::new("", reload::Host::Rawr);
         state.reloaded(reload::Outcome::Failed(reload::Failure::new(
             "cannot find value `nxt` in this scope",
             Some(reload::Position {
@@ -565,32 +518,23 @@ mod tests {
                 column: 17,
             }),
         )));
-        let (line, tone) = strip_line(&state).unwrap();
-        assert!(
-            line.starts_with("Line 42:17: cannot find value `nxt`"),
-            "{line}"
+        assert_eq!(
+            strip_line(&state).as_deref(),
+            Some("Line 42:17: cannot find value `nxt` in this scope")
         );
-        assert!(line.contains("last good program keeps running"), "{line}");
-        assert_eq!(tone, Tone::Bad);
+        state.reloaded(reload::Outcome::Swapped);
+        assert_eq!(strip_line(&state), None);
     }
 
     #[test]
-    fn a_compiled_program_says_it_cannot_change() {
-        let mut state = State::new("");
+    fn a_failed_write_shows_the_error_and_keeps_the_edit_dirty() {
+        let mut state = State::new("", reload::Host::Rawr);
         insert(&mut state, 'x');
-        state.applied(Ok(()), reload::Host::Compiled);
-        let (line, _) = strip_line(&state).unwrap();
-        assert!(line.contains("can't change while it runs"), "{line}");
-    }
-
-    #[test]
-    fn a_failed_write_applies_nothing_and_keeps_the_edit_dirty() {
-        let mut state = State::new("");
-        insert(&mut state, 'x');
-        state.applied(Err(io::Error::other("disk full")), reload::Host::Rawr);
-        let (line, tone) = strip_line(&state).unwrap();
-        assert!(line.contains("disk full"), "{line}");
-        assert_eq!(tone, Tone::Bad);
+        state.applied(Err(io::Error::other("disk full")));
+        assert_eq!(
+            strip_line(&state).as_deref(),
+            Some("Couldn't save: disk full")
+        );
         assert!(state.dirty);
     }
 }

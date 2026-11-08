@@ -283,8 +283,7 @@ pub mod container {
         }
     }
 
-    /// The status strip under the editor: what became of an applied
-    /// edit.
+    /// The strip under the editor when rawr restarted the game.
     pub fn status_panel(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {

@@ -34,28 +34,16 @@ Pick a challenge, press **Start**, and watch the starter program
 struggle. Then make it yours: edit the program - in the editor on the
 left, or in [`program/src/main.rs`](program/src/main.rs) in your own
 editor - and save. **Apply** (or Cmd+Enter, Ctrl+Enter off macOS)
-writes the file and rawr reloads it into the running game, and the
-strip under the editor says what happened:
-
-- the new code is in, the program kept its state, and the next message
-  runs the new code;
-- rawr couldn't keep the state (the shape of `Program` or `Message`
-  changed, say), so the game restarts on the same challenge with a
-  fresh world and `new`, and the strip gives rawr's reason;
-- the edit doesn't compile, so the old program keeps running and the
-  strip shows the error and its line.
-
-**Save** writes the file without waiting on the result; rawr reloads
-it all the same. **Reset** restores the starter program (with **Undo
-reset** as the escape hatch). **Restart** starts a fresh attempt. The −/+ buttons step the
+applies the edit to the running game. **Save** writes the file.
+**Reset** restores the starter program (with **Undo reset** as the
+escape hatch). **Restart** starts a fresh attempt. The −/+ buttons step the
 simulation speed along the original's golden-ratio ladder; the
 timescale is saved under the platform config dir.
 
 Every run is deterministic: the seed shown in the stats bar plus your
 program and timescale reproduce a run exactly. Restarting advances the
 seed, so consecutive attempts still vary like the original's. An edit
-applied mid-run breaks that, and the seed says "(edited)" until the
-next Restart, which boots the program as it now stands.
+applied mid-run marks the seed "(edited)" for the rest of the attempt.
 
 ## Building
 
@@ -64,9 +52,6 @@ Natively, with your program compiled in:
 ```sh
 cargo run -p program
 ```
-
-The program can't change while this build runs: Apply saves the file
-for the next build, and the strip says so.
 
 In the browser (requires [trunk](https://trunkrs.dev) and the
 `wasm32-unknown-unknown` target):
