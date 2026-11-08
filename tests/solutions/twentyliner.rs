@@ -7,7 +7,7 @@
 //! claimed, and the car is stopped and sent there with its lamps set to
 //! match.
 
-use elevato::{Elevator, Rider, elevator, floor};
+use elevato::{Elevator, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub struct Program {
@@ -92,10 +92,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders().map(|rider| match rider {
-            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
-            Rider::Floor(floor, message) => Message::Floor(floor, message),
-        })
+        elevato::riders(Message::Elevator, Message::Floor)
     }
 
     fn plan(&mut self) -> Task<Message> {

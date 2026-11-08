@@ -8,7 +8,7 @@
 //! message, and the program keeps its state when the new code allows
 //! it. Under `cargo run`, the next build compiles your edits.
 
-use elevato::{Elevator, Rider, elevator, floor};
+use elevato::{Elevator, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
@@ -57,9 +57,6 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders().map(|rider| match rider {
-            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
-            Rider::Floor(floor, message) => Message::Floor(floor, message),
-        })
+        elevato::riders(Message::Elevator, Message::Floor)
     }
 }

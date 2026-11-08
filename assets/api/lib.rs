@@ -1,7 +1,7 @@
 //! Handle elevator and rider messages in `update`. Return `Task`s to
 //! control the elevators.
 //!
-//!     use elevato::{Elevator, Rider, elevator, floor};
+//!     use elevato::{Elevator, elevator, floor};
 //!     use iced::{Function, Subscription, Task};
 //!
 //! A car's trip is a task: it streams the floors the car passes and
@@ -33,26 +33,18 @@ pub fn update(&mut self, message: Message) -> Task<Message>;
 
 /// Listens to the riders:
 ///
-///     elevato::riders().map(|rider| match rider {
-///         Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
-///         Rider::Floor(floor, message) => Message::Floor(floor, message),
-///     })
+///     elevato::riders(Message::Elevator, Message::Floor)
 pub fn subscription(&self) -> Subscription<Message>;
 
-/// Every button a rider presses that was not lit: a call on a floor,
-/// or a destination inside a car. A lit button stays silent.
-pub fn riders() -> Subscription<Rider>;
-
-/// Something a rider did.
-pub enum Rider {
-    /// A rider on this floor called a car: `UpButtonPressed` or
-    /// `DownButtonPressed`.
-    Floor(usize, floor::Message),
-
-    /// A rider in this car pressed a destination button:
-    /// `FloorButtonPressed`.
-    Elevator(Elevator, elevator::Message),
-}
+/// Every button a rider presses that was not lit, made into your
+/// messages: `elevator` for a destination pressed inside a car
+/// (`FloorButtonPressed`), `floor` for a call on a floor
+/// (`UpButtonPressed` or `DownButtonPressed`). A lit button stays
+/// silent.
+pub fn riders<M>(
+    elevator: impl Fn(Elevator, elevator::Message) -> M,
+    floor: impl Fn(usize, floor::Message) -> M,
+) -> Subscription<M>;
 
 /// A direction of travel.
 pub enum Direction {

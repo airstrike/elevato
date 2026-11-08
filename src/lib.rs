@@ -21,5 +21,5 @@ pub mod theme;
 pub mod widget;
 
 pub use app::run;
-pub use elevato_api::{Direction, Elevator, Rider, elevator, floor, riders};
+pub use elevato_api::{Direction, Elevator, elevator, floor, riders};
 pub use elevato_core as core;

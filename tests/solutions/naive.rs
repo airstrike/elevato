@@ -7,7 +7,7 @@
 //! its `update` takes an [`elevator::Message`], and the program routes
 //! each car's messages to it and maps its tasks back.
 
-use elevato::{Elevator, Rider, elevator, floor};
+use elevato::{Elevator, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub struct Program {
@@ -53,10 +53,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders().map(|rider| match rider {
-            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
-            Rider::Floor(floor, message) => Message::Floor(floor, message),
-        })
+        elevato::riders(Message::Elevator, Message::Floor)
     }
 }
 

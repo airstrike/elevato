@@ -34,7 +34,6 @@ use iced_futures::subscription::{self, Tracker};
 use iced_futures::{BoxFuture, BoxStream, MaybeSend, Subscription};
 use iced_runtime::{Action, Task, task};
 
-use crate::Rider;
 use crate::elevator::{self, Elevator};
 use crate::floor;
 use crate::hub::{self, Command, Hub};
@@ -283,13 +282,13 @@ where
             // The program owns its queues: an empty one tells it nothing.
             Event::Idle { .. } => {}
             Event::UpButtonPressed { floor } => {
-                hub::broadcast(Rider::Floor(floor, floor::Message::UpButtonPressed));
+                hub::broadcast(hub::Rider::Floor(floor, floor::Message::UpButtonPressed));
             }
             Event::DownButtonPressed { floor } => {
-                hub::broadcast(Rider::Floor(floor, floor::Message::DownButtonPressed));
+                hub::broadcast(hub::Rider::Floor(floor, floor::Message::DownButtonPressed));
             }
             Event::FloorButtonPressed { elevator, floor } => {
-                hub::broadcast(Rider::Elevator(
+                hub::broadcast(hub::Rider::Elevator(
                     Elevator::new(elevator),
                     elevator::Message::FloorButtonPressed(floor),
                 ));

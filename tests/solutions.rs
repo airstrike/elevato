@@ -24,7 +24,7 @@ mod twentyliner;
 
 use elevato::core::challenge::{self, Outcome};
 use elevato::core::stats::Stats;
-use elevato::{Direction, Elevator, Rider, elevator, floor};
+use elevato::{Direction, Elevator, elevator, floor};
 use elevato_api::Simulation;
 use elevato_api::simulation::Error;
 use iced::{Subscription, Task};
@@ -299,23 +299,31 @@ fn a_task_does_nothing_until_the_program_returns_it() {
 
 #[test]
 fn riders_call_cars_and_press_their_buttons() {
+    #[derive(Debug, Clone)]
+    enum Call {
+        Floor(usize, floor::Message),
+        Elevator(Elevator, elevator::Message),
+    }
+
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
         |elevators: Vec<Elevator>, _: usize| (elevators, Task::none()),
-        |elevators: &mut Vec<Elevator>, rider: Rider| match rider {
-            Rider::Floor(floor, _) => elevators[0].go_to_floor(floor).discard(),
-            Rider::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
+        |elevators: &mut Vec<Elevator>, call: Call| match call {
+            Call::Floor(
+                floor,
+                floor::Message::UpButtonPressed | floor::Message::DownButtonPressed,
+            ) => elevators[0].go_to_floor(floor).discard(),
+            Call::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
                 elevator.go_to_floor(floor).discard()
             }
-            Rider::Elevator(..) => Task::none(),
+            Call::Elevator(..) => Task::none(),
         },
-        |_: &Vec<Elevator>| elevato::riders(),
+        |_: &Vec<Elevator>| elevato::riders(Call::Elevator, Call::Floor),
     )
     .expect("the program boots");
     drive(&mut simulation, 3700);
     assert!(simulation.stats().transported() > 0);
-    let _ = floor::Message::UpButtonPressed;
 }
 
 #[test]

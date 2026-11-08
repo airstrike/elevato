@@ -346,7 +346,6 @@ mod tests {
         ("elevators", Page::Lib),
         ("floors", Page::Lib),
         ("riders", Page::Lib),
-        ("Rider", Page::Lib),
         ("Direction", Page::Lib),
         ("Up", Page::Lib),
         ("Down", Page::Lib),

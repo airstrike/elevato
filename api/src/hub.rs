@@ -11,14 +11,24 @@ use iced_runtime::futures::MaybeSend;
 use iced_runtime::futures::futures::channel::mpsc;
 use iced_runtime::{Task, task};
 
-use crate::Rider;
 use crate::elevator::{self, Elevator};
+use crate::floor;
 
 /// The commands submitted and the riders' subscribers.
 #[derive(Debug, Default)]
 pub(crate) struct Hub {
     commands: Vec<Command>,
     riders: Vec<mpsc::UnboundedSender<Rider>>,
+}
+
+/// Something a rider did: pressed a call button on a floor, or a
+/// destination button inside a car.
+#[derive(Debug, Clone)]
+pub(crate) enum Rider {
+    /// A rider at this floor pressed a call button that was not lit.
+    Floor(usize, floor::Message),
+    /// A rider in this car pressed a destination button that was not lit.
+    Elevator(Elevator, elevator::Message),
 }
 
 /// An instruction to one car, submitted by the task that carries it.

@@ -15,7 +15,7 @@ methods to the message or task that replaces it.
 
 ```rust
 // rawr
-use elevato::{Elevator, Rider, elevator, floor};
+use elevato::{Elevator, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
@@ -51,10 +51,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders().map(|rider| match rider {
-            Rider::Elevator(elevator, message) => Message::Elevator(elevator, message),
-            Rider::Floor(floor, message) => Message::Floor(floor, message),
-        })
+        elevato::riders(Message::Elevator, Message::Floor)
     }
 }
 ```
@@ -86,8 +83,8 @@ with your code").
 
 | Message | Cause | Channel |
 |---|---|---|
-| `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders()`, as `Rider::Floor(floor, message)` |
-| `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders()`, as `Rider::Elevator(elevator, message)` |
+| `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders(..)`, through the program's floor constructor |
+| `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders(..)`, through the program's elevator constructor |
 | `elevator::Message::PassingFloor(floor, direction)` | A car the program sent is about to pass a floor | Streamed by the task from `go_to_floor` |
 | `elevator::Message::StoppedAtFloor { .. }` | That car arriving | The same task's final message, after riders got off and on |
 
