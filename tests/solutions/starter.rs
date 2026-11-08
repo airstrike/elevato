@@ -3,10 +3,6 @@
 //! uses, `update` handles each message and answers with tasks, `view`
 //! draws the building, and `subscription` listens to the riders. `main`
 //! hands the four to elevato, which runs the game around them.
-//!
-//! Under `rawr run`, a save reaches the running game at its next
-//! message, and the program keeps its state when the new code allows
-//! it. Under `cargo run`, the next build compiles your edits.
 
 use elevato::{Building, Elevator, elevator, floor};
 use iced::{Element, Function, Subscription, Task};
