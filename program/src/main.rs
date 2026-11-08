@@ -15,9 +15,10 @@ pub fn main() -> iced::Result {
     elevato::run(Program::new, Program::update, Program::subscription)
 }
 
-/// Our state. All we keep so far is how many floors the building has.
+/// Our state: the elevator we use, and how many trips it has queued.
 pub struct Program {
-    floors: usize,
+    elevator: Elevator,
+    trips: usize,
 }
 
 /// Everything that can happen to us.
@@ -31,32 +32,41 @@ pub enum Message {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Self, Task<Message>) {
-        // Send every elevator to the lobby to begin with.
-        let start = Task::batch(elevators.into_iter().map(|elevator| {
-            elevator
-                .go_to_floor(0)
-                .map(Message::Elevator.with(elevator))
-        }));
-        (Self { floors }, start)
+    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
+        let elevator = elevators[0]; // Let's use the first elevator
+
+        let mut program = Self { elevator, trips: 0 };
+        let start = program.idle();
+        (program, start)
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            // Whenever an elevator stops at a floor ...
-            Message::Elevator(elevator, elevator::Message::StoppedAtFloor { floor, .. }) => {
-                // ... let's go to all the floors (or did we forget one?)
-                let next = (floor + 1) % self.floors.min(2);
-                elevator
-                    .go_to_floor(next)
-                    .map(Message::Elevator.with(elevator))
+            Message::Elevator(elevator, elevator::Message::StoppedAtFloor { .. })
+                if elevator == self.elevator =>
+            {
+                self.trips -= 1;
+
+                // Whenever the elevator is idle (has no more queued destinations) ...
+                if self.trips == 0 {
+                    self.idle()
+                } else {
+                    Task::none()
+                }
             }
-            // Everything else, we ignore for now.
+            // We normally don't need to do anything here
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
         }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
         elevato::riders(Message::Elevator, Message::Floor)
+    }
+
+    fn idle(&mut self) -> Task<Message> {
+        // let's go to all the floors (or did we forget one?)
+        self.trips += 2;
+        Task::batch([self.elevator.go_to_floor(0), self.elevator.go_to_floor(1)])
+            .map(Message::Elevator.with(self.elevator))
     }
 }
