@@ -8,16 +8,16 @@
 //! message, and the program keeps its state when the new code allows
 //! it. Under `cargo run`, the next build compiles your edits.
 
-use elevato::{Elevator, Floor, Rider, elevator, floor};
+use elevato::{Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
     elevato::run(Program::new, Program::update, Program::subscription)
 }
 
-/// Our state. All we keep so far is the building's floors.
+/// Our state. All we keep so far is how many floors the building has.
 pub struct Program {
-    floors: Vec<Floor>,
+    floors: usize,
 }
 
 /// Everything that can happen to us.
@@ -27,11 +27,11 @@ pub enum Message {
     /// pressing a button.
     Elevator(Elevator, elevator::Message),
     /// A rider on a floor calling a car.
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
+    pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Self, Task<Message>) {
         // Send every elevator to the lobby to begin with.
         let start = Task::batch(elevators.into_iter().map(|elevator| {
             elevator
@@ -46,11 +46,7 @@ impl Program {
             // Whenever an elevator stops at a floor ...
             Message::Elevator(elevator, elevator::Message::StoppedAtFloor { floor, .. }) => {
                 // ... let's go to all the floors (or did we forget one?)
-                let next = if floor == self.floors[0] {
-                    self.floors[1]
-                } else {
-                    self.floors[0]
-                };
+                let next = (floor + 1) % self.floors.min(2);
                 elevator
                     .go_to_floor(next)
                     .map(Message::Elevator.with(elevator))

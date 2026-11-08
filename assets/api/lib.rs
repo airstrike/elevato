@@ -1,7 +1,7 @@
 //! Handle elevator and rider messages in `update`. Return `Task`s to
 //! control the elevators.
 //!
-//!     use elevato::{Elevator, Floor, Rider, elevator, floor};
+//!     use elevato::{Elevator, Rider, elevator, floor};
 //!     use iced::{Function, Subscription, Task};
 //!
 //! A car's trip is a task: it streams the floors the car passes and
@@ -17,14 +17,15 @@
 pub fn run(new, update, subscription) -> iced::Result;
 
 /// Boots your program on a challenge. It gets the bank of elevators
-/// and the building's floors, keeps what it needs, and returns the
-/// first tasks - the moves the cars make before anything happens.
+/// and how many floors the building has, keeps what it needs, and
+/// returns the first tasks - the moves the cars make before anything
+/// happens.
 ///
 ///     let start = Task::batch(elevators.iter().map(|&elevator| {
 ///         elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
 ///     }));
 ///     (Self { elevators, floors }, start)
-pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Program, Task<Message>);
+pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Program, Task<Message>);
 
 /// Handles one message and answers with tasks. The elevators move
 /// when the tasks you return run, in the order you return them.
@@ -46,7 +47,7 @@ pub fn riders() -> Subscription<Rider>;
 pub enum Rider {
     /// A rider on this floor called a car: `UpButtonPressed` or
     /// `DownButtonPressed`.
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 
     /// A rider in this car pressed a destination button:
     /// `FloorButtonPressed`.

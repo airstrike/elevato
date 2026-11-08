@@ -82,7 +82,7 @@ program that uses the `elevato` crate:
 
 ```rust
 // rawr
-use elevato::{Elevator, Floor, Rider, elevator, floor};
+use elevato::{Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
@@ -90,17 +90,17 @@ pub fn main() -> iced::Result {
 }
 
 pub struct Program {
-    floors: Vec<Floor>,
+    floors: usize,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Elevator(Elevator, elevator::Message),
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
+    pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Self, Task<Message>) {
         let start = Task::batch(elevators.into_iter().map(|elevator| {
             elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
         }));
@@ -110,7 +110,7 @@ impl Program {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Elevator(elevator, elevator::Message::StoppedAtFloor { floor, .. }) => {
-                let next = if floor == self.floors[0] { self.floors[1] } else { self.floors[0] };
+                let next = (floor + 1) % self.floors.min(2);
                 elevator.go_to_floor(next).map(Message::Elevator.with(elevator))
             }
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
@@ -126,7 +126,8 @@ impl Program {
 }
 ```
 
-`new` gets the challenge's elevators and floors. A car moves when the
+`new` gets the challenge's elevators and its number of floors; a
+floor is its level, a number from 0 (the lobby). A car moves when the
 program returns the task `elevator.go_to_floor(n)` gives it; that task
 streams `PassingFloor` as the car travels and ends with
 `StoppedAtFloor`, which says who got off and on. Riders call cars and
@@ -165,7 +166,7 @@ The original's 19, verbatim:
 elevato/
 ├── src/       the game: the iced app hosting your program - canvas, editor, playback, theme
 ├── program/   your program, the marked `src/main.rs` that runs the game
-├── api/       elevato-api - Elevator, Floor, riders(), and the Simulation that runs a program
+├── api/       elevato-api - Elevator, riders(), and the Simulation that runs a program
 └── core/      elevato-core - the pure simulation (no iced, no rawr)
 ```
 

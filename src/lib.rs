@@ -2,8 +2,8 @@
 //! iced program of your own, and watch the simulation clear (or fail)
 //! the challenges.
 //!
-//! A program uses the API re-exported here - [`Elevator`], [`Floor`],
-//! their [`elevator`] and [`floor`] messages and [`riders()`] - and
+//! A program uses the API re-exported here - [`Elevator`], the
+//! [`elevator`] and [`floor`] messages and [`riders()`] - and
 //! hands its functions to [`run`], which opens the game with the
 //! program steering the elevators.
 
@@ -21,5 +21,5 @@ pub mod theme;
 pub mod widget;
 
 pub use app::run;
-pub use elevato_api::{Direction, Elevator, Floor, Rider, elevator, floor, riders};
+pub use elevato_api::{Direction, Elevator, Rider, elevator, floor, riders};
 pub use elevato_core as core;

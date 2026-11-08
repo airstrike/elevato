@@ -11,8 +11,8 @@ use iced_runtime::futures::MaybeSend;
 use iced_runtime::futures::futures::channel::mpsc;
 use iced_runtime::{Task, task};
 
+use crate::Rider;
 use crate::elevator::{self, Elevator};
-use crate::{Floor, Rider};
 
 /// The commands submitted and the riders' subscribers.
 #[derive(Debug, Default)]
@@ -28,7 +28,7 @@ pub(crate) enum Command {
     /// to `sender`; `handle` aborts its task.
     GoToFloor {
         elevator: Elevator,
-        floor: Floor,
+        floor: usize,
         first: bool,
         sender: mpsc::UnboundedSender<elevator::Message>,
         handle: task::Handle,

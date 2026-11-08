@@ -7,7 +7,7 @@
 //! its `update` takes an [`elevator::Message`], and the program routes
 //! each car's messages to it and maps its tasks back.
 
-use elevato::{Elevator, Floor, Rider, elevator, floor};
+use elevato::{Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub struct Program {
@@ -17,7 +17,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub enum Message {
     Elevator(Elevator, elevator::Message),
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 /// One car and the trips it has under way.
@@ -27,7 +27,7 @@ struct Car {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: Vec<Floor>) -> (Self, Task<Message>) {
+    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
         let mut cars: Vec<Car> = elevators.into_iter().map(Car::new).collect();
         let start = Task::batch(cars.iter_mut().map(|car| {
             let elevator = car.elevator;
@@ -65,7 +65,7 @@ impl Car {
         Self { elevator, trips: 0 }
     }
 
-    fn go_to_floor(&mut self, floor: impl Into<Floor>) -> Task<elevator::Message> {
+    fn go_to_floor(&mut self, floor: usize) -> Task<elevator::Message> {
         self.trips += 1;
         self.elevator.go_to_floor(floor)
     }

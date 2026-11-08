@@ -4,8 +4,8 @@
 use iced_runtime::Task;
 use iced_runtime::futures::futures::channel::mpsc;
 
+use crate::Direction;
 use crate::hub::{self, Command};
-use crate::{Direction, Floor};
 
 /// A car of the challenge's bank.
 ///
@@ -21,16 +21,16 @@ pub struct Elevator(usize);
 pub enum Message {
     /// A rider inside pressed the button for this floor, and it was not
     /// lit. It arrives through [`riders()`](crate::riders).
-    FloorButtonPressed(Floor),
+    FloorButtonPressed(usize),
     /// The car is about to pass this floor without stopping, heading in
     /// this direction. A trip's task streams one per floor it passes,
     /// still in time for [`Elevator::go_to_floor_first`] to stop there.
-    PassingFloor(Floor, Direction),
+    PassingFloor(usize, Direction),
     /// The car stopped at the floor its trip was going to: the last
     /// message of that trip's task, sent once riders have got off and on.
     StoppedAtFloor {
         /// Where the car stopped.
-        floor: Floor,
+        floor: usize,
         /// How many riders got off here.
         exited: usize,
         /// How many riders got on here.
@@ -54,20 +54,21 @@ impl Elevator {
         self.0
     }
 
-    /// A trip to `floor`, queued after the car's other trips.
+    /// A trip to `floor`, queued after the car's other trips. A floor
+    /// past the top is the top floor, as in the original.
     ///
     /// The task streams [`Message::PassingFloor`] while the car travels
     /// toward `floor` and ends with [`Message::StoppedAtFloor`] when it
     /// gets there. Asking for the floor the car is already queued to
     /// reach last adds no stop: both trips end at that one arrival.
-    pub fn go_to_floor(self, floor: impl Into<Floor>) -> Task<Message> {
-        self.trip(floor.into(), false)
+    pub fn go_to_floor(self, floor: usize) -> Task<Message> {
+        self.trip(floor, false)
     }
 
     /// A trip to `floor`, ahead of the car's other trips: go there first.
     /// The trips it overtakes resume after it, each still running.
-    pub fn go_to_floor_first(self, floor: impl Into<Floor>) -> Task<Message> {
-        self.trip(floor.into(), true)
+    pub fn go_to_floor_first(self, floor: usize) -> Task<Message> {
+        self.trip(floor, true)
     }
 
     /// Stops the car where it can, usually between floors, and aborts
@@ -89,7 +90,7 @@ impl Elevator {
         hub::command(Command::GoingDownIndicator { elevator: self, on })
     }
 
-    fn trip(self, floor: Floor, first: bool) -> Task<Message> {
+    fn trip(self, floor: usize, first: bool) -> Task<Message> {
         let (sender, receiver) = mpsc::unbounded();
         let (trip, handle) = Task::stream(receiver).abortable();
         hub::command(Command::GoToFloor {

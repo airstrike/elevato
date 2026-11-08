@@ -29,8 +29,8 @@
 
 use std::sync::Arc;
 
+use elevato_api::Elevator;
 use elevato_api::simulation::{self, Simulation};
-use elevato_api::{Elevator, Floor};
 use iced::{Subscription, Task};
 
 use crate::core::World;
@@ -104,7 +104,7 @@ impl Program {
     /// A program from its three functions, as iced takes an
     /// application's.
     pub fn new<P, M>(
-        new: impl Fn(Vec<Elevator>, Vec<Floor>) -> (P, Task<M>) + 'static,
+        new: impl Fn(Vec<Elevator>, usize) -> (P, Task<M>) + 'static,
         update: impl Fn(&mut P, M) -> Task<M> + Clone + 'static,
         subscription: impl Fn(&P) -> Subscription<M> + Clone + 'static,
     ) -> Self
@@ -350,13 +350,13 @@ mod tests {
 
     /// A program that shuttles every car between the lobby and the top.
     struct Shuttle {
-        floors: Vec<Floor>,
+        floors: usize,
     }
 
     fn shuttle() -> Program {
         Program::new(
-            |elevators: Vec<Elevator>, floors: Vec<Floor>| {
-                let top = floors[floors.len() - 1];
+            |elevators: Vec<Elevator>, floors: usize| {
+                let top = floors - 1;
                 let task = Task::batch(elevators.into_iter().map(|elevator| {
                     elevator
                         .go_to_floor(top)
@@ -367,11 +367,7 @@ mod tests {
             |shuttle: &mut Shuttle, (elevator, message): (Elevator, elevator::Message)| {
                 match message {
                     elevator::Message::StoppedAtFloor { floor, .. } => {
-                        let next = if floor == shuttle.floors[0] {
-                            shuttle.floors[shuttle.floors.len() - 1]
-                        } else {
-                            shuttle.floors[0]
-                        };
+                        let next = if floor == 0 { shuttle.floors - 1 } else { 0 };
                         elevator
                             .go_to_floor(next)
                             .map(move |message| (elevator, message))

@@ -13,12 +13,12 @@ impl Elevator {
     /// adds no stop: both trips end at that one arrival.
     ///
     ///     elevator.go_to_floor(3).map(Message::Elevator.with(elevator))
-    pub fn go_to_floor(self, floor: impl Into<Floor>) -> Task<Message>;
+    pub fn go_to_floor(self, floor: usize) -> Task<Message>;
 
     /// A trip to `floor` ahead of the car's other trips: go there
     /// first. The trips it overtakes resume after it. In time from
     /// `PassingFloor`, it stops the car at the floor it is passing.
-    pub fn go_to_floor_first(self, floor: impl Into<Floor>) -> Task<Message>;
+    pub fn go_to_floor_first(self, floor: usize) -> Task<Message>;
 
     /// Halts the car where it can - usually between floors, doors shut -
     /// and aborts its trips: their tasks end with no more messages.
@@ -36,18 +36,18 @@ impl Elevator {
 pub enum Message {
     /// A rider inside pressed this floor's button, and it was not lit.
     /// Arrives through `riders()`, about a second after they board.
-    FloorButtonPressed(Floor),
+    FloorButtonPressed(usize),
 
     /// The car is about to pass this floor without stopping, going this
     /// way. Streamed by the trip's task, still in time for
     /// `go_to_floor_first` to stop there.
-    PassingFloor(Floor, Direction),
+    PassingFloor(usize, Direction),
 
     /// The car reached the trip's floor: the trip task's last message,
     /// sent once riders have got off and on.
     StoppedAtFloor {
         /// Where the car stopped.
-        floor: Floor,
+        floor: usize,
         /// How many riders got off.
         exited: usize,
         /// How many riders got on. Only riders going the way a lit lamp

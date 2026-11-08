@@ -24,7 +24,7 @@ mod twentyliner;
 
 use elevato::core::challenge::{self, Outcome};
 use elevato::core::stats::Stats;
-use elevato::{Direction, Elevator, Floor, Rider, elevator, floor};
+use elevato::{Direction, Elevator, Rider, elevator, floor};
 use elevato_api::Simulation;
 use elevato_api::simulation::Error;
 use iced::{Subscription, Task};
@@ -139,7 +139,7 @@ fn recorder(
     Simulation::new(
         &challenge::roster()[challenge],
         SEED,
-        |elevators: Vec<Elevator>, _floors: Vec<Floor>| {
+        |elevators: Vec<Elevator>, _floors: usize| {
             let car = elevators[0];
             (
                 Log::new(),
@@ -169,14 +169,11 @@ fn a_trip_streams_the_floors_it_passes_and_ends_where_it_stops() {
     let messages: Vec<elevator::Message> = simulation_log(&simulation);
     assert_eq!(
         messages.first(),
-        Some(&elevator::Message::PassingFloor(
-            Floor::from(1),
-            Direction::Up
-        ))
+        Some(&elevator::Message::PassingFloor(1, Direction::Up))
     );
     assert!(matches!(
         messages.last(),
-        Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == Floor::from(2)
+        Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == 2
     ));
     assert_eq!(simulation.world().elevators()[0].current_floor(), 2);
 }
@@ -187,7 +184,7 @@ fn a_floor_past_the_top_is_the_top_floor() {
     drive(&mut simulation, 600);
     assert!(matches!(
         simulation_log(&simulation).last(),
-        Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == Floor::from(2)
+        Some(elevator::Message::StoppedAtFloor { floor, .. }) if *floor == 2
     ));
 }
 
@@ -212,7 +209,7 @@ fn going_to_a_floor_first_from_passing_floor_stops_there() {
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: Vec<Floor>| {
+        |elevators: Vec<Elevator>, _: usize| {
             let car = elevators[0];
             (
                 Log::new(),
@@ -233,14 +230,14 @@ fn going_to_a_floor_first_from_passing_floor_stops_there() {
     )
     .expect("the program boots");
     drive(&mut simulation, 900);
-    let stops: Vec<Floor> = simulation_log(&simulation)
+    let stops: Vec<usize> = simulation_log(&simulation)
         .into_iter()
         .filter_map(|message| match message {
             elevator::Message::StoppedAtFloor { floor, .. } => Some(floor),
             elevator::Message::FloorButtonPressed(_) | elevator::Message::PassingFloor(..) => None,
         })
         .collect();
-    assert_eq!(stops, vec![Floor::from(1), Floor::from(2)]);
+    assert_eq!(stops, vec![1, 2]);
     assert_eq!(simulation.world().elevators()[0].move_count(), 2);
 }
 
@@ -250,7 +247,7 @@ fn stop_aborts_the_trip_it_interrupts() {
     let mut stopping = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: Vec<Floor>| {
+        |elevators: Vec<Elevator>, _: usize| {
             let car = elevators[0];
             (
                 (car, Log::new()),
@@ -305,7 +302,7 @@ fn riders_call_cars_and_press_their_buttons() {
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: Vec<Floor>| (elevators, Task::none()),
+        |elevators: Vec<Elevator>, _: usize| (elevators, Task::none()),
         |elevators: &mut Vec<Elevator>, rider: Rider| match rider {
             Rider::Floor(floor, _) => elevators[0].go_to_floor(floor).discard(),
             Rider::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
@@ -326,7 +323,7 @@ fn a_panicking_program_ends_the_run_with_its_message() {
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
-        |elevators: Vec<Elevator>, _: Vec<Floor>| {
+        |elevators: Vec<Elevator>, _: usize| {
             let car = elevators[0];
             ((), car.go_to_floor(1))
         },

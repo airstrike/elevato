@@ -31,7 +31,6 @@ mod hub;
 
 pub use elevato_core::event::Direction;
 pub use elevator::Elevator;
-pub use floor::Floor;
 pub use simulation::Simulation;
 
 use iced_futures::Subscription;
@@ -43,7 +42,7 @@ use iced_runtime::Task;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Rider {
     /// A rider at this floor pressed a call button that was not lit.
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
     /// A rider in this car pressed a destination button that was not lit.
     Elevator(Elevator, elevator::Message),
 }

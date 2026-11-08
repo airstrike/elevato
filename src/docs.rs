@@ -22,7 +22,7 @@ pub enum Page {
     Lib,
     /// `Elevator`, its commands, and its messages.
     Elevator,
-    /// `Floor`, and its riders' messages.
+    /// What riders on a floor do.
     Floor,
 }
 
@@ -359,8 +359,6 @@ mod tests {
         ("FloorButtonPressed", Page::Elevator),
         ("PassingFloor", Page::Elevator),
         ("StoppedAtFloor", Page::Elevator),
-        ("Floor", Page::Floor),
-        ("level", Page::Floor),
         ("UpButtonPressed", Page::Floor),
         ("DownButtonPressed", Page::Floor),
     ];
@@ -415,7 +413,7 @@ mod tests {
         let mut state = State::new();
         let (page, line) = resolve("go_to_floor", None).unwrap();
         state.open(page, line);
-        let (page, line) = resolve("level", None).unwrap();
+        let (page, line) = resolve("UpButtonPressed", None).unwrap();
         state.open(page, line);
         state.back();
         assert!(state.can_go_forward());
@@ -433,7 +431,7 @@ mod tests {
         assert!(!state.can_go_back());
         let (page, line) = resolve("stop", None).unwrap();
         state.open(page, line);
-        let (page, line) = resolve("level", None).unwrap();
+        let (page, line) = resolve("UpButtonPressed", None).unwrap();
         state.open(page, line);
         assert_eq!(state.page(), Page::Floor);
         state.back();

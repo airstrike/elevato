@@ -8,33 +8,33 @@
 //! its `update` takes an [`elevator::Message`]; the program routes each
 //! car's messages to it and maps its tasks back.
 
-use elevato::{Direction, Elevator, Floor, Rider, elevator, floor};
+use elevato::{Direction, Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
-    ups: Vec<Floor>,
-    downs: Vec<Floor>,
+    ups: Vec<usize>,
+    downs: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Elevator(Elevator, elevator::Message),
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 /// One car: where it is, the stops it will make in order, and how many
 /// of them it has already been sent toward.
 struct Car {
     elevator: Elevator,
-    at: Floor,
-    stops: Vec<Floor>,
+    at: usize,
+    stops: Vec<usize>,
     sent: usize,
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
-        let lobby = floors[0];
+    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
+        let lobby = 0;
         let cars = elevators
             .into_iter()
             .map(|elevator| Car::new(elevator, lobby))
@@ -82,7 +82,7 @@ impl Program {
         let Some(car) = self.cars.iter_mut().find(|car| car.stops.is_empty()) else {
             return Task::none();
         };
-        let sweep: Vec<Floor> = if !self.ups.is_empty() {
+        let sweep: Vec<usize> = if !self.ups.is_empty() {
             std::mem::take(&mut self.ups)
         } else if !self.downs.is_empty() {
             std::mem::take(&mut self.downs).into_iter().rev().collect()
@@ -95,7 +95,7 @@ impl Program {
 }
 
 impl Car {
-    fn new(elevator: Elevator, at: Floor) -> Self {
+    fn new(elevator: Elevator, at: usize) -> Self {
         Self {
             elevator,
             at,
@@ -123,7 +123,7 @@ impl Car {
     }
 
     /// Takes a sweep of pickups, in the order given.
-    fn sweep(&mut self, floors: Vec<Floor>) -> Task<elevator::Message> {
+    fn sweep(&mut self, floors: Vec<usize>) -> Task<elevator::Message> {
         for floor in floors {
             if !self.stops.contains(&floor) {
                 self.stops.push(floor);
@@ -134,11 +134,11 @@ impl Car {
 
     /// A rider's destination joins the stops in travel order, so the car
     /// sweeps one way instead of ping-ponging in press order.
-    fn drop_off(&mut self, floor: Floor) -> Task<elevator::Message> {
+    fn drop_off(&mut self, floor: usize) -> Task<elevator::Message> {
         if self.stops.contains(&floor) {
             return Task::none();
         }
-        let between = |a: Floor, b: Floor| (a <= floor && floor <= b) || (b <= floor && floor <= a);
+        let between = |a: usize, b: usize| (a <= floor && floor <= b) || (b <= floor && floor <= a);
         match self.stops.first() {
             Some(&next) if self.sent > 0 && between(self.at, next) => {
                 // On the way to the stop it was sent to: stop here first.
@@ -196,7 +196,7 @@ impl Car {
 }
 
 /// Adds `floor` to a sorted list of calls, once.
-fn insert_sorted(calls: &mut Vec<Floor>, floor: Floor) {
+fn insert_sorted(calls: &mut Vec<usize>, floor: usize) {
     if let Err(index) = calls.binary_search(&floor) {
         calls.insert(index, floor);
     }

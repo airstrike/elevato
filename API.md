@@ -15,7 +15,7 @@ methods to the message or task that replaces it.
 
 ```rust
 // rawr
-use elevato::{Elevator, Floor, Rider, elevator, floor};
+use elevato::{Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
@@ -24,17 +24,17 @@ pub fn main() -> iced::Result {
 
 pub struct Program {
     elevators: Vec<Elevator>,
-    floors: Vec<Floor>,
+    floors: usize,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     Elevator(Elevator, elevator::Message),
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: Vec<Floor>) -> (Self, Task<Message>) {
+    pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Self, Task<Message>) {
         let start = Task::batch(elevators.iter().map(|&elevator| {
             elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
         }));
@@ -65,8 +65,8 @@ its `update`, and runs its tasks and subscription. Every attempt - a
 restart, a new challenge - boots the program afresh with `new`
 on a fresh world.
 
-`new` receives the challenge's elevators and floors, and the program
-keeps what it needs. There is no world to read: nothing the program
+`new` receives the challenge's elevators and its number of floors,
+and the program keeps what it needs. There is no world to read: nothing the program
 calls reads the simulation, and everything it knows arrives as a
 message. A panic anywhere in the program ends the attempt, and its
 message shows under the editor (the original's "There is a problem
@@ -74,18 +74,13 @@ with your code").
 
 ## Elevators and floors
 
-`Elevator` and `Floor` are the only types for cars and floors, and
-both are `Copy`, comparable and hashable.
-
-- **Elevators** come only from `new` and from messages, so a program
-  can never name a car the challenge doesn't have.
-- **Floors** come from `new`, from messages, and from integers:
-  `Floor` converts from `usize`, `i64` and `i32` (what an integer
-  literal is when nothing else types it), and every function that
-  takes a floor takes `impl Into<Floor>`. `elevator.go_to_floor(3)`
-  works. `floor.level()` reads the level back. A negative level is the
-  lobby, and a level past the top floor is the top floor once a car
-  is sent there, as the original clamped it.
+- **Elevators** are `Elevator`s: `Copy`, comparable and hashable. They
+  come only from `new` and from messages, so a program can never name
+  a car the challenge doesn't have.
+- **Floors** are plain numbers, `usize` levels from 0 (the lobby) to
+  one below the count `new` receives. `elevator.go_to_floor(3)` works,
+  and a level past the top floor is the top floor once a car is sent
+  there, as the original clamped it.
 
 ## Where each message comes from
 
@@ -131,7 +126,7 @@ elevator.go_to_floor(3)])` sets the lamp before the car leaves.
 | `currentFloor()`, `destinationDirection()`, `getPressedFloors()` | - | No reads. The program learns where its cars are from `PassingFloor` and `StoppedAtFloor`, and which buttons are lit from `riders()`. |
 | `loadFactor()` | `StoppedAtFloor { load_factor, full, .. }` | As the car leaves the stop. `full` is the slot-count test the weight-based load factor can't answer. |
 | `maxPassengerCount()` | - | Not exposed; `full` says when a car can take no one. |
-| `floor.buttonStates`, `floorNum()` | `riders()`, `floor.level()` | The program keeps its own record of lit calls. |
+| `floor.buttonStates`, `floorNum()` | `riders()`, the floor itself | The program keeps its own record of lit calls. |
 
 ## Rust as rawr runs it
 

@@ -15,7 +15,7 @@ use iced::widget::{
 use iced::window;
 use iced::{Center, Element, Fill, Length, Pixels, Subscription, Task};
 
-use elevato_api::{Elevator, Floor};
+use elevato_api::Elevator;
 
 use crate::core::challenge::{Condition, Outcome};
 use crate::docs;
@@ -180,7 +180,7 @@ pub enum Message {
 /// program afresh on the challenge's world, and the game hosts it as
 /// its child.
 pub fn run<P, M>(
-    new: impl Fn(Vec<Elevator>, Vec<Floor>) -> (P, Task<M>) + 'static,
+    new: impl Fn(Vec<Elevator>, usize) -> (P, Task<M>) + 'static,
     update: impl Fn(&mut P, M) -> Task<M> + Clone + 'static,
     subscription: impl Fn(&P) -> Subscription<M> + Clone + 'static,
 ) -> iced::Result

@@ -36,7 +36,7 @@ use iced_runtime::{Action, Task, task};
 
 use crate::Rider;
 use crate::elevator::{self, Elevator};
-use crate::floor::{self, Floor};
+use crate::floor;
 use crate::hub::{self, Command, Hub};
 
 /// Hard cap on delivery rounds per dispatch point: a program whose
@@ -90,7 +90,7 @@ struct Run<P, M> {
 
 /// One entry of a car's destination queue, and the trips that end there.
 struct Stop {
-    floor: Floor,
+    floor: usize,
     trips: Vec<Trip>,
 }
 
@@ -103,7 +103,7 @@ struct Trip {
 /// A car that stopped, before riders got off and on.
 struct Arrival {
     elevator: Elevator,
-    floor: Floor,
+    floor: usize,
     /// Riders aboard as it stopped.
     aboard: usize,
     /// Riders aboard who were going here.
@@ -162,13 +162,13 @@ where
     pub fn new(
         challenge: &Challenge,
         seed: u64,
-        new: impl FnOnce(Vec<Elevator>, Vec<Floor>) -> (P, Task<M>),
+        new: impl FnOnce(Vec<Elevator>, usize) -> (P, Task<M>),
         update: impl Fn(&mut P, M) -> Task<M> + 'static,
         subscription: impl Fn(&P) -> Subscription<M> + 'static,
     ) -> Result<Self, Error> {
         let world = World::new(challenge, seed);
         let elevators = (0..world.elevators().len()).map(Elevator::new).collect();
-        let floors = (0..world.floors().len()).map(Floor::from).collect();
+        let floors = world.floors().len();
         let queues = world.elevators().iter().map(|_| Vec::new()).collect();
         let mut hub = Hub::default();
         let (program, task) = hub::enter(&mut hub, || guard(|| new(elevators, floors)))?;
@@ -283,21 +283,15 @@ where
             // The program owns its queues: an empty one tells it nothing.
             Event::Idle { .. } => {}
             Event::UpButtonPressed { floor } => {
-                hub::broadcast(Rider::Floor(
-                    Floor::from(floor),
-                    floor::Message::UpButtonPressed,
-                ));
+                hub::broadcast(Rider::Floor(floor, floor::Message::UpButtonPressed));
             }
             Event::DownButtonPressed { floor } => {
-                hub::broadcast(Rider::Floor(
-                    Floor::from(floor),
-                    floor::Message::DownButtonPressed,
-                ));
+                hub::broadcast(Rider::Floor(floor, floor::Message::DownButtonPressed));
             }
             Event::FloorButtonPressed { elevator, floor } => {
                 hub::broadcast(Rider::Elevator(
                     Elevator::new(elevator),
-                    elevator::Message::FloorButtonPressed(Floor::from(floor)),
+                    elevator::Message::FloorButtonPressed(floor),
                 ));
             }
             Event::PassingFloor {
@@ -308,25 +302,23 @@ where
                 let heading = self.world.elevators()[elevator]
                     .destination_queue()
                     .first()
-                    .map(|&level| Floor::from(level.round() as usize));
+                    .map(|&level| level.round() as usize);
                 if let Some(stop) = self.queues[elevator].first()
                     && Some(stop.floor) == heading
                 {
                     for trip in &stop.trips {
-                        let _ = trip.sender.unbounded_send(elevator::Message::PassingFloor(
-                            Floor::from(floor),
-                            direction,
-                        ));
+                        let _ = trip
+                            .sender
+                            .unbounded_send(elevator::Message::PassingFloor(floor, direction));
                     }
                 }
             }
             Event::StoppedAtFloor { elevator, floor } => {
-                let floor = Floor::from(floor);
                 let queue = &mut self.queues[elevator];
                 let stop =
                     (queue.first().map(|stop| stop.floor) == Some(floor)).then(|| queue.remove(0));
                 let aboard = self.riders(elevator, |_| true);
-                let leaving = self.riders(elevator, |destination| destination == floor.level());
+                let leaving = self.riders(elevator, |destination| destination == floor);
                 self.arrivals.push(Arrival {
                     elevator: Elevator::new(elevator),
                     floor,
@@ -471,9 +463,10 @@ where
                     handle,
                 } => {
                     let index = elevator.index();
-                    let floor = floor.within(self.world.floors().len());
+                    // A floor past the top is the top floor, as in the original.
+                    let floor = floor.min(self.world.floors().len().saturating_sub(1));
                     let before = self.world.elevators()[index].destination_queue().len();
-                    self.world.go_to_floor(index, floor.level() as f64, first);
+                    self.world.go_to_floor(index, floor as f64, first);
                     let queued = self.world.elevators()[index].destination_queue().len() > before;
                     let trip = Trip { sender, handle };
                     let queue = &mut self.queues[index];

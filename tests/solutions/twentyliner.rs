@@ -7,7 +7,7 @@
 //! claimed, and the car is stopped and sent there with its lamps set to
 //! match.
 
-use elevato::{Elevator, Floor, Rider, elevator, floor};
+use elevato::{Elevator, Rider, elevator, floor};
 use iced::{Function, Subscription, Task};
 
 pub struct Program {
@@ -19,7 +19,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub enum Message {
     Elevator(Elevator, elevator::Message),
-    Floor(Floor, floor::Message),
+    Floor(usize, floor::Message),
 }
 
 /// What the program knows of one car.
@@ -36,7 +36,7 @@ struct Car {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: Vec<Floor>) -> (Self, Task<Message>) {
+    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
         let cars = elevators
             .into_iter()
             .map(|elevator| Car {
@@ -152,7 +152,7 @@ impl Program {
                     elevator.stop(),
                     elevator.set_going_down_indicator(lamps.1),
                     elevator.set_going_up_indicator(lamps.0),
-                    elevator.go_to_floor(best.abs()),
+                    elevator.go_to_floor(best.unsigned_abs() as usize),
                 ])
                 .map(Message::Elevator.with(elevator)),
             );
@@ -161,6 +161,6 @@ impl Program {
     }
 }
 
-fn level(floor: Floor) -> i64 {
-    floor.level() as i64
+fn level(floor: usize) -> i64 {
+    floor as i64
 }
