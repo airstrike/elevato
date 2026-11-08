@@ -73,7 +73,7 @@ fn the_starter_runs_challenge_one_to_its_time_limit() {
     // Shuttling floors 0 and 1 cannot clear a 3-floor challenge; the
     // point is a clean run to the time limit, moving somebody.
     assert_eq!(run.outcome(), Outcome::Failed);
-    assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3656));
+    assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3689));
 }
 
 #[test]
@@ -222,7 +222,8 @@ fn going_to_a_floor_first_from_passing_floor_stops_there() {
                 elevator::Message::PassingFloor(floor, _) => car
                     .go_to_floor_first(floor)
                     .map(move |message| (car, message)),
-                elevator::Message::FloorButtonPressed(_)
+                elevator::Message::Idle
+                | elevator::Message::FloorButtonPressed(_)
                 | elevator::Message::StoppedAtFloor { .. } => Task::none(),
             }
         },
@@ -234,7 +235,9 @@ fn going_to_a_floor_first_from_passing_floor_stops_there() {
         .into_iter()
         .filter_map(|message| match message {
             elevator::Message::StoppedAtFloor { floor, .. } => Some(floor),
-            elevator::Message::FloorButtonPressed(_) | elevator::Message::PassingFloor(..) => None,
+            elevator::Message::Idle
+            | elevator::Message::FloorButtonPressed(_)
+            | elevator::Message::PassingFloor(..) => None,
         })
         .collect();
     assert_eq!(stops, vec![1, 2]);
@@ -337,9 +340,9 @@ fn a_panicking_program_ends_the_run_with_its_message() {
         },
         |_: &mut (), message: elevator::Message| match message {
             elevator::Message::StoppedAtFloor { .. } => panic!("kaboom"),
-            elevator::Message::FloorButtonPressed(_) | elevator::Message::PassingFloor(..) => {
-                Task::none()
-            }
+            elevator::Message::Idle
+            | elevator::Message::FloorButtonPressed(_)
+            | elevator::Message::PassingFloor(..) => Task::none(),
         },
         |_: &()| Subscription::none(),
     )

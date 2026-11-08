@@ -19,6 +19,10 @@ pub struct Elevator(usize);
 /// What a car tells the program.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
+    /// The car has no trip left to make: at the start, and after it stops
+    /// at the last floor it was sent to. It arrives through
+    /// [`riders()`](crate::riders).
+    Idle,
     /// A rider inside pressed the button for this floor, and it was not
     /// lit. It arrives through [`riders()`](crate::riders).
     FloorButtonPressed(usize),

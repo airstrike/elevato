@@ -156,8 +156,9 @@ where
     M: MaybeSend + 'static,
 {
     /// Builds the world for `challenge` and boots the program on it:
-    /// `new` gets the bank's elevators and the building's floors, and
-    /// the tasks it returns run before this returns.
+    /// `new` gets the bank's elevators and the building's floors, the
+    /// tasks it returns run, and every car left without a trip reports
+    /// [`Idle`](elevator::Message::Idle), all before this returns.
     pub fn new(
         challenge: &Challenge,
         seed: u64,
@@ -194,6 +195,12 @@ where
             run.guarded(|run| {
                 run.spawn(task);
                 run.subscribe();
+                run.dispatch();
+                // The original's first round: every car `new` left without
+                // a trip says it is idle.
+                for elevator in 0..run.world.elevators().len() {
+                    run.world.check_destination_queue(elevator);
+                }
                 run.dispatch();
             })
         })?;
@@ -279,8 +286,12 @@ where
     /// Sends one world event where it belongs.
     fn route(&mut self, event: Event) {
         match event {
-            // The program owns its queues: an empty one tells it nothing.
-            Event::Idle { .. } => {}
+            Event::Idle { elevator } => {
+                hub::broadcast(hub::Rider::Elevator(
+                    Elevator::new(elevator),
+                    elevator::Message::Idle,
+                ));
+            }
             Event::UpButtonPressed { floor } => {
                 hub::broadcast(hub::Rider::Floor(floor, floor::Message::UpButtonPressed));
             }

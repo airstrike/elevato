@@ -68,6 +68,7 @@ impl Program {
                     return Task::none();
                 };
                 match message {
+                    elevator::Message::Idle => {}
                     elevator::Message::FloorButtonPressed(floor) => car.pressed.push(level(floor)),
                     elevator::Message::PassingFloor(floor, _) => car.at = level(floor),
                     elevator::Message::StoppedAtFloor {

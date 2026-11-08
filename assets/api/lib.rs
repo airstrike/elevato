@@ -5,8 +5,8 @@
 //!     use iced::{Function, Subscription, Task};
 //!
 //! A car's trip is a task: it streams the floors the car passes and
-//! ends when the car stops. Riders are the other source of messages,
-//! through `riders()`.
+//! ends when the car stops. Riders and idle cars are the other sources
+//! of messages, through `riders()`.
 
 /// Opens the game with your program steering the elevators. `main`
 /// calls it once, with the program's three functions:

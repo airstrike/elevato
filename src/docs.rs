@@ -355,6 +355,7 @@ mod tests {
         ("stop", Page::Elevator),
         ("set_going_up_indicator", Page::Elevator),
         ("set_going_down_indicator", Page::Elevator),
+        ("Idle", Page::Elevator),
         ("FloorButtonPressed", Page::Elevator),
         ("PassingFloor", Page::Elevator),
         ("StoppedAtFloor", Page::Elevator),

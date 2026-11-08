@@ -34,6 +34,10 @@ impl Elevator {
 
 /// What a car tells your program.
 pub enum Message {
+    /// The car has no trip left: at the start, and when it stops at the
+    /// last floor it was sent to. Arrives through `riders()`.
+    Idle,
+
     /// A rider inside pressed this floor's button, and it was not lit.
     /// Arrives through `riders()`, about a second after they board.
     FloorButtonPressed(usize),

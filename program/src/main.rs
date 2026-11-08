@@ -15,10 +15,9 @@ pub fn main() -> iced::Result {
     elevato::run(Program::new, Program::update, Program::subscription)
 }
 
-/// Our state: the elevator we use, and how many trips it has queued.
+/// Our state: the elevator we use.
 pub struct Program {
     elevator: Elevator,
-    trips: usize,
 }
 
 /// Everything that can happen to us.
@@ -35,25 +34,14 @@ impl Program {
     pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
         let elevator = elevators[0]; // Let's use the first elevator
 
-        let start = Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
-            .map(Message::Elevator.with(elevator));
-        (Self { elevator, trips: 2 }, start)
+        (Self { elevator }, Task::none())
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Elevator(elevator, elevator::Message::StoppedAtFloor { .. })
-                if elevator == self.elevator =>
-            {
-                self.trips -= 1;
-
-                // Whenever the elevator is idle (has no more queued destinations) ...
-                if self.trips > 0 {
-                    return Task::none();
-                }
-
+            // Whenever the elevator is idle (has no more queued destinations) ...
+            Message::Elevator(elevator, elevator::Message::Idle) if elevator == self.elevator => {
                 // let's go to all the floors (or did we forget one?)
-                self.trips = 2;
                 Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
                     .map(Message::Elevator.with(elevator))
             }

@@ -70,7 +70,7 @@ impl Car {
     fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
         match message {
             elevator::Message::FloorButtonPressed(floor) => self.go_to_floor(floor),
-            elevator::Message::PassingFloor(..) => Task::none(),
+            elevator::Message::Idle | elevator::Message::PassingFloor(..) => Task::none(),
             elevator::Message::StoppedAtFloor { .. } => {
                 self.trips -= 1;
                 if self.trips == 0 {

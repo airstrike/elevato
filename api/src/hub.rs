@@ -21,13 +21,14 @@ pub(crate) struct Hub {
     riders: Vec<mpsc::UnboundedSender<Rider>>,
 }
 
-/// Something a rider did: pressed a call button on a floor, or a
-/// destination button inside a car.
+/// What the building tells the program unasked: a rider's press on a
+/// floor, or a car's news (a rider's press inside it, or that it is idle).
 #[derive(Debug, Clone)]
 pub(crate) enum Rider {
     /// A rider at this floor pressed a call button that was not lit.
     Floor(usize, floor::Message),
-    /// A rider in this car pressed a destination button that was not lit.
+    /// A rider in this car pressed a destination button that was not
+    /// lit, or the car has no trip left.
     Elevator(Elevator, elevator::Message),
 }
 

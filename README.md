@@ -91,7 +91,7 @@ pub fn main() -> iced::Result {
 }
 
 pub struct Program {
-    floors: usize,
+    elevator: Elevator,
 }
 
 #[derive(Debug, Clone)]
@@ -101,18 +101,19 @@ pub enum Message {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Self, Task<Message>) {
-        let start = Task::batch(elevators.into_iter().map(|elevator| {
-            elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
-        }));
-        (Self { floors }, start)
+    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
+        let elevator = elevators[0]; // Let's use the first elevator
+
+        (Self { elevator }, Task::none())
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Elevator(elevator, elevator::Message::StoppedAtFloor { floor, .. }) => {
-                let next = (floor + 1) % self.floors.min(2);
-                elevator.go_to_floor(next).map(Message::Elevator.with(elevator))
+            // Whenever the elevator is idle (has no more queued destinations) ...
+            Message::Elevator(elevator, elevator::Message::Idle) if elevator == self.elevator => {
+                // let's go to all the floors (or did we forget one?)
+                Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
+                    .map(Message::Elevator.with(elevator))
             }
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
         }

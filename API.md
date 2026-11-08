@@ -84,20 +84,21 @@ with your code").
 | Message | Cause | Channel |
 |---|---|---|
 | `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders(..)`, through the program's floor constructor |
+| `elevator::Message::Idle` | A car has no trip left: at the start, and when it stops at the last floor it was sent to | `elevato::riders(..)`, through the program's elevator constructor |
 | `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders(..)`, through the program's elevator constructor |
 | `elevator::Message::PassingFloor(floor, direction)` | A car the program sent is about to pass a floor | Streamed by the task from `go_to_floor` |
 | `elevator::Message::StoppedAtFloor { .. }` | That car arriving | The same task's final message, after riders got off and on |
 
-Riders are the only source of messages besides the program's own
-tasks. A button already lit stays silent, as in the original.
+Riders and idle cars are the only sources of messages besides the
+program's own tasks. A button already lit stays silent, as in the original.
 
 ## The original's callbacks
 
 | Original (JS) | elevato | Notes |
 |---|---|---|
-| `init(elevators, floors)` | `Program::new(elevators, floors)` | Returns the state and the first tasks. The original's initial `idle` round is gone: the first moves are the tasks `new` returns. |
+| `init(elevators, floors)` | `Program::new(elevators, floors)` | Returns the state and the first tasks. Then, as in the original, every car left without a trip says it is idle. |
 | `update(dt, elevators, floors)` | - | No tick. Time isn't a message; the program reacts to riders and to its cars. |
-| `elevator.on("idle")` | - | The program owns its queues. A car is idle when the program has no trip under way for it; the last `StoppedAtFloor` says so. |
+| `elevator.on("idle")` | `elevator::Message::Idle` | From `riders()`. |
 | `elevator.on("floor_button_pressed", f)` | `elevator::Message::FloorButtonPressed(floor)` | From `riders()`. |
 | `elevator.on("passing_floor", f, dir)` | `elevator::Message::PassingFloor(floor, direction)` | Streamed by the trip's task, still in time for `go_to_floor_first` to stop there. |
 | `elevator.on("stopped_at_floor", f)` | `elevator::Message::StoppedAtFloor { floor, exited, boarded, load_factor, full }` | The trip task's last message. **[deviation]** It arrives after riders got off and on, so it says who did; lamps that steer boarding are set when the car is sent, not on arrival. |
@@ -141,8 +142,8 @@ what works.
 1. The Elm architecture replaces callbacks and handles: events arrive
    as messages, effects are tasks the program returns, and the program
    keeps its own state instead of reading the world's.
-2. There is no tick and no idle event: the program reacts to riders and
-   to its own trips.
+2. There is no tick: the program reacts to riders, idle cars and its
+   own trips.
 3. `StoppedAtFloor` arrives after riders got off and on (and says how
    many did); the original called `stopped_at_floor` before boarding.
 4. Destinations are whole floors. The original's `Number()` coercion

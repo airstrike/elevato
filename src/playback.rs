@@ -372,7 +372,8 @@ mod tests {
                             .go_to_floor(next)
                             .map(move |message| (elevator, message))
                     }
-                    elevator::Message::FloorButtonPressed(_)
+                    elevator::Message::Idle
+                    | elevator::Message::FloorButtonPressed(_)
                     | elevator::Message::PassingFloor(..) => Task::none(),
                 }
             },

@@ -103,6 +103,7 @@ impl Car {
 
     fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
         match message {
+            elevator::Message::Idle => Task::none(),
             elevator::Message::FloorButtonPressed(floor) => self.drop_off(floor),
             elevator::Message::PassingFloor(floor, _) => {
                 self.at = floor;
