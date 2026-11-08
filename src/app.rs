@@ -533,7 +533,7 @@ impl Game {
                                 self.playback.timescale(),
                                 self.playback.challenge_index(),
                             );
-                            self.editor.applied(written);
+                            self.editor.saved(written);
                         }
                         editor::Instruction::Save(source) => {
                             let written = storage::save(

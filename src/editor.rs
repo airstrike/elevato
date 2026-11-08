@@ -1,8 +1,7 @@
 //! The Rust editor pane: a self-contained TEA cell owning the text
 //! buffer, the dirty flag, the Reset backup, and the strip that shows
 //! an applied edit's error. The parent owns the writes (it is told via
-//! [`Instruction`] and answers through [`State::applied`] and
-//! [`State::saved`]) and passes rawr's verdicts down through
+//! [`Instruction`] and answers through [`State::saved`]) and passes rawr's verdicts down through
 //! [`State::reloaded`]; the program's panic, when it stopped the run,
 //! is a read-only prop passed into [`State::view`].
 //!
@@ -29,8 +28,7 @@ use crate::theme;
 pub struct State {
     content: text_editor::Content,
     /// Whether the text has changed since the parent last confirmed a
-    /// save ([`State::saved`], [`State::applied`]); gates Save and
-    /// Apply.
+    /// save ([`State::saved`]); gates Save and Apply.
     dirty: bool,
     /// The text Reset replaced, kept for Undo reset. `Content` is not
     /// `Clone`, so backups travel as text snapshots.
@@ -108,7 +106,7 @@ pub enum Message {
 /// What the parent must do on the editor's behalf.
 pub enum Instruction {
     /// Save this source as the program, for the running game to take up;
-    /// answer with [`State::applied`].
+    /// answer with [`State::saved`].
     Apply(String),
     /// Save this source as the program (whether or not it compiles);
     /// answer with [`State::saved`].
@@ -136,22 +134,20 @@ impl State {
         self.content.text()
     }
 
-    /// The parent's answer to [`Instruction::Apply`]: whether the text
-    /// was written.
-    pub fn applied(&mut self, written: io::Result<()>) {
-        self.saved(written);
-    }
-
-    /// The parent's answer to [`Instruction::Save`]: whether the text was
-    /// written.
+    /// The parent's answer to [`Instruction::Apply`] and
+    /// [`Instruction::Save`]: whether the text was written.
+    /// A write clears only a write error: rawr's own outcomes clear the
+    /// rest, and a save rawr sees no change in brings none.
     pub fn saved(&mut self, written: io::Result<()>) {
-        self.status = match written {
+        match written {
             Ok(()) => {
                 self.dirty = false;
-                None
+                if matches!(self.status, Some(Status::Unsaved(_))) {
+                    self.status = None;
+                }
             }
-            Err(error) => Some(Status::Unsaved(error)),
-        };
+            Err(error) => self.status = Some(Status::Unsaved(error)),
+        }
     }
 
     /// rawr's verdict on a save, from this editor or any other. Only a
@@ -253,7 +249,7 @@ impl State {
         self.last_edit = Some(kind);
     }
 
-    /// The pane: editor, the status strip (once an edit was applied),
+    /// The pane: editor, the strip (when there is something to show),
     /// the error panel (when `error` is present), and the
     /// Apply/Save/Reset/Undo-reset row. `error` is the program's panic
     /// that stopped the run, owned by the parent.
@@ -470,7 +466,7 @@ mod tests {
         assert!(state.update(Message::Apply).instruction.is_none());
         insert(&mut state, 'x');
         assert!(state.update(Message::Apply).instruction.is_some());
-        state.applied(Ok(()));
+        state.saved(Ok(()));
         assert!(state.update(Message::Apply).instruction.is_none());
 
         let mut compiled = State::new("fn new() -> Model {}", reload::Host::Compiled);
@@ -484,8 +480,7 @@ mod tests {
         let mut state = State::new("", reload::Host::Rawr);
         state.reloaded(reload::Outcome::Restarted("`Program` changed".to_string()));
         insert(&mut state, 'x');
-        state.applied(Ok(()));
-        assert_eq!(strip_line(&state), None);
+        state.saved(Ok(()));
         for outcome in [
             reload::Outcome::Queued,
             reload::Outcome::Swapped,
@@ -522,6 +517,9 @@ mod tests {
             strip_line(&state).as_deref(),
             Some("Line 42:17: cannot find value `nxt` in this scope")
         );
+        insert(&mut state, 'x');
+        state.saved(Ok(()));
+        assert!(strip_line(&state).is_some(), "a save alone keeps the error");
         state.reloaded(reload::Outcome::Swapped);
         assert_eq!(strip_line(&state), None);
     }
@@ -530,7 +528,7 @@ mod tests {
     fn a_failed_write_shows_the_error_and_keeps_the_edit_dirty() {
         let mut state = State::new("", reload::Host::Rawr);
         insert(&mut state, 'x');
-        state.applied(Err(io::Error::other("disk full")));
+        state.saved(Err(io::Error::other("disk full")));
         assert_eq!(
             strip_line(&state).as_deref(),
             Some("Couldn't save: disk full")
