@@ -526,15 +526,20 @@ impl Game {
                     self.tab = Tab::Api;
                 }
                 if let Some(instruction) = action.instruction {
-                    match instruction {
-                        editor::Instruction::Save(source) => {
-                            let written = storage::save(
-                                &source,
-                                self.playback.timescale(),
-                                self.playback.challenge_index(),
-                            );
-                            self.editor.saved(written);
-                        }
+                    let (source, start) = match instruction {
+                        editor::Instruction::Save(source) => (Some(source), false),
+                        editor::Instruction::Run(source) => (source, true),
+                    };
+                    if let Some(source) = source {
+                        let written = storage::save(
+                            &source,
+                            self.playback.timescale(),
+                            self.playback.challenge_index(),
+                        );
+                        self.editor.saved(written);
+                    }
+                    if start && !self.playback.is_running() {
+                        self.playback.toggle();
                     }
                 }
                 return action.task.map(Message::Editor);

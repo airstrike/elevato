@@ -6,8 +6,9 @@
 //! panic, when it stopped the run, is a read-only prop passed into
 //! [`State::view`].
 //!
-//! Save (the button, Cmd+S or Cmd+Enter) writes the program; under
-//! `rawr run` that write is what applies the edit.
+//! Save (the button, or Cmd+S) writes the program; under `rawr run`
+//! that write is what applies the edit. Cmd+Enter saves too, and starts
+//! the run when it isn't running.
 
 use std::io;
 
@@ -83,9 +84,11 @@ fn edit_kind(action: &text_editor::Action) -> Edit {
 pub enum Message {
     /// The text editor performed an action (edit, cursor move, …).
     Edited(text_editor::Action),
-    /// Save was pressed, or Cmd+S / Cmd+Enter typed: write the current
-    /// text as the program.
+    /// Save was pressed, or Cmd+S typed: write the current text as the
+    /// program.
     Save,
+    /// Cmd+Enter: save, and start the run when it isn't running.
+    Run,
     /// Reset was pressed: back the current text up, restore the
     /// starter program.
     Reset,
@@ -102,6 +105,9 @@ pub enum Instruction {
     /// Save this source as the program (whether or not it compiles);
     /// answer with [`State::saved`].
     Save(String),
+    /// Start the run when it isn't running, first saving this source
+    /// when there are unsaved edits (answer with [`State::saved`]).
+    Run(Option<String>),
 }
 
 impl State {
@@ -182,6 +188,7 @@ impl State {
                 }
                 Action::instruction(Instruction::Save(self.text()))
             }
+            Message::Run => Action::instruction(Instruction::Run(self.dirty.then(|| self.text()))),
             Message::Reset => {
                 self.record(Edit::Other);
                 self.backup = Some(self.text());
@@ -244,9 +251,10 @@ impl State {
             .on_action(Message::Edited)
             .key_binding(|press| {
                 let command = press.modifiers.command();
-                let save = press.key == keyboard::Key::Named(Named::Enter)
-                    || matches!(press.key.as_ref(), keyboard::Key::Character("s"));
-                if command && save {
+                if command && press.key == keyboard::Key::Named(Named::Enter) {
+                    return Some(text_editor::Binding::Custom(Message::Run));
+                }
+                if command && matches!(press.key.as_ref(), keyboard::Key::Character("s")) {
                     return Some(text_editor::Binding::Custom(Message::Save));
                 }
                 let z = matches!(press.key.as_ref(), keyboard::Key::Character("z"));
@@ -426,6 +434,20 @@ mod tests {
     /// The strip's line, as the player reads it.
     fn strip_line(state: &State) -> Option<String> {
         state.status.as_ref().map(describe)
+    }
+
+    #[test]
+    fn run_saves_unsaved_edits_and_runs_either_way() {
+        let mut state = State::new("fn new() -> Model {}");
+        assert!(matches!(
+            state.update(Message::Run).instruction,
+            Some(Instruction::Run(None))
+        ));
+        insert(&mut state, 'x');
+        assert!(matches!(
+            state.update(Message::Run).instruction,
+            Some(Instruction::Run(Some(source))) if source.starts_with('x')
+        ));
     }
 
     #[test]
