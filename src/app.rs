@@ -121,8 +121,13 @@ pub enum Message {
     Continue,
     /// The splash's homage link: open the original game in a new tab.
     OpenOriginal,
-    /// The splash measurement came back; build the game with it.
-    Measured(Option<selector::Target>),
+    /// The splash measurement came back; build the game with it,
+    /// resuming the game rawr restarted for an edit when `restarted`
+    /// gives rawr's reason.
+    Measured {
+        target: Option<selector::Target>,
+        restarted: Option<String>,
+    },
     /// One playback frame is due. Deliberately a unit variant: the tick
     /// subscription's `Instant` is a different type on wasm, so it must
     /// never ride along.
@@ -230,7 +235,10 @@ pub fn boot(program: Program) -> (App, Task<Message>) {
 pub fn update(app: &mut App, message: Message) -> Task<Message> {
     match message {
         Message::Continue => {
-            return selector::find(SPLASH).map(Message::Measured);
+            return selector::find(SPLASH).map(|target| Message::Measured {
+                target,
+                restarted: None,
+            });
         }
         Message::OpenOriginal => {
             const ORIGINAL: &str = "https://play.elevatorsaga.com";
@@ -241,7 +249,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             #[cfg(not(target_arch = "wasm32"))]
             let _ = open::that(ORIGINAL);
         }
-        Message::Measured(target) => {
+        Message::Measured { target, restarted } => {
             // Half the measured viewport seeds the divider so the twin
             // cards come up even; an unmeasurable splash (shouldn't
             // happen) falls back to the split's own halving.
@@ -249,20 +257,26 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
                 .map(|bounds| bounds.width);
-            app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), app.host, width)));
+            let mut game = Box::new(Game::new(app.program.clone(), app.host, width));
+            let task = match restarted {
+                Some(reason) => game.update(Message::Reloaded(reload::Outcome::Restarted(reason))),
+                None => Task::none(),
+            };
+            app.screen = Screen::Game(game);
+            return task;
         }
-        Message::Reloaded(outcome) => {
+        Message::Reloaded(outcome) => match (&mut app.screen, outcome) {
             // A game rawr restarted for an edit goes straight back to
-            // the game, not the splash.
-            if matches!(app.screen, Screen::Splash)
-                && matches!(outcome, reload::Outcome::Restarted(_))
-            {
-                app.screen = Screen::Game(Box::new(Game::new(app.program.clone(), app.host, None)));
+            // the game, not the splash, once the splash is measured.
+            (Screen::Splash, reload::Outcome::Restarted(reason)) => {
+                return selector::find(SPLASH).map(move |target| Message::Measured {
+                    target,
+                    restarted: Some(reason.clone()),
+                });
             }
-            if let Screen::Game(game) = &mut app.screen {
-                return game.update(Message::Reloaded(outcome));
-            }
-        }
+            (Screen::Splash, _) => {}
+            (Screen::Game(game), outcome) => return game.update(Message::Reloaded(outcome)),
+        },
         Message::ToggleMode => {
             app.mode = app.mode.toggle();
             // Cached geometry bakes the old palette in; force a redraw.
@@ -557,7 +571,7 @@ impl Game {
             }
             // Handled at the app level before routing here.
             Message::Continue
-            | Message::Measured(_)
+            | Message::Measured { .. }
             | Message::ToggleMode
             | Message::OpenOriginal => {}
         }
