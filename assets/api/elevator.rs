@@ -1,27 +1,32 @@
-//! Get elevators from `new` or messages. Return a command's `Task` to
-//! run it.
+//! Power on an elevator with `Elevator::new`. Return a command's `Task`
+//! to run it.
 
 /// A car of the challenge's bank. `Copy`, comparable, hashable: a
 /// fine key for your own maps.
 pub struct Elevator;
 
 impl Elevator {
-    /// A trip to `floor`, after the car's other trips. The task streams
-    /// `PassingFloor` while the car travels and ends with
-    /// `StoppedAtFloor` when it gets there. A floor past the top is the
-    /// top floor. Asking for the floor the car already goes to last
-    /// adds no stop: both trips end at that one arrival.
+    /// Powers on the bank's next car, standing at the lobby, with the
+    /// task of its news: `Idle` at once, and whenever it has nothing left
+    /// to do. A car past the bank never enters the building.
+    ///
+    ///     let (elevator, start) = Elevator::new();
+    pub fn new() -> (Elevator, Task<Message>);
+
+    /// Powers on the bank's next car without its news.
+    pub fn default() -> Elevator;
+
+    /// A trip to `floor`, replacing the car's current trip. The task
+    /// streams `PassingFloor` while the car travels and ends with
+    /// `StoppedAtFloor` when it gets there; a replaced trip's task ends
+    /// with no more messages. A floor past the top is the top floor.
     ///
     ///     elevator.go_to_floor(3).map(Message::Elevator.with(elevator))
     pub fn go_to_floor(self, floor: usize) -> Task<Message>;
 
-    /// A trip to `floor` ahead of the car's other trips: go there
-    /// first. The trips it overtakes resume after it. In time from
-    /// `PassingFloor`, it stops the car at the floor it is passing.
-    pub fn go_to_floor_first(self, floor: usize) -> Task<Message>;
-
     /// Halts the car where it can - usually between floors, doors shut -
-    /// and aborts its trips: their tasks end with no more messages.
+    /// and aborts its trip, whose task ends with no more messages. The
+    /// car says `Idle`.
     pub fn stop(self) -> Task<Message>;
 
     /// Sets the up lamp. Both lamps start on. A car stopping with a lamp
@@ -34,8 +39,9 @@ impl Elevator {
 
 /// What a car tells your program.
 pub enum Message {
-    /// The car has no trip left: at the start, and when it stops at the
-    /// last floor it was sent to. Arrives through `riders()`.
+    /// The car has nothing to do: when it is powered on, and whenever it
+    /// finishes a trip or stops. Arrives through the task from
+    /// `Elevator::new`.
     Idle,
 
     /// A rider inside pressed this floor's button, and it was not lit.
@@ -43,8 +49,8 @@ pub enum Message {
     FloorButtonPressed(usize),
 
     /// The car is about to pass this floor without stopping, going this
-    /// way. Streamed by the trip's task, still in time for
-    /// `go_to_floor_first` to stop there.
+    /// way. Streamed by the trip's task, still in time to send the car
+    /// there instead.
     PassingFloor(usize, Direction),
 
     /// The car reached the trip's floor: the trip task's last message,

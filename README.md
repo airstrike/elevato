@@ -1,13 +1,16 @@
 # elevato.rs
 
-A faithful rewrite of [Elevator Saga](https://play.elevatorsaga.com) -
-Magnus Wolffelt's elevator programming game - in Rust: program a bank of
+A rewrite of [Elevator Saga](https://play.elevatorsaga.com) - Magnus
+Wolffelt's elevator programming game - in Rust: program a bank of
 elevators in Rust, watch the simulation, and clear the challenges.
-Your program is an iced program of its own, which
+Same physics constants, same spawn model, same boarding rules, same
+challenge roster as the original. The program model is new: your
+program is an iced program of its own, in the Elm architecture - it
+owns its state, sends each car one trip at a time, and draws the
+building in its `view` - which
 [rawr](https://github.com/airstrike/rawr) interprets and reloads while
-the game runs, and which `cargo` compiles natively. Same physics
-constants, same spawn model, same boarding rules, same challenge
-roster as the original.
+the game runs, and which `cargo` compiles natively. The starter is the
+original's wrong program, in that model.
 
 Built with [iced](https://iced.rs) as a gift to the Rust world: one
 codebase runs natively and in the browser via WebAssembly, and the repo
@@ -83,16 +86,19 @@ program that uses the `elevato` crate:
 
 ```rust
 // rawr
-use elevato::{Elevator, elevator, floor};
-use iced::{Function, Subscription, Task};
+use elevato::{Building, Elevator, elevator, floor};
+use iced::{Element, Function, Subscription, Task};
 
 pub fn main() -> iced::Result {
-    elevato::run(Program::new, Program::update, Program::subscription)
+    elevato::run(
+        Program::new,
+        Program::update,
+        Program::view,
+        Program::subscription,
+    )
 }
 
-pub struct Program {
-    elevator: Elevator,
-}
+pub struct Program;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -101,22 +107,27 @@ pub enum Message {
 }
 
 impl Program {
-    pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
-        let elevator = elevators[0]; // Let's use the first elevator
+    pub fn new(_elevators: usize) -> (Self, Task<Message>) {
+        let (elevator, start) = Elevator::new();
 
-        (Self { elevator }, Task::none())
+        (Self, start.map(Message::Elevator.with(elevator)))
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message, building: &Building) -> Task<Message> {
         match message {
-            // Whenever the elevator is idle (has no more queued destinations) ...
-            Message::Elevator(elevator, elevator::Message::Idle) if elevator == self.elevator => {
+            // Whenever the elevator is idle ...
+            Message::Elevator(elevator, elevator::Message::Idle) => {
                 // let's go to all the floors (or did we forget one?)
-                Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
-                    .map(Message::Elevator.with(elevator))
+                let next = if building.floor_of(elevator) == 0 { 1 } else { 0 };
+
+                elevator.go_to_floor(next).map(Message::Elevator.with(elevator))
             }
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
         }
+    }
+
+    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+        elevato::view(building)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -125,15 +136,17 @@ impl Program {
 }
 ```
 
-`new` gets the challenge's elevators and its number of floors; a
-floor is its level, a number from 0 (the lobby). A car moves when the
-program returns the task `elevator.go_to_floor(n)` gives it; that task
+`new` learns how many elevators the challenge's bank holds and powers
+on the ones it uses: `Elevator::new()` gives the car and the task of
+its news, which says `Idle` whenever the car has nothing to do. A car
+moves when the program returns the task `elevator.go_to_floor(n)`
+gives it - one trip at a time; a new trip replaces the last. That task
 streams `PassingFloor` as the car travels and ends with
 `StoppedAtFloor`, which says who got off and on. Riders call cars and
-press buttons inside them through `elevato::riders()`. There is no
-world to read: what the program knows, it learned from a message. See
-**[API.md](API.md)** for how each of the original's callbacks maps to
-a task or a rider message, and for the documented deviations. The
+press buttons inside them through `elevato::riders()`. `update` and
+`view` borrow the building as it stands, and `elevato::view` draws it.
+See **[API.md](API.md)** for how each of the original's callbacks maps
+to a message or a task, and for the documented deviations. The
 in-game API tab has the same reference, a cmd+click away from any name
 in your program.
 
@@ -165,7 +178,7 @@ The original's 19, verbatim:
 elevato/
 ├── src/       the game: the iced app hosting your program - canvas, editor, playback, theme
 ├── program/   your program, the marked `src/main.rs` that runs the game
-├── api/       elevato-api - Elevator, riders(), and the Simulation that runs a program
+├── api/       elevato-api - Elevator, Building, riders(), and the Simulation that runs a program
 └── core/      elevato-core - the pure simulation (no iced, no rawr)
 ```
 

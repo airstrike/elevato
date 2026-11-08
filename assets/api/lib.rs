@@ -1,40 +1,60 @@
-//! Handle elevator and rider messages in `update`. Return `Task`s to
-//! control the elevators.
+//! Power on elevators in `new`, handle their messages and the riders'
+//! in `update`, and return `Task`s to move them. `update` and `view`
+//! read the building as it stands.
 //!
-//!     use elevato::{Elevator, elevator, floor};
-//!     use iced::{Function, Subscription, Task};
+//!     use elevato::{Building, Elevator, elevator, floor};
+//!     use iced::{Element, Function, Subscription, Task};
 //!
-//! A car's trip is a task: it streams the floors the car passes and
-//! ends when the car stops. Riders and idle cars are the other sources
-//! of messages, through `riders()`.
+//! A car makes one trip at a time. It says `Idle` when it has nothing
+//! to do; a trip is a task that streams the floors the car passes and
+//! ends when it stops.
 
-/// Opens the game with your program steering the elevators. `main`
-/// calls it once, with the program's three functions:
+/// Opens the game with your program running the elevators. `main` calls
+/// it once, with the program's four functions:
 ///
 ///     fn main() -> iced::Result {
-///         elevato::run(Program::new, Program::update, Program::subscription)
+///         elevato::run(Program::new, Program::update, Program::view, Program::subscription)
 ///     }
-pub fn run(new, update, subscription) -> iced::Result;
+pub fn run(new, update, view, subscription) -> iced::Result;
 
-/// Boots your program on a challenge. It gets the bank of elevators
-/// and how many floors the building has, keeps what it needs, and
-/// returns the first tasks - the moves the cars make before anything
-/// happens.
+/// Boots your program on a challenge. It learns how many elevators the
+/// challenge's bank holds, powers on the ones it uses, and returns the
+/// first tasks.
 ///
-///     let start = Task::batch(elevators.iter().map(|&elevator| {
-///         elevator.go_to_floor(0).map(Message::Elevator.with(elevator))
-///     }));
-///     (Self { elevators, floors }, start)
-pub fn new(elevators: Vec<Elevator>, floors: usize) -> (Program, Task<Message>);
+///     let (elevator, start) = Elevator::new();
+///     (Self, start.map(Message::Elevator.with(elevator)))
+pub fn new(elevators: usize) -> (Program, Task<Message>);
 
-/// Handles one message and answers with tasks. The elevators move
-/// when the tasks you return run, in the order you return them.
-pub fn update(&mut self, message: Message) -> Task<Message>;
+/// Handles one message, reading the building as it stands, and answers
+/// with tasks. The elevators move when the tasks you return run, in the
+/// order you return them.
+pub fn update(&mut self, message: Message, building: &Building) -> Task<Message>;
+
+/// Draws the building:
+///
+///     elevato::view(building)
+pub fn view(&self, building: &Building) -> Element<'_, Message>;
 
 /// Listens to the riders:
 ///
 ///     elevato::riders(Message::Elevator, Message::Floor)
 pub fn subscription(&self) -> Subscription<Message>;
+
+/// The building as it stands: its floors, the elevators you powered on,
+/// and its riders.
+pub struct Building;
+
+impl Building {
+    /// How many floors the building has; the lobby is floor 0.
+    pub fn floors(&self) -> usize;
+
+    /// The floor the car is at, or nearest to while it travels.
+    pub fn floor_of(&self, elevator: Elevator) -> usize;
+}
+
+/// The building drawn: its floors and their call lamps, the elevators
+/// you powered on, and the riders.
+pub fn view<Message>(building: &Building) -> Element<'_, Message>;
 
 /// Every button a rider presses that was not lit, made into your
 /// messages: `elevator` for a destination pressed inside a car

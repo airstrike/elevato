@@ -77,13 +77,16 @@ static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|
         }
     }
     // Entry-point parameters read like names of their own in a program;
-    // point them at their declaring signature.
+    // point them at their declaring signature on the program's page.
     for (alias, target) in [
         ("message", "update"),
+        ("building", "update"),
         ("elevators", "new"),
-        ("floors", "new"),
     ] {
-        if let Some(&(page, line)) = registry.get(target).and_then(|sites| sites.first()) {
+        if let Some(&(page, line)) = registry
+            .get(target)
+            .and_then(|sites| sites.iter().find(|&&(page, _)| page == Page::Lib))
+        {
             registry
                 .entry(alias.to_string())
                 .or_default()
@@ -339,19 +342,23 @@ mod tests {
     /// forgets the reference fails here.
     const CONTRACT: &[(&str, Page)] = &[
         ("run", Page::Lib),
-        ("new", Page::Lib),
+        ("new", Page::Elevator),
         ("update", Page::Lib),
+        ("view", Page::Lib),
         ("subscription", Page::Lib),
         ("message", Page::Lib),
         ("elevators", Page::Lib),
+        ("building", Page::Lib),
+        ("Building", Page::Lib),
         ("floors", Page::Lib),
+        ("floor_of", Page::Lib),
         ("riders", Page::Lib),
         ("Direction", Page::Lib),
         ("Up", Page::Lib),
         ("Down", Page::Lib),
         ("Elevator", Page::Elevator),
+        ("default", Page::Elevator),
         ("go_to_floor", Page::Elevator),
-        ("go_to_floor_first", Page::Elevator),
         ("stop", Page::Elevator),
         ("set_going_up_indicator", Page::Elevator),
         ("set_going_down_indicator", Page::Elevator),
