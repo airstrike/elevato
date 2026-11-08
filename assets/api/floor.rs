@@ -1,5 +1,3 @@
-//! A floor of the building, and what riders on it do.
-
 /// A floor, by level: the lobby is 0. Your program gets the
 /// building's floors from `new`, and makes floors from integers -
 /// every function that takes one takes `impl Into<Floor>`, so

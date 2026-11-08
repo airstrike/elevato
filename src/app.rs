@@ -94,7 +94,7 @@ impl Tab {
     /// The face selector's label.
     fn label(self) -> &'static str {
         match self {
-            Self::Player => "Player",
+            Self::Player => "Simulation",
             Self::Code => "Code",
             Self::Api => "API",
         }
@@ -363,11 +363,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
 fn splash() -> Element<'static, Message> {
     let content = column![
         text("elevato.rs").size(56).style(theme::text::primary),
-        text("Program a bank of elevators in Rust. Watch the simulation. Clear the challenges.")
-            .size(16)
-            .style(theme::text::secondary),
         button(
-            row![icon::play().size(14), text("Continue").size(14)]
+            row![icon::play().size(14), text("Play").size(14)]
                 .spacing(6)
                 .align_y(Center),
         )
@@ -640,12 +637,9 @@ impl Game {
         if let Some((name, page, line)) = self.selected_reference() {
             bar = bar.push(
                 button(
-                    row![
-                        text(name).size(12).font(theme::MONO),
-                        icon::arrow_up_right().size(11)
-                    ]
-                    .spacing(3)
-                    .align_y(Center),
+                    text(format!("Definition: {name}"))
+                        .size(12)
+                        .font(theme::MONO),
                 )
                 .padding([4, 6])
                 .on_press(Message::DocsJump(page, line))
@@ -890,13 +884,13 @@ impl Game {
         let stats = self.playback.stats();
         let bar = row![
             stat("Transported", stats.transported().to_string()),
-            stat("Elapsed time", format!("{:.1}s", stats.elapsed())),
+            stat("Elapsed", format!("{:.1}s", stats.elapsed())),
             stat(
                 "Transported/s",
                 format!("{:.2}", stats.transported_per_sec())
             ),
-            stat("Avg waiting time", format!("{:.1}s", stats.avg_wait_time())),
-            stat("Max waiting time", format!("{:.1}s", stats.max_wait_time())),
+            stat("Avg wait", format!("{:.1}s", stats.avg_wait_time())),
+            stat("Max wait", format!("{:.1}s", stats.max_wait_time())),
             stat("Moves", stats.move_count().to_string()),
             stat("Seed", seed(&self.playback)),
             space::horizontal(),
@@ -975,7 +969,7 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
         }
     } else {
         content = content.push(
-            text("Challenge failed - maybe your program needs an improvement?")
+            text("Challenge failed")
                 .size(18)
                 .style(theme::text::outcome(false)),
         );

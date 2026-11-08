@@ -52,8 +52,8 @@ pub struct State {
 enum Status {
     /// rawr refused a save.
     Failed(reload::Failure),
-    /// rawr restarted the game for an edit, for this reason.
-    Restarted(String),
+    /// rawr restarted the run for an edit.
+    Restarted,
     /// Writing the program failed.
     Unsaved(io::Error),
 }
@@ -155,7 +155,7 @@ impl State {
     pub fn reloaded(&mut self, outcome: reload::Outcome) {
         self.status = match outcome {
             reload::Outcome::Failed(failure) => Some(Status::Failed(failure)),
-            reload::Outcome::Restarted(reason) => Some(Status::Restarted(reason)),
+            reload::Outcome::Restarted(_) => Some(Status::Restarted),
             reload::Outcome::Queued | reload::Outcome::Swapped | reload::Outcome::Restarting(_) => {
                 None
             }
@@ -295,14 +295,14 @@ impl State {
             .style(theme::button::outline),
             space::horizontal(),
             button(
-                row![icon::eraser().size(13), text("Reset").size(13)]
+                row![icon::eraser().size(13), text("Restore starter").size(13)]
                     .spacing(6)
                     .align_y(iced::Center)
             )
             .on_press(Message::Reset)
             .style(theme::button::ghost),
             button(
-                row![icon::undo_2().size(13), text("Undo reset").size(13)]
+                row![icon::undo_2().size(13), text("Undo restore").size(13)]
                     .spacing(6)
                     .align_y(iced::Center)
             )
@@ -329,7 +329,7 @@ impl State {
 fn strip<'a>(status: &Status) -> Element<'a, Message> {
     let line = text(describe(status)).size(12);
     let (line, panel): (_, fn(&iced::Theme) -> container::Style) = match status {
-        Status::Restarted(_) => (
+        Status::Restarted => (
             line.style(theme::text::secondary),
             theme::container::status_panel,
         ),
@@ -348,7 +348,10 @@ fn describe(status: &Status) -> String {
             Some(at) => format!("Line {}:{}: {}", at.line, at.column, failure.message()),
             None => failure.message().to_string(),
         },
-        Status::Restarted(reason) => reason.clone(),
+        Status::Restarted => "Run restarted after your edit.".to_string(),
+        Status::Unsaved(_) if cfg!(target_arch = "wasm32") => {
+            "Couldn't save your code.".to_string()
+        }
         Status::Unsaved(error) => format!("Couldn't save: {error}"),
     }
 }
@@ -492,14 +495,14 @@ mod tests {
     }
 
     #[test]
-    fn a_restart_shows_its_reason_alone() {
+    fn a_restart_says_the_edit_restarted_the_run() {
         let mut state = State::new("", reload::Host::Rawr);
         state.reloaded(reload::Outcome::Restarted(
             "`Program` changed its fields".to_string(),
         ));
         assert_eq!(
             strip_line(&state).as_deref(),
-            Some("`Program` changed its fields")
+            Some("Run restarted after your edit.")
         );
     }
 

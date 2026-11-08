@@ -35,7 +35,7 @@ struggle. Then make it yours: edit the program - in the editor on the
 left, or in [`program/src/main.rs`](program/src/main.rs) in your own
 editor - and save. **Apply** (or Cmd+Enter, Ctrl+Enter off macOS)
 applies the edit to the running game. **Save** writes the file.
-**Reset** restores the starter program (with **Undo reset** as the
+**Restore starter** restores the starter program (with **Undo restore** as the
 escape hatch). **Restart** starts a fresh attempt. The −/+ buttons step the
 simulation speed along the original's golden-ratio ladder; the
 timescale is saved under the platform config dir.

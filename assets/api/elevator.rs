@@ -1,6 +1,5 @@
-//! A car of the bank. Your program gets its elevators from `new` and
-//! from messages; it can't make one. Each command returns a task, and
-//! nothing happens until your program returns that task.
+//! Get elevators from `new` or messages. Return a command's `Task` to
+//! run it.
 
 /// A car of the challenge's bank. `Copy`, comparable, hashable: a
 /// fine key for your own maps.

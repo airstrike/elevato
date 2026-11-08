@@ -1,6 +1,5 @@
-//! Your program is an iced program. It keeps its own state, handles
-//! messages in `update`, and answers with `Task`s. Nothing it calls
-//! reads the simulation: everything it knows arrives as a message.
+//! Handle elevator and rider messages in `update`. Return `Task`s to
+//! control the elevators.
 //!
 //!     use elevato::{Elevator, Floor, Rider, elevator, floor};
 //!     use iced::{Function, Subscription, Task};
@@ -15,9 +14,6 @@
 ///     fn main() -> iced::Result {
 ///         elevato::run(Program::new, Program::update, Program::subscription)
 ///     }
-///
-/// Every attempt (Start after a restart, a new challenge, Apply)
-/// boots the program afresh on a fresh world.
 pub fn run(new, update, subscription) -> iced::Result;
 
 /// Boots your program on a challenge. It gets the bank of elevators

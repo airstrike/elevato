@@ -42,9 +42,9 @@ impl Page {
     /// The file name shown above the pane.
     pub fn file_name(self) -> &'static str {
         match self {
-            Self::Lib => "lib.rs",
-            Self::Elevator => "elevator.rs",
-            Self::Floor => "floor.rs",
+            Self::Lib => "Program",
+            Self::Elevator => "Elevators",
+            Self::Floor => "Floors",
         }
     }
 }
