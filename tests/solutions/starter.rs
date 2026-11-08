@@ -35,9 +35,9 @@ impl Program {
     pub fn new(elevators: Vec<Elevator>, _floors: usize) -> (Self, Task<Message>) {
         let elevator = elevators[0]; // Let's use the first elevator
 
-        let mut program = Self { elevator, trips: 0 };
-        let start = program.idle();
-        (program, start)
+        let start = Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
+            .map(Message::Elevator.with(elevator));
+        (Self { elevator, trips: 2 }, start)
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -48,11 +48,14 @@ impl Program {
                 self.trips -= 1;
 
                 // Whenever the elevator is idle (has no more queued destinations) ...
-                if self.trips == 0 {
-                    self.idle()
-                } else {
-                    Task::none()
+                if self.trips > 0 {
+                    return Task::none();
                 }
+
+                // let's go to all the floors (or did we forget one?)
+                self.trips = 2;
+                Task::batch([elevator.go_to_floor(0), elevator.go_to_floor(1)])
+                    .map(Message::Elevator.with(elevator))
             }
             // We normally don't need to do anything here
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
@@ -61,12 +64,5 @@ impl Program {
 
     pub fn subscription(&self) -> Subscription<Message> {
         elevato::riders(Message::Elevator, Message::Floor)
-    }
-
-    fn idle(&mut self) -> Task<Message> {
-        // let's go to all the floors (or did we forget one?)
-        self.trips += 2;
-        Task::batch([self.elevator.go_to_floor(0), self.elevator.go_to_floor(1)])
-            .map(Message::Elevator.with(self.elevator))
     }
 }
