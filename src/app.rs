@@ -363,6 +363,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
 fn splash() -> Element<'static, Message> {
     let content = column![
         text("elevato.rs").size(56).style(theme::text::primary),
+        text("Program a bank of elevators in Rust. Watch the simulation. Clear the challenges.")
+            .size(16)
+            .style(theme::text::secondary),
         button(
             row![icon::play().size(14), text("Play").size(14)]
                 .spacing(6)
