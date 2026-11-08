@@ -275,14 +275,14 @@ impl State {
             .style(theme::button::primary),
             space::horizontal(),
             button(
-                row![icon::eraser().size(13), text("Restore starter").size(13)]
+                row![icon::eraser().size(13), text("Reset").size(13)]
                     .spacing(6)
                     .align_y(iced::Center)
             )
             .on_press(Message::Reset)
             .style(theme::button::ghost),
             button(
-                row![icon::undo_2().size(13), text("Undo restore").size(13)]
+                row![icon::undo_2().size(13), text("Undo reset").size(13)]
                     .spacing(6)
                     .align_y(iced::Center)
             )

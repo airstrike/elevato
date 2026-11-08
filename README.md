@@ -36,7 +36,7 @@ left, or in [`program/src/main.rs`](program/src/main.rs) in your own
 editor - and save. **Save** (Cmd+S or Cmd+Enter; Ctrl elsewhere)
 writes the file, and under `rawr run` the running game picks the edit
 up.
-**Restore starter** restores the starter program (with **Undo restore** as the
+**Reset** restores the starter program (with **Undo reset** as the
 escape hatch). **Restart** starts a fresh attempt. The −/+ buttons step the
 simulation speed along the original's golden-ratio ladder; the
 timescale is saved under the platform config dir.

@@ -632,9 +632,12 @@ impl Game {
         if let Some((name, page, line)) = self.selected_reference() {
             bar = bar.push(
                 button(
-                    text(format!("Definition: {name}"))
-                        .size(12)
-                        .font(theme::MONO),
+                    row![
+                        text(name).size(12).font(theme::MONO),
+                        icon::arrow_up_right().size(11)
+                    ]
+                    .spacing(3)
+                    .align_y(Center),
                 )
                 .padding([4, 6])
                 .on_press(Message::DocsJump(page, line))
