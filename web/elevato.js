@@ -3,8 +3,9 @@
 //
 // The universe's module is compiled once. Each run of the program needs an
 // instance of its own, and the game's web shell keeps the instance it runs
-// on, so each run gets a fresh frame that instantiates the module. One
-// frame always waits, ready, under the one the player sees.
+// on, so each run gets a fresh frame that instantiates the module. After
+// the player's first click in the game, one frame waits, ready, under the
+// one the player sees.
 //
 // The game finds the `elevato` global on its window (src/reload.rs): it
 // tells the game whether the page restarted it for a save, and the error
@@ -85,7 +86,12 @@ async function frame() {
   return { element, instance };
 }
 
-let next = frame();
+/**
+ * The frame the next run takes. Preparing one holds the page's thread, so
+ * it waits for a moment after the player's first click in the visible
+ * game, which then never waits behind it; a run before that makes its own.
+ */
+let next = null;
 /** The frame the player sees. */
 let shown = null;
 
@@ -95,8 +101,8 @@ let shown = null;
  */
 async function run(source, global) {
   const { manifest } = await loaded;
-  const ready = await next;
-  next = frame();
+  const ready = await (next ?? frame());
+  next = null;
   ready.element.contentWindow.elevato = global;
   let answer;
   try {
@@ -119,6 +125,18 @@ function show(frame) {
   shown = frame;
   document.getElementById("intro")?.remove();
   frame.element.focus();
+  frame.element.contentWindow.addEventListener("pointerup", () => setTimeout(warm, WARM_AFTER), {
+    capture: true,
+    once: true,
+  });
+}
+
+/** How long after that click, in ms: time for the game to show what it did. */
+const WARM_AFTER = 1000;
+
+/** Make the next run's frame, unless it is made. */
+function warm() {
+  next ??= frame();
 }
 
 async function boot() {
