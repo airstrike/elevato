@@ -62,7 +62,7 @@ target):
 
 ```sh
 sh web/build.sh                  # the page in dist/
-python3 -m http.server -d dist   # serve it at http://localhost:8000
+npx wrangler pages dev dist      # serve it as Cloudflare Pages does
 ```
 
 The page runs your program on rawr's universe: `web/universe` names the

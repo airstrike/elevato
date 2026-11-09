@@ -1,6 +1,7 @@
 #!/bin/sh
-# Build the web page into DIR (dist/ by default), ready to serve:
-#   sh web/build.sh && python3 -m http.server -d dist
+# Build the web page into DIR (dist/ by default), ready to serve as
+# Cloudflare Pages serves it:
+#   sh web/build.sh && npx wrangler pages dev dist
 # The page runs the player's program on rawr's universe: web/universe built
 # for wasm32 by rawr-import as a universe runner, whose bindings compile the
 # program in the page. This follows rawr's play/universe/web.sh and
@@ -52,7 +53,23 @@ mkdir -p "$out"
   --out-name universe --out-dir "$out" "$runner"
 cp "$universe/Cargo.toml" "$out/universe.toml"
 cp tests/solutions/starter.rs "$out/starter.rs"
-cp web/index.html web/elevato.js "$out/"
+cp web/index.html web/elevato.js web/_worker.js "$out/"
 cp assets/og.png assets/favicon.svg assets/favicon-32.png assets/apple-touch-icon.png \
   assets/fonts/GeistMono-Variable.ttf assets/fonts/OFL.txt "$out/"
+
+# The module ships only as its brotli copy, at quality 11 with a 16 MiB
+# window: raw, it is over Cloudflare Pages' 25 MiB limit on a file.
+# _worker.js serves the copy under the module's own path.
+node -e 'const fs = require("fs"), z = require("zlib"), c = z.constants;
+  fs.writeFileSync(process.argv[1] + ".br", z.brotliCompressSync(fs.readFileSync(process.argv[1]),
+    { params: { [c.BROTLI_PARAM_QUALITY]: 11, [c.BROTLI_PARAM_LGWIN]: 24 } }));' "$out/universe_bg.wasm"
+rm "$out/universe_bg.wasm"
+
+# Pages takes no file over 25 MiB.
+large=$(find "$out" -type f -size +25600k)
+if [ -n "$large" ]; then
+  echo "web/build.sh: over Cloudflare Pages' 25 MiB limit on a file:" >&2
+  ls -l $large >&2
+  exit 1
+fi
 ls -l "$out"
