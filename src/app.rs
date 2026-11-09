@@ -41,6 +41,8 @@ pub struct App {
     program: Program,
     /// Whether rawr runs the program, and so reports each save's reload.
     host: reload::Host,
+    /// A save refused while the splash was up, for the game's strip.
+    failed: Option<reload::Failure>,
     screen: Screen,
 }
 
@@ -54,6 +56,8 @@ enum Screen {
 
 /// The game screen's state.
 struct Game {
+    /// Who applies a save: the game hands it each one.
+    host: reload::Host,
     playback: Playback,
     editor: editor::State,
     /// Picker entries, one per roster challenge, built once.
@@ -193,7 +197,13 @@ where
     #[cfg(target_arch = "wasm32")]
     {
         console_log::init().expect("initialize logger");
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        // The page's own hook (rawr's, which keeps the message for the
+        // page) still runs after the console's.
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            console_error_panic_hook::hook(info);
+            previous(info);
+        }));
     }
 
     let settings = iced::Settings {
@@ -225,6 +235,7 @@ pub fn boot(program: Program) -> (App, Task<Message>) {
             mode: theme::Mode::from_env(),
             program,
             host: reload::host(),
+            failed: None,
             screen: Screen::Splash,
         },
         Task::none(),
@@ -258,11 +269,17 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
                 .map(|bounds| bounds.width);
-            let mut game = Box::new(Game::new(app.program.clone(), width));
-            let task = match restarted {
+            let mut game = Box::new(Game::new(app.program.clone(), app.host, width));
+            let mut task = match restarted {
                 Some(reason) => game.update(Message::Reloaded(reload::Outcome::Restarted(reason))),
                 None => Task::none(),
             };
+            if let Some(failure) = app.failed.take() {
+                task = Task::batch([
+                    task,
+                    game.update(Message::Reloaded(reload::Outcome::Failed(failure))),
+                ]);
+            }
             app.screen = Screen::Game(game);
             return task;
         }
@@ -275,6 +292,7 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
                     restarted: Some(reason.clone()),
                 });
             }
+            (Screen::Splash, reload::Outcome::Failed(failure)) => app.failed = Some(failure),
             (Screen::Splash, _) => {}
             (Screen::Game(game), outcome) => return game.update(Message::Reloaded(outcome)),
         },
@@ -403,7 +421,7 @@ impl Game {
     /// until Start is pressed (the original's flow), its last-saved text
     /// in the editor (else the built-in starter) and its last timescale,
     /// with the divider seeded from the measured viewport.
-    fn new(program: Program, viewport_width: Option<f32>) -> Self {
+    fn new(program: Program, host: reload::Host, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
             None => (playback::STARTER.to_string(), None),
@@ -426,6 +444,7 @@ impl Game {
             })
             .collect();
         Game {
+            host,
             playback,
             editor: editor::State::new(&code),
             choices,
@@ -527,6 +546,9 @@ impl Game {
                             self.playback.timescale(),
                             self.playback.challenge_index(),
                         );
+                        if written.is_ok() {
+                            self.host.apply(&source);
+                        }
                         self.editor.saved(written);
                     }
                     if start && !self.playback.is_running() {

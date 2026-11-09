@@ -747,10 +747,12 @@ dependencies = [
  "elevato-core",
  "iced",
  "iced_lucide",
+ "js-sys",
  "log",
  "open",
  "rawr-reload",
  "syntect",
+ "wasm-bindgen",
  "web-sys",
 ]
 
