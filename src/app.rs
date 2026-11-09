@@ -252,8 +252,8 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
         }
         Message::Measured { target, restarted } => {
             // Half the measured viewport seeds the divider so the twin
-            // cards come up even; an unmeasurable splash (shouldn't
-            // happen) falls back to the split's own halving.
+            // cards come up even. Without one (a game the web page
+            // restarts gets none) the split halves the latest viewport.
             let width = target
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
@@ -576,7 +576,7 @@ impl Game {
             Split::new(
                 card(self.editor_pane()),
                 card(self.world_pane()),
-                self.divider,
+                Some(self.divider.unwrap_or(Pixels(self.viewport_width / 2.0))),
                 Axis::Vertical,
             )
             .on_resize(Message::SplitResized)
