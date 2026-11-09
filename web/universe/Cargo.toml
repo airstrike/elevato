@@ -1,0 +1,22 @@
+# The browser's universe: the crates a player's program may use, built for
+# wasm32 by web/build.sh with rawr-import as a universe runner. The page
+# compiles the player's program against the runner's bindings and runs it,
+# with no server and no Cargo per Run.
+#
+# The runner covers the native calls its programs make (src/programs/, the
+# solutions and this directory's programs/, which web/universe/programs.sh
+# copies there), so an edit that makes calls none of them makes doesn't
+# compile on the page.
+[package]
+name = "universe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+elevato = { workspace = true }
+iced = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { workspace = true, features = ["webgl", "fira-sans"] }
