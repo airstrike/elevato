@@ -36,7 +36,7 @@ In the root `Cargo.toml`:
 2. Delete the live `[patch.crates-io]` block (the local cosmic-text
    path patch) and uncomment the prepared git-patch block below it.
 3. `cargo update`, then `cargo test --workspace` and
-   `trunk build --release` to confirm nothing moved.
+   `sh web/build.sh` to confirm nothing moved.
 
 ## 3. Verify with a clean clone
 
@@ -48,7 +48,7 @@ tmp="$(mktemp -d)"
 git clone <repo-url> "$tmp/elevato"
 cd "$tmp/elevato"
 cargo test --workspace
-trunk build --release
+sh web/build.sh
 ```
 
 ## 4. Deploy
@@ -57,8 +57,8 @@ trunk build --release
 ./deploy.sh
 ```
 
-(`trunk build --release` + `npx wrangler pages deploy dist
---project-name elevato`; needs a wrangler login.)
+(`sh web/build.sh dist` + `npx wrangler pages deploy dist
+--project-name elevato`; needs rawr-import and a wrangler login.)
 
 ## 5. Browser verification (manual)
 

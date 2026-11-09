@@ -57,19 +57,21 @@ Natively, with your program compiled in:
 cargo run -p program
 ```
 
-In the browser (requires [trunk](https://trunkrs.dev) and the
-`wasm32-unknown-unknown` target):
+In the browser (requires `rawr-import` and the `wasm32-unknown-unknown`
+target):
 
 ```sh
-trunk serve            # develop at http://localhost:8080
-trunk build --release  # deployable bundle in dist/
+sh web/build.sh                  # the page in dist/
+python3 -m http.server -d dist   # serve it at http://localhost:8000
 ```
 
-The web build runs the program compiled into the page. Its editor
-keeps a draft in localStorage, but edits don't run in the browser
-until rawr can interpret marked code against dependencies compiled
-into the page's wasm
-([rawr#435](https://github.com/airstrike/rawr/issues/435)).
+The page runs your program on rawr's universe: `web/universe` names the
+crates a program may use, and rawr-import builds them for wasm32 with
+the bindings that compile your program in the page. Save compiles the
+edit there. One that compiles restarts the game with it; one that
+doesn't shows its error, and the old program keeps running. A program
+can call only what the universe's programs (the solutions and
+`web/universe/programs/`) call.
 
 The solutions and the playback's determinism gate are the game's
 tests:
