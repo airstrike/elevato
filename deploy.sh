@@ -13,4 +13,4 @@ echo "Building the page..."
 sh web/build.sh dist
 
 echo "Deploying dist/ to Cloudflare Pages..."
-npx wrangler pages deploy dist --project-name elevato
+npx wrangler pages deploy dist --project-name elevato --branch main
