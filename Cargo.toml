@@ -8,6 +8,7 @@ license.workspace = true
 elevato-api = { workspace = true }
 elevato-core = { workspace = true }
 iced = { workspace = true }
+iced_split = { workspace = true }
 syntect = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -47,6 +48,9 @@ iced = { path = "/Users/andy/projects/iced-web-clipboard", features = ["canvas",
 # checkout the app's iced uses.
 iced_futures = { path = "/Users/andy/projects/iced-web-clipboard/futures" }
 iced_runtime = { path = "/Users/andy/projects/iced-web-clipboard/runtime" }
+# The newest iced_split this iced checkout builds: later ones call
+# `Renderer::hint_factor`, which it doesn't have yet.
+iced_split = { git = "https://github.com/edwloef/iced_split", rev = "6a35f89130dc56d58a123d79c244c7f507993d4d" }
 thiserror = "2"
 
 # Highlighting: parsing only (the app maps scopes to theme colors

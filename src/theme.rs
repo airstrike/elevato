@@ -481,28 +481,26 @@ pub mod button {
 }
 
 pub mod split {
-    //! Divider styling for the workspace [`Split`](crate::widget::split).
+    //! Separator styling for the workspace's [`iced_split`] split.
 
-    use iced::Background;
-    use iced::Theme;
+    use iced::{Color, Theme};
+    use iced_split::{Style, StyleSheet};
 
-    use crate::widget::split::{Status, Style};
-
-    use super::palette;
-
-    /// A hairline divider that warms to the accent while grabbed.
-    pub fn divider(theme: &Theme, status: Status) -> Style {
-        let palette = palette(theme);
-        let base = Style {
-            divider_background: Background::Color(palette.floor_line),
-            ..Style::default()
-        };
-        match status {
-            Status::Active | Status::Disabled => base,
-            Status::Hovered | Status::Dragging => Style {
-                divider_background: Background::Color(theme.palette().primary.base.color),
-                ..base
+    /// No line at rest - the gap between the cards marks the split - and
+    /// the accent while the separator is hovered or dragged.
+    pub fn divider(theme: &Theme) -> Style {
+        Style {
+            unfocused: StyleSheet {
+                color: Color::TRANSPARENT,
+                width: 0.0,
+                radius: 0.0.into(),
             },
+            focused: StyleSheet {
+                color: theme.palette().primary.base.color,
+                width: 3.0,
+                radius: 1.5.into(),
+            },
+            snap: true,
         }
     }
 }

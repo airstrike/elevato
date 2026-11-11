@@ -15,7 +15,8 @@ use iced::widget::{
 };
 use iced::padding;
 use iced::window;
-use iced::{Center, Element, Fill, Length, Pixels, Subscription, Task};
+use iced::{Center, Element, Fill, Length, Subscription, Task};
+use iced_split::vertical_split;
 
 use elevato_api::Building;
 
@@ -29,10 +30,9 @@ use crate::storage;
 use crate::theme;
 use crate::widget::balance::balance;
 use crate::widget::pointer::pointer;
-use crate::widget::split::{Axis, Split};
 
 /// The splash's full-bleed container; measuring it yields the viewport
-/// size that seeds the game's divider.
+/// width that picks the game's wide or narrow layout.
 const SPLASH: Id = Id::new("splash");
 
 /// Top-level application state.
@@ -64,9 +64,9 @@ struct Game {
     editor: editor::State,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
-    /// The divider position of the workspace split, in pixels from the
-    /// left; seeded from the measured viewport, `None` splits in half.
-    divider: Option<Pixels>,
+    /// The workspace divider's position, as a ratio of the workspace's
+    /// width from the left: resizing the window keeps the proportion.
+    divider: f32,
     /// Which face the narrow layout's single card shows.
     tab: Tab,
     /// Whether the code card shows a page of the library rather than
@@ -91,6 +91,11 @@ struct Game {
 /// Below this viewport width the split gives way to the single-card
 /// narrow layout (its two panes need 260 + 320 px just to exist).
 const NARROW: f32 = 700.0;
+
+/// The narrowest the wide layout's code and world cards get, in logical
+/// pixels: a drag of the divider stops short of them.
+const CODE_MIN: f32 = 260.0;
+const WORLD_MIN: f32 = 320.0;
 
 /// The faces of the narrow layout's single card. The wide layout shows
 /// both at once, the code card beside the world.
@@ -170,7 +175,7 @@ pub enum Message {
     /// Cmd+Page Up: step back one challenge.
     PreviousChallenge,
     /// The editor/world divider was dragged.
-    SplitResized(Pixels),
+    SplitResized(f32),
     /// A face of the narrow layout's card was selected.
     Tab(Tab),
     /// `main.rs` in the file tree or its tab: back to the player's
@@ -292,9 +297,9 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             let _ = open::that(ORIGINAL);
         }
         Message::Measured { target, restarted } => {
-            // Half the measured viewport seeds the divider so the twin
-            // cards come up even. Without one (a game the web page
-            // restarts gets none) the split halves the latest viewport.
+            // The measured viewport picks the layout. A game the web
+            // page restarts gets no measure and lays out wide, as it
+            // does for any viewport it hasn't heard of.
             let width = target
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
@@ -453,7 +458,7 @@ impl Game {
     /// Builds the game: the player's program on challenge 1, paused
     /// until Start is pressed (the original's flow), its last-saved text
     /// in the editor (else the built-in starter) and its last timescale,
-    /// with the divider seeded from the measured viewport.
+    /// laid out for the measured viewport.
     fn new(program: Program, host: reload::Host, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
@@ -481,7 +486,7 @@ impl Game {
             playback,
             editor: editor::State::new(&code),
             choices,
-            divider: viewport_width.map(|width| Pixels(width / 2.0)),
+            divider: 0.5,
             tab: Tab::Player,
             reading: false,
             docs: docs::State::new(),
@@ -515,7 +520,10 @@ impl Game {
                 self.playback.previous_challenge();
             }
             Message::Program(input) => self.playback.send(input),
-            Message::SplitResized(position) => self.divider = Some(position),
+            Message::SplitResized(ratio) => {
+                let width = self.viewport_width.max(CODE_MIN + WORLD_MIN);
+                self.divider = ratio.clamp(CODE_MIN / width, 1.0 - WORLD_MIN / width);
+            }
             Message::Tab(tab) => self.tab = tab,
             Message::Write => {
                 self.reading = false;
@@ -679,15 +687,15 @@ impl Game {
         // the game loop: write, then watch - twin rounded cards around
         // a draggable hairline divider.
         let workspace = container(
-            Split::new(
+            vertical_split(
                 card(self.code_face()),
                 card(self.player_face()),
-                Some(self.divider.unwrap_or(Pixels(self.viewport_width / 2.0))),
-                Axis::Vertical,
+                self.divider,
+                Message::SplitResized,
             )
-            .on_resize(Message::SplitResized)
-            .min_size_first(260)
-            .min_size_second(320)
+            // The handle is the gap between the cards, as wide as the
+            // workspace's margin.
+            .handle_width(8)
             .style(theme::split::divider),
         )
         .width(Fill)

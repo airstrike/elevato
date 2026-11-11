@@ -747,6 +747,7 @@ dependencies = [
  "elevato-core",
  "iced",
  "iced_lucide",
+ "iced_split",
  "js-sys",
  "log",
  "open",
@@ -1404,6 +1405,14 @@ dependencies = [
 [[package]]
 name = "iced_selector"
 version = "0.15.0-dev"
+dependencies = [
+ "iced_core",
+]
+
+[[package]]
+name = "iced_split"
+version = "0.2.0-dev"
+source = "git+https://github.com/edwloef/iced_split?rev=6a35f89130dc56d58a123d79c244c7f507993d4d#6a35f89130dc56d58a123d79c244c7f507993d4d"
 dependencies = [
  "iced_core",
 ]
