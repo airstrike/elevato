@@ -149,8 +149,8 @@ press buttons inside them through `elevato::riders()`. `update` and
 `view` borrow the building as it stands, and `elevato::view` draws it.
 See **[API.md](API.md)** for how each of the original's callbacks maps
 to a message or a task, and for the documented deviations. The
-in-game API tab has the same reference, a cmd+click away from any name
-in your program.
+game's file browser has the same reference as read-only files under
+`api/`, a cmd+click away from any name in your program.
 
 ## Challenges
 

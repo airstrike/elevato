@@ -10,9 +10,10 @@ use iced::keyboard::{self, key::Named};
 use iced::mouse;
 use iced::time::{self, milliseconds};
 use iced::widget::{
-    Id, button, center, column, container, pick_list, row, selector, space, stack, text,
-    text_editor,
+    Id, button, center, column, container, mouse_area, pick_list, row, selector, space, stack,
+    text, text_editor,
 };
+use iced::padding;
 use iced::window;
 use iced::{Center, Element, Fill, Length, Pixels, Subscription, Task};
 
@@ -66,10 +67,17 @@ struct Game {
     /// The divider position of the workspace split, in pixels from the
     /// left; seeded from the measured viewport, `None` splits in half.
     divider: Option<Pixels>,
-    /// Which face the right card shows: the world or the reference.
+    /// Which face the narrow layout's single card shows.
     tab: Tab,
-    /// The API reference pane.
+    /// Whether the code card shows a page of the library rather than
+    /// the player's `main.rs`.
+    reading: bool,
+    /// The library's pages, read-only.
     docs: docs::State,
+    /// Whether the wide layout shows the file sidebar.
+    sidebar: bool,
+    /// Whether the narrow layout's file drawer is open.
+    drawer: bool,
     /// Live keyboard modifiers, tracked so clicks can tell whether the
     /// command key is down (cmd+click = jump to documentation).
     modifiers: keyboard::Modifiers,
@@ -81,16 +89,14 @@ struct Game {
 /// narrow layout (its two panes need 260 + 320 px just to exist).
 const NARROW: f32 = 700.0;
 
-/// The card faces: two on the wide layout's right card, three on the
-/// narrow layout's single card (where the editor is a tab too).
+/// The faces of the narrow layout's single card. The wide layout shows
+/// both at once, the code card beside the world.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     /// The running world.
     Player,
-    /// The code editor (narrow layout only).
+    /// The code card: `main.rs` and the library.
     Code,
-    /// The API reference.
-    Api,
 }
 
 impl Tab {
@@ -99,10 +105,20 @@ impl Tab {
         match self {
             Self::Player => "Simulation",
             Self::Code => "Code",
-            Self::Api => "API",
         }
     }
 }
+
+/// The library's pages in the file tree, sorted by file name.
+const LIBRARY: [docs::Page; 4] = [
+    docs::Page::Building,
+    docs::Page::Elevator,
+    docs::Page::Floor,
+    docs::Page::Lib,
+];
+
+/// The width of the wide layout's file sidebar.
+const SIDEBAR: f32 = 150.0;
 
 /// Resolves the active iced theme from the app's mode.
 pub fn theme(app: &App) -> iced::Theme {
@@ -152,8 +168,15 @@ pub enum Message {
     PreviousChallenge,
     /// The editor/world divider was dragged.
     SplitResized(Pixels),
-    /// A tab of the right card was selected.
+    /// A face of the narrow layout's card was selected.
     Tab(Tab),
+    /// The file tree's `main.rs`: back to the player's program.
+    Write,
+    /// A library page of the file tree.
+    Read(docs::Page),
+    /// The code card's header button: show or hide the file sidebar on
+    /// the wide layout, open or close the drawer on the narrow one.
+    ToggleFiles,
     /// Back through the reference's jump history (the tab-bar arrow, a
     /// keyboard's browser-back key, a mouse's back button, or the
     /// cmd+O / cmd+[ chords).
@@ -454,7 +477,10 @@ impl Game {
             choices,
             divider: viewport_width.map(|width| Pixels(width / 2.0)),
             tab: Tab::Player,
+            reading: false,
             docs: docs::State::new(),
+            sidebar: true,
+            drawer: false,
             modifiers: keyboard::Modifiers::default(),
             viewport_width: viewport_width.unwrap_or(1280.0),
         }
@@ -484,19 +510,38 @@ impl Game {
             Message::Program(input) => self.playback.send(input),
             Message::SplitResized(position) => self.divider = Some(position),
             Message::Tab(tab) => self.tab = tab,
+            Message::Write => {
+                self.reading = false;
+                self.drawer = false;
+            }
+            Message::Read(page) => {
+                if self.docs.page() != page {
+                    self.docs.open(page, 0);
+                }
+                self.reading = true;
+                self.drawer = false;
+            }
+            Message::ToggleFiles => {
+                if self.viewport_width < NARROW {
+                    self.drawer = !self.drawer;
+                } else {
+                    self.sidebar = !self.sidebar;
+                }
+            }
             Message::DocsBack => {
-                if self.tab == Tab::Api {
+                if self.reading {
                     self.docs.back();
                 }
             }
             Message::DocsForward => {
-                if self.tab == Tab::Api {
+                if self.reading {
                     self.docs.forward();
                 }
             }
             Message::DocsJump(page, line) => {
                 self.docs.open(page, line);
-                self.tab = Tab::Api;
+                self.reading = true;
+                self.tab = Tab::Code;
             }
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
             Message::Resized(width) => self.viewport_width = width,
@@ -522,7 +567,7 @@ impl Game {
             }
             Message::Editor(message) => {
                 // A cmd+click in the editor opens the clicked name's
-                // documentation on the API tab.
+                // page of the library in the code card.
                 let jump = self.modifiers.command()
                     && matches!(
                         &message,
@@ -537,7 +582,7 @@ impl Game {
                         .and_then(|name| docs::resolve(name, None))
                 {
                     self.docs.open(page, line);
-                    self.tab = Tab::Api;
+                    self.reading = true;
                 }
                 if let Some(instruction) = action.instruction {
                     let (source, start) = match instruction {
@@ -600,8 +645,8 @@ impl Game {
         // a draggable hairline divider.
         let workspace = container(
             Split::new(
-                card(self.editor_pane()),
-                card(self.world_pane()),
+                card(self.code_face()),
+                card(self.player_face()),
                 Some(self.divider.unwrap_or(Pixels(self.viewport_width / 2.0))),
                 Axis::Vertical,
             )
@@ -621,37 +666,105 @@ impl Game {
             .into()
     }
 
-    /// The face of the right card: the world, or the API reference.
-    fn world_pane(&self) -> Element<'_, Message> {
-        match self.tab {
-            // Code is a narrow-layout face; wide has the editor card.
-            Tab::Player | Tab::Code => self.player_face(),
-            Tab::Api => self.docs_face(),
-        }
-    }
-
     /// The identifier a double click (or double tap) left selected in
-    /// whichever code pane is visible, resolved to its definition.
+    /// the code card's file, resolved to its definition.
     fn selected_reference(&self) -> Option<(String, docs::Page, usize)> {
-        let (name, preference) = match self.tab {
-            Tab::Api => (self.docs.selected_identifier()?, Some(self.docs.page())),
-            Tab::Code => (self.editor.selected_identifier()?, None),
-            // On a wide viewport the editor pane flanks the player.
-            Tab::Player if self.viewport_width >= NARROW => {
-                (self.editor.selected_identifier()?, None)
-            }
-            Tab::Player => return None,
+        if self.viewport_width < NARROW && self.tab != Tab::Code {
+            return None;
+        }
+        let (name, preference) = if self.reading {
+            (self.docs.selected_identifier()?, Some(self.docs.page()))
+        } else {
+            (self.editor.selected_identifier()?, None)
         };
         let (page, line) = docs::resolve(&name, preference)?;
         Some((name, page, line))
     }
 
-    /// The face selectors, prefixed by the selection-jump chip and -
-    /// when the reference is up - the history arrows.
-    fn tab_bar(&self, tabs: &'static [Tab]) -> Element<'_, Message> {
-        let mut bar = row![].spacing(4).align_y(Center);
+    /// The code card: a header naming the open file over the file, with
+    /// the file tree beside it - a collapsible sidebar on the wide
+    /// layout, a drawer over the file on the narrow one.
+    fn code_face(&self) -> Element<'_, Message> {
+        let file = if self.reading {
+            self.docs_face()
+        } else {
+            self.editor_pane()
+        };
+        let body: Element<'_, Message> = if self.viewport_width < NARROW {
+            if self.drawer {
+                // Tapping beside the drawer closes it.
+                let drawer = container(self.file_tree())
+                    .width(200)
+                    .height(Fill)
+                    .padding(8)
+                    .style(theme::container::panel);
+                stack![
+                    file,
+                    row![
+                        drawer,
+                        mouse_area(space().width(Fill).height(Fill))
+                            .on_press(Message::ToggleFiles)
+                    ]
+                ]
+                .into()
+            } else {
+                file
+            }
+        } else if self.sidebar {
+            row![
+                container(self.file_tree()).width(SIDEBAR).height(Fill),
+                file
+            ]
+            .spacing(8)
+            .into()
+        } else {
+            file
+        };
+        column![self.file_header(), body].spacing(6).into()
+    }
+
+    /// The open file's path - the sidebar's toggle beside it on the wide
+    /// layout, the drawer's opener on the narrow one - and at its end
+    /// the selection-jump chip and, while a page is read, the history
+    /// arrows.
+    fn file_header(&self) -> Element<'_, Message> {
+        let path = if self.reading {
+            format!("api/{}", self.docs.page().file_name())
+        } else {
+            "src/main.rs".to_string()
+        };
+        let mut name = row![
+            text(path)
+                .size(12)
+                .font(theme::MONO)
+                .style(theme::text::primary)
+        ]
+            .spacing(4)
+            .align_y(Center);
+        if self.reading {
+            name = name.push(icon::lock().size(11).style(theme::text::secondary));
+        }
+        let mut header = if self.viewport_width < NARROW {
+            row![
+                button(name.push(icon::chevron_down().size(12)))
+                    .padding([4, 6])
+                    .on_press(Message::ToggleFiles)
+                    .style(theme::button::ghost)
+            ]
+        } else {
+            row![
+                button(icon::panel_left().size(14))
+                    .padding([4, 6])
+                    .on_press(Message::ToggleFiles)
+                    .style(theme::button::tab(self.sidebar)),
+                container(name).padding([0, 4]),
+            ]
+        }
+        .spacing(4)
+        .align_y(Center);
+        header = header.push(space::horizontal());
         if let Some((name, page, line)) = self.selected_reference() {
-            bar = bar.push(
+            header = header.push(
                 button(
                     row![
                         text(name).size(12).font(theme::MONO),
@@ -665,27 +778,63 @@ impl Game {
                 .style(theme::button::link),
             );
         }
-        if self.tab == Tab::Api {
-            bar = bar.push(
+        if self.reading {
+            header = header.push(
                 button(icon::arrow_left().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_back().then_some(Message::DocsBack))
                     .style(theme::button::vanishing),
             );
-            bar = bar.push(
+            header = header.push(
                 button(icon::arrow_right().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_forward().then_some(Message::DocsForward))
                     .style(theme::button::vanishing),
             );
         }
-        for &tab in tabs {
-            bar = bar.push(tab_button(tab.label(), tab, self.tab));
-        }
-        bar.into()
+        header.into()
     }
 
-    /// The API reference, with a pointer cursor while command is held
+    /// The program's files: `src/main.rs`, the player's, and the
+    /// library's read-only pages under `api/`.
+    fn file_tree(&self) -> Element<'_, Message> {
+        let folder = |name| {
+            row![
+                icon::folder().size(12).style(theme::text::secondary),
+                text(name).size(12).font(theme::MONO).style(theme::text::secondary),
+            ]
+            .spacing(6)
+            .align_y(Center)
+        };
+        let file = |name, active, message| {
+            button(
+                row![icon::file_code().size(12), text(name).size(12).font(theme::MONO)]
+                    .spacing(6)
+                    .align_y(Center),
+            )
+            .width(Fill)
+            .padding([3, 6])
+            .on_press(message)
+            .style(theme::button::tab(active))
+        };
+        let mut tree = column![
+            folder("src"),
+            container(file("main.rs", !self.reading, Message::Write)).padding(padding::left(12)),
+            space().height(4),
+            folder("api"),
+        ]
+        .spacing(2);
+        for page in LIBRARY {
+            let active = self.reading && self.docs.page() == page;
+            tree = tree.push(
+                container(file(page.file_name(), active, Message::Read(page)))
+                    .padding(padding::left(12)),
+            );
+        }
+        tree.into()
+    }
+
+    /// The library page being read, with a pointer cursor while command is held
     /// (the cmd+click affordance).
     fn docs_face(&self) -> Element<'_, Message> {
         pointer(
@@ -712,20 +861,22 @@ impl Game {
     }
 
     /// The narrow (phone) layout: compact toolbar and stats over one
-    /// card where the world, the editor, and the reference are tabs.
+    /// card where the world and the code are tabs.
     fn narrow_view(&self, mode: theme::Mode) -> Element<'_, Message> {
         let face: Element<'_, Message> = match self.tab {
             Tab::Player => self.player_face(),
-            Tab::Code => self.editor_pane(),
-            Tab::Api => self.docs_face(),
+            Tab::Code => self.code_face(),
         };
+        let tabs = row![
+            space::horizontal(),
+            tab_button(Tab::Player.label(), Tab::Player, self.tab),
+            tab_button(Tab::Code.label(), Tab::Code, self.tab),
+        ]
+        .spacing(4);
 
         let workspace = container(
             column![
-                row![
-                    space::horizontal(),
-                    self.tab_bar(&[Tab::Player, Tab::Code, Tab::Api])
-                ],
+                tabs,
                 card(face)
             ]
             .spacing(6),
@@ -913,8 +1064,6 @@ impl Game {
             stat("Max wait", format!("{:.1}s", stats.max_wait_time())),
             stat("Moves", stats.move_count().to_string()),
             stat("Seed", seed(&self.playback)),
-            space::horizontal(),
-            self.tab_bar(&[Tab::Player, Tab::Api]),
         ]
         .spacing(24)
         .align_y(Center);
@@ -927,7 +1076,7 @@ impl Game {
     }
 }
 
-/// One face selector of the right card's tab bar.
+/// One face selector of the narrow layout's tab bar.
 fn tab_button(label: &str, tab: Tab, active: Tab) -> Element<'_, Message> {
     button(text(label).size(13))
         .on_press(Message::Tab(tab))

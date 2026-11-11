@@ -1,6 +1,6 @@
 // Generated automatically by iced_lucide at build time.
 // Do not edit manually.
-// 17b531d1d461c41c7e60e36be0be2a25cd70671cab40bca41ad7b2f0145e1130
+// f42f00904f8da7efd72b77a8882452dbd67c784b4f519e7d987e48676e25cbcc
 use iced::widget::text::{self, Text};
 
 pub const FONT: &[u8] = include_bytes!("../assets/fonts/lucide.ttf");
@@ -13,9 +13,14 @@ pub const ALL_ICONS: &[(&str, &str)] = &[
     ("arrow_right", "\u{E049}"),
     ("arrow_up_right", "\u{E04D}"),
     ("check", "\u{E06C}"),
+    ("chevron_down", "\u{E06D}"),
     ("eraser", "\u{E28F}"),
+    ("file_code", "\u{E0C3}"),
+    ("folder", "\u{E0D7}"),
+    ("lock", "\u{E10B}"),
     ("minus", "\u{E11C}"),
     ("moon", "\u{E11E}"),
+    ("panel_left", "\u{E12A}"),
     ("pause", "\u{E12E}"),
     ("play", "\u{E13C}"),
     ("plus", "\u{E13D}"),
@@ -54,11 +59,39 @@ where
     icon("\u{E06C}")
 }
 
+pub fn chevron_down<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E06D}")
+}
+
 pub fn eraser<'a, Theme>() -> Text<'a, Theme>
 where
     Theme: text::Catalog + 'a,
 {
     icon("\u{E28F}")
+}
+
+pub fn file_code<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E0C3}")
+}
+
+pub fn folder<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E0D7}")
+}
+
+pub fn lock<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E10B}")
 }
 
 pub fn minus<'a, Theme>() -> Text<'a, Theme>
@@ -73,6 +106,13 @@ where
     Theme: text::Catalog + 'a,
 {
     icon("\u{E11E}")
+}
+
+pub fn panel_left<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E12A}")
 }
 
 pub fn pause<'a, Theme>() -> Text<'a, Theme>
