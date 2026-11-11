@@ -26,6 +26,7 @@ use crate::playback::{self, Playback, Program};
 use crate::reload;
 use crate::storage;
 use crate::theme;
+use crate::widget::balance::balance;
 use crate::widget::pointer::pointer;
 use crate::widget::split::{Axis, Split};
 
@@ -377,9 +378,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
 fn splash() -> Element<'static, Message> {
     let content = column![
         text("elevato.rs").size(56).style(theme::text::primary),
-        text("Program a bank of elevators in Rust. Hot-reload your code mid-run. Clear the challenges.")
-            .size(16)
-            .style(theme::text::secondary),
+        balance(
+            text("Program a bank of elevators in Rust. Hot-reload your code mid-run. Clear the challenges.")
+                .size(16)
+                .align_x(Center)
+                .style(theme::text::secondary),
+        ),
         button(
             row![icon::play().size(14), text("Play").size(14)]
                 .spacing(6)
