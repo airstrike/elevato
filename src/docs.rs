@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use iced::widget::{column, container, text, text_editor};
+use iced::widget::text_editor;
 use iced::{Element, Fill};
 
 use crate::action::Action;
@@ -20,6 +20,8 @@ pub enum Page {
     /// Program shape: `run`, `new`, `update`, `subscription`, riders,
     /// determinism.
     Lib,
+    /// `Building`: the floors and where the cars are.
+    Building,
     /// `Elevator`, its commands, and its messages.
     Elevator,
     /// What riders on a floor do.
@@ -28,21 +30,23 @@ pub enum Page {
 
 impl Page {
     /// Every page, in resolution-preference order for editor clicks.
-    pub const ALL: &[Self] = &[Self::Elevator, Self::Floor, Self::Lib];
+    pub const ALL: &[Self] = &[Self::Elevator, Self::Floor, Self::Building, Self::Lib];
 
     /// The page's source text.
     pub fn source(self) -> &'static str {
         match self {
             Self::Lib => include_str!("../assets/api/lib.rs"),
+            Self::Building => include_str!("../assets/api/building.rs"),
             Self::Elevator => include_str!("../assets/api/elevator.rs"),
             Self::Floor => include_str!("../assets/api/floor.rs"),
         }
     }
 
-    /// The file name shown above the pane.
+    /// The page's file name in the `api/` folder.
     pub fn file_name(self) -> &'static str {
         match self {
             Self::Lib => "lib.rs",
+            Self::Building => "building.rs",
             Self::Elevator => "elevator.rs",
             Self::Floor => "floor.rs",
         }
@@ -307,23 +311,14 @@ impl State {
     /// The pane: the current file's name over its source, rendered
     /// under the same highlighter and style as the code editor.
     pub fn view(&self) -> Element<'_, Message> {
-        let header = container(
-            text(self.page.file_name())
-                .size(11)
-                .font(theme::MONO)
-                .style(theme::text::secondary),
-        )
-        .padding([2, 4]);
-
-        let source = text_editor(&self.content)
+        text_editor(&self.content)
             .height(Fill)
             .size(13)
             .font(theme::MONO)
             .on_action(Message::Viewed)
             .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
-            .style(theme::text_editor::code);
-
-        column![header, source].spacing(4).into()
+            .style(theme::text_editor::code)
+            .into()
     }
 }
 
@@ -349,9 +344,9 @@ mod tests {
         ("message", Page::Lib),
         ("elevators", Page::Lib),
         ("building", Page::Lib),
-        ("Building", Page::Lib),
-        ("floors", Page::Lib),
-        ("floor_of", Page::Lib),
+        ("Building", Page::Building),
+        ("floors", Page::Building),
+        ("floor_of", Page::Building),
         ("riders", Page::Lib),
         ("Direction", Page::Lib),
         ("Up", Page::Lib),

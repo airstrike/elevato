@@ -1,6 +1,40 @@
 //! Power on an elevator with `Elevator::new`. Return a command's `Task`
 //! to run it.
 
+/// What a car tells your program.
+pub enum Message {
+    /// The car has nothing to do: when it is powered on, and whenever it
+    /// finishes a trip or stops. Arrives through the task from
+    /// `Elevator::new`.
+    Idle,
+
+    /// A rider inside pressed this floor's button, and it was not lit.
+    /// Arrives through `riders()`, about a second after they board.
+    FloorButtonPressed(usize),
+
+    /// The car is about to pass this floor without stopping, going this
+    /// way. Streamed by the trip's task, still in time to send the car
+    /// there instead.
+    PassingFloor(usize, Direction),
+
+    /// The car reached the trip's floor: the trip task's last message,
+    /// sent once riders have got off and on.
+    StoppedAtFloor {
+        /// Where the car stopped.
+        floor: usize,
+        /// How many riders got off.
+        exited: usize,
+        /// How many riders got on. Only riders going the way a lit lamp
+        /// points board.
+        boarded: usize,
+        /// Riders' weight over capacity × 100: 0 empty, about 1 full.
+        /// Riders weigh 55 to 100, so `full` is the exact test.
+        load_factor: f64,
+        /// Whether every place is taken.
+        full: bool,
+    },
+}
+
 /// A car of the challenge's bank. `Copy`, comparable, hashable: a
 /// fine key for your own maps.
 pub struct Elevator;
@@ -35,38 +69,4 @@ impl Elevator {
 
     /// Sets the down lamp. See `set_going_up_indicator`.
     pub fn set_going_down_indicator(self, on: bool) -> Task<Message>;
-}
-
-/// What a car tells your program.
-pub enum Message {
-    /// The car has nothing to do: when it is powered on, and whenever it
-    /// finishes a trip or stops. Arrives through the task from
-    /// `Elevator::new`.
-    Idle,
-
-    /// A rider inside pressed this floor's button, and it was not lit.
-    /// Arrives through `riders()`, about a second after they board.
-    FloorButtonPressed(usize),
-
-    /// The car is about to pass this floor without stopping, going this
-    /// way. Streamed by the trip's task, still in time to send the car
-    /// there instead.
-    PassingFloor(usize, Direction),
-
-    /// The car reached the trip's floor: the trip task's last message,
-    /// sent once riders have got off and on.
-    StoppedAtFloor {
-        /// Where the car stopped.
-        floor: usize,
-        /// How many riders got off.
-        exited: usize,
-        /// How many riders got on. Only riders going the way a lit lamp
-        /// points board.
-        boarded: usize,
-        /// Riders' weight over capacity × 100: 0 empty, about 1 full.
-        /// Riders weigh 55 to 100, so `full` is the exact test.
-        load_factor: f64,
-        /// Whether every place is taken.
-        full: bool,
-    },
 }
