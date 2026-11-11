@@ -142,7 +142,12 @@
         failure.textContent = detail;
         loading.replaceWith(failure);
     }
-    addEventListener("error", (e) => bootFailure(e.message || String(e.error)));
+    // A script from another origin, such as a browser extension's, that
+    // throws reaches the page only as "Script error.", with no error, file
+    // or line: it isn't the page's, and it says nothing, so neither the
+    // boot nor the overlay takes it.
+    const foreign = (e) => !e.error && !e.filename && !e.lineno;
+    addEventListener("error", (e) => { if (!foreign(e)) bootFailure(e.message || String(e.error)); });
     addEventListener("unhandledrejection", (e) => bootFailure(String(e.reason)));
 
     // Debug overlay: every JS error, unhandled rejection, and wasm panic
@@ -185,8 +190,10 @@
         log.appendChild(entry);
         overlay.scrollTop = overlay.scrollHeight;
     }
-    addEventListener("error", (e) =>
-        report("error", e.message || String(e.error), e.filename ? e.filename + ":" + e.lineno + ":" + e.colno : ""));
+    addEventListener("error", (e) => {
+        if (foreign(e)) return;
+        report("error", e.message || String(e.error), e.filename ? e.filename + ":" + e.lineno + ":" + e.colno : "");
+    });
     addEventListener("unhandledrejection", (e) =>
         report("rejection", e.reason instanceof Error ? e.reason.message : String(e.reason),
             e.reason?.stack ? e.reason.stack.split("\n").slice(1, 4).join("\n") : ""));
