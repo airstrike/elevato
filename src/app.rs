@@ -10,8 +10,8 @@ use iced::keyboard::{self, key::Named};
 use iced::mouse;
 use iced::time::{self, milliseconds};
 use iced::widget::{
-    Id, button, center, column, container, mouse_area, pick_list, row, selector, space, stack,
-    text, text_editor,
+    Id, button, center, column, container, mouse_area, pick_list, row, scrollable, selector,
+    space, stack, text, text_editor,
 };
 use iced::padding;
 use iced::window;
@@ -74,6 +74,9 @@ struct Game {
     reading: bool,
     /// The library's pages, read-only.
     docs: docs::State,
+    /// The library pages open as tabs beside `main.rs`, in the order
+    /// they were opened.
+    tabs: Vec<docs::Page>,
     /// Whether the wide layout shows the file sidebar.
     sidebar: bool,
     /// Whether the narrow layout's file drawer is open.
@@ -170,10 +173,13 @@ pub enum Message {
     SplitResized(Pixels),
     /// A face of the narrow layout's card was selected.
     Tab(Tab),
-    /// The file tree's `main.rs`: back to the player's program.
+    /// `main.rs` in the file tree or its tab: back to the player's
+    /// program.
     Write,
-    /// A library page of the file tree.
+    /// A library page in the file tree or its tab.
     Read(docs::Page),
+    /// A library page's tab was closed.
+    Close(docs::Page),
     /// The code card's header button: show or hide the file sidebar on
     /// the wide layout, open or close the drawer on the narrow one.
     ToggleFiles,
@@ -479,6 +485,7 @@ impl Game {
             tab: Tab::Player,
             reading: false,
             docs: docs::State::new(),
+            tabs: Vec::new(),
             sidebar: true,
             drawer: false,
             modifiers: keyboard::Modifiers::default(),
@@ -520,6 +527,21 @@ impl Game {
                 }
                 self.reading = true;
                 self.drawer = false;
+                self.reveal();
+            }
+            Message::Close(page) => {
+                let Some(index) = self.tabs.iter().position(|&tab| tab == page) else {
+                    return Task::none();
+                };
+                self.tabs.remove(index);
+                if self.reading && self.docs.page() == page {
+                    // The tab to the left takes its place; main.rs is
+                    // left of them all.
+                    match index.checked_sub(1).map(|left| self.tabs[left]) {
+                        Some(left) => self.docs.open(left, 0),
+                        None => self.reading = false,
+                    }
+                }
             }
             Message::ToggleFiles => {
                 if self.viewport_width < NARROW {
@@ -531,15 +553,18 @@ impl Game {
             Message::DocsBack => {
                 if self.reading {
                     self.docs.back();
+                    self.reveal();
                 }
             }
             Message::DocsForward => {
                 if self.reading {
                     self.docs.forward();
+                    self.reveal();
                 }
             }
             Message::DocsJump(page, line) => {
                 self.docs.open(page, line);
+                self.reveal();
                 self.reading = true;
                 self.tab = Tab::Code;
             }
@@ -562,6 +587,7 @@ impl Game {
                         .and_then(|name| docs::resolve(name, Some(self.docs.page())))
                 {
                     self.docs.open(page, line);
+                    self.reveal();
                 }
                 return action.task.map(Message::Docs);
             }
@@ -582,6 +608,7 @@ impl Game {
                         .and_then(|name| docs::resolve(name, None))
                 {
                     self.docs.open(page, line);
+                    self.reveal();
                     self.reading = true;
                 }
                 if let Some(instruction) = action.instruction {
@@ -632,6 +659,14 @@ impl Game {
             | Message::OpenOriginal => {}
         }
         Task::none()
+    }
+
+    /// Opens a tab for the page being read, unless it has one.
+    fn reveal(&mut self) {
+        let page = self.docs.page();
+        if !self.tabs.contains(&page) {
+            self.tabs.push(page);
+        }
     }
 
     /// Renders the game screen: the split workspace on wide
@@ -723,46 +758,59 @@ impl Game {
         column![self.file_header(), body].spacing(6).into()
     }
 
-    /// The open file's path - the sidebar's toggle beside it on the wide
-    /// layout, the drawer's opener on the narrow one - and at its end
-    /// the selection-jump chip and, while a page is read, the history
-    /// arrows.
+    /// The open files as tabs - `main.rs` first, then each library
+    /// page opened - after the file tree's button: the sidebar's toggle
+    /// on the wide layout, the drawer's opener on the narrow one. At its
+    /// end, the selection-jump chip and, while a page is read, the
+    /// history arrows.
     fn file_header(&self) -> Element<'_, Message> {
-        let path = if self.reading {
-            format!("api/{}", self.docs.page().file_name())
+        let toggle = if self.viewport_width < NARROW {
+            button(icon::folder().size(14))
+                .padding([4, 6])
+                .on_press(Message::ToggleFiles)
+                .style(theme::button::tab(self.drawer))
         } else {
-            "src/main.rs".to_string()
+            button(icon::panel_left().size(14))
+                .padding([4, 6])
+                .on_press(Message::ToggleFiles)
+                .style(theme::button::tab(self.sidebar))
         };
-        let mut name = row![
-            text(path)
-                .size(12)
-                .font(theme::MONO)
-                .style(theme::text::primary)
+        let mut tabs = row![
+            button(text("main.rs").size(12).font(theme::MONO))
+                .padding([4, 8])
+                .on_press(Message::Write)
+                .style(theme::button::tab(!self.reading))
         ]
-            .spacing(4)
-            .align_y(Center);
-        if self.reading {
-            name = name.push(icon::lock().size(11).style(theme::text::secondary));
+        .spacing(2);
+        for &page in &self.tabs {
+            let active = self.reading && self.docs.page() == page;
+            tabs = tabs.push(
+                button(
+                    row![
+                        text(page.file_name()).size(12).font(theme::MONO),
+                        button(icon::x().size(11))
+                            .padding(1)
+                            .on_press(Message::Close(page))
+                            .style(theme::button::vanishing),
+                    ]
+                    .spacing(4)
+                    .align_y(Center),
+                )
+                .padding(padding::all(3).left(8).right(4))
+                .on_press(Message::Read(page))
+                .style(theme::button::tab(active)),
+            );
         }
-        let mut header = if self.viewport_width < NARROW {
-            row![
-                button(name.push(icon::chevron_down().size(12)))
-                    .padding([4, 6])
-                    .on_press(Message::ToggleFiles)
-                    .style(theme::button::ghost)
-            ]
-        } else {
-            row![
-                button(icon::panel_left().size(14))
-                    .padding([4, 6])
-                    .on_press(Message::ToggleFiles)
-                    .style(theme::button::tab(self.sidebar)),
-                container(name).padding([0, 4]),
-            ]
-        }
-        .spacing(4)
+        let mut header = row![
+            toggle,
+            scrollable(tabs)
+                .direction(scrollable::Direction::Horizontal(
+                    scrollable::Scrollbar::new().width(0).scroller_width(0)
+                ))
+                .width(Fill),
+        ]
+        .spacing(6)
         .align_y(Center);
-        header = header.push(space::horizontal());
         if let Some((name, page, line)) = self.selected_reference() {
             header = header.push(
                 button(

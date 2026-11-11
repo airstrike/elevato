@@ -1,6 +1,6 @@
 // Generated automatically by iced_lucide at build time.
 // Do not edit manually.
-// f42f00904f8da7efd72b77a8882452dbd67c784b4f519e7d987e48676e25cbcc
+// 465adc174c2d894eaca9a53b8d8c774580157de6144ac610079c08aa16da8928
 use iced::widget::text::{self, Text};
 
 pub const FONT: &[u8] = include_bytes!("../assets/fonts/lucide.ttf");
@@ -29,6 +29,7 @@ pub const ALL_ICONS: &[(&str, &str)] = &[
     ("skip_forward", "\u{E160}"),
     ("sun", "\u{E178}"),
     ("undo_2", "\u{E2A1}"),
+    ("x", "\u{E1B2}"),
 ];
 
 pub fn arrow_left<'a, Theme>() -> Text<'a, Theme>
@@ -169,6 +170,13 @@ where
     Theme: text::Catalog + 'a,
 {
     icon("\u{E2A1}")
+}
+
+pub fn x<'a, Theme>() -> Text<'a, Theme>
+where
+    Theme: text::Catalog + 'a,
+{
+    icon("\u{E1B2}")
 }
 
 /// Render any Lucide icon by its codepoint string.
