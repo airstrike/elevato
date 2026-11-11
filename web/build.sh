@@ -32,12 +32,18 @@ if [ "$status" -ne 0 ] && ! grep -q "runner exited before connecting its protoco
   cat "$log" >&2
   exit "$status"
 fi
-runner=$(find target/rawr -path "*/runner/target/wasm32-unknown-unknown/debug/universe.wasm" | head -n 1)
+# rawr keeps each build of the runner in its store, and older rawrs left
+# it in the runner's own target: the newest module is this build's.
+members=target/rawr/members/web/universe
+runner=$(find "$members" \
+  -path "$members/store/executions/*/target/debug/rawr-generated-runner" -o \
+  -path "$members/runner/target/wasm32-unknown-unknown/debug/universe.wasm" |
+  xargs ls -t 2>/dev/null | head -n 1)
 if [ -z "$runner" ]; then
   echo "web/build.sh: no runner was built (see $log)" >&2
   exit 1
 fi
-lock="${runner%/target/wasm32-unknown-unknown/debug/universe.wasm}/Cargo.lock"
+lock="$members/runner/Cargo.lock"
 
 version=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3 }' "$lock")
 tools="target/web/tools/$version"
