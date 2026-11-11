@@ -7,14 +7,6 @@ use iced_runtime::futures::futures::channel::mpsc;
 use crate::Direction;
 use crate::hub::{self, Command};
 
-/// A car of the challenge's bank.
-///
-/// [`Elevator::new`] powers on the bank's next car. Each command returns
-/// a [`Task`], and nothing happens until the program hands that task back
-/// from `new` or `update`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Elevator(usize);
-
 /// What a car tells the program.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
@@ -44,6 +36,14 @@ pub enum Message {
         full: bool,
     },
 }
+
+/// A car of the challenge's bank.
+///
+/// [`Elevator::new`] powers on the bank's next car. Each command returns
+/// a [`Task`], and nothing happens until the program hands that task back
+/// from `new` or `update`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Elevator(usize);
 
 impl Elevator {
     /// Powers on the bank's next car, standing at the lobby, and returns
