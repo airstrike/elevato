@@ -2404,8 +2404,8 @@ dependencies = [
 
 [[package]]
 name = "rawr-reload"
-version = "0.3.184"
-source = "git+https://github.com/airstrike/rawr#3335b150390ab35f5e7212c610fad197dbc8766f"
+version = "0.3.197"
+source = "git+https://github.com/airstrike/rawr#886931b3d1aeb27195b34b61be29c94ea3255f55"
 
 [[package]]
 name = "read-fonts"
