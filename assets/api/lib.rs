@@ -3,7 +3,7 @@
 //! read the building as it stands.
 //!
 //!     use elevato::{Building, Elevator, Message, elevator, floor};
-//!     use iced::{Element, Subscription, Task};
+//!     use iced::{Subscription, Task, Widget};
 //!
 //! A car makes one trip at a time. It says `Idle` when it has nothing
 //! to do; a trip is a task that streams the floors the car passes and
@@ -48,7 +48,7 @@ impl Program {
     /// Draws the building:
     ///
     ///     elevato::view(building)
-    pub fn view(&self, building: &Building) -> Element<'_, Message>;
+    pub fn view(&self, building: &Building) -> impl Widget<Message>;
 
     /// Listens to the riders:
     ///
@@ -58,7 +58,7 @@ impl Program {
 
 /// The building drawn: its floors and their call lamps, the elevators
 /// you powered on, and the riders.
-pub fn view<Message>(building: &Building) -> Element<'_, Message>;
+pub fn view<Message>(building: &Building) -> impl Widget<Message>;
 
 /// Every button a rider presses that was not lit: a `Message::Floor`
 /// for a call on a floor (`UpButtonPressed` or `DownButtonPressed`), a

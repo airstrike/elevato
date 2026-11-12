@@ -27,13 +27,12 @@ pub use elevato_api::{Building, Direction, Elevator, Message, elevator, floor, r
 pub use elevato_core as core;
 
 use iced::widget::canvas;
-use iced::{Element, Fill};
+use iced::{Fill, Widget};
 
 /// The building drawn: its floors and their call lamps, the cars the
 /// program powered on, and the riders.
-pub fn view<'a, Message: 'a>(building: &Building) -> Element<'a, Message> {
+pub fn view<'a, Message: 'a>(building: &Building) -> impl Widget<Message> + 'a {
     canvas(sim::View::new(building.world().clone()))
         .width(Fill)
         .height(Fill)
-        .into()
 }

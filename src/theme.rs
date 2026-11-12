@@ -202,6 +202,7 @@ pub mod text {
     pub fn primary(theme: &Theme) -> Style {
         Style {
             color: Some(palette(theme).text_primary),
+            ..Style::default()
         }
     }
 
@@ -209,6 +210,7 @@ pub mod text {
     pub fn secondary(theme: &Theme) -> Style {
         Style {
             color: Some(palette(theme).text_secondary),
+            ..Style::default()
         }
     }
 
@@ -216,6 +218,7 @@ pub mod text {
     pub fn failure(theme: &Theme) -> Style {
         Style {
             color: Some(palette(theme).failure),
+            ..Style::default()
         }
     }
 
@@ -229,6 +232,7 @@ pub mod text {
                 } else {
                     palette.failure
                 }),
+                ..Style::default()
             }
         }
     }

@@ -4,70 +4,67 @@
 //! wrapped sentence breaks into lines of about one length instead of a
 //! long line and a stray last word.
 
-use iced::advanced::layout::{Limits, Node};
-use iced::advanced::widget::Tree;
+use iced::advanced::layout::Limits;
+use iced::advanced::widget::{Meta, Tree};
 use iced::advanced::{Layout, Widget, renderer};
 use iced::mouse::Cursor;
-use iced::{Element, Length, Rectangle, Size};
+use iced::{Length, Rectangle, Size};
 
 /// How close, in logical pixels, the search comes to the narrowest width.
 const PRECISION: f32 = 1.0;
 
 /// Wraps `content`, a [`Length::Shrink`] text, balancing its lines.
-pub fn balance<'a, Message, Theme, Renderer>(
-    content: impl Into<Element<'a, Message, Theme, Renderer>>,
-) -> Balance<'a, Message, Theme, Renderer>
-where
-    Renderer: renderer::Renderer,
-{
-    Balance {
-        content: content.into(),
-    }
+pub fn balance<W>(content: W) -> Balance<W> {
+    Balance { content }
 }
 
 /// See [`balance`].
-#[allow(missing_debug_implementations)]
-pub struct Balance<'a, Message, Theme = iced::Theme, Renderer = iced::Renderer>
-where
-    Renderer: renderer::Renderer,
-{
-    content: Element<'a, Message, Theme, Renderer>,
+#[derive(Debug)]
+pub struct Balance<W> {
+    content: W,
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Balance<'a, Message, Theme, Renderer>
+impl<W> Meta for Balance<W> {}
+
+impl<Message, Theme, Renderer, W> Widget<Message, Theme, Renderer> for Balance<W>
 where
     Renderer: renderer::Renderer,
+    W: Widget<Message, Theme, Renderer>,
 {
     fn diff(&mut self, tree: &mut Tree) {
         tree.diff_children(std::slice::from_mut(&mut self.content));
     }
 
     fn size(&self) -> Size<Length> {
-        self.content.as_widget().size()
+        self.content.size()
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        let content = self.content.as_widget_mut();
-        let tree = &mut tree.children[0];
-        let max = limits.max();
-        let within = |width: f32| Limits::new(Size::ZERO, Size::new(width, max.height));
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
+        let content = &mut self.content;
+        let child = &mut tree.children[0];
+        let within = |width: f32| Limits {
+            min: Size::ZERO,
+            max: Size::new(width, limits.max.height),
+            ..*limits
+        };
 
         // Text's height counts its lines: a width is wide enough while the
         // text stays as tall as it is at the full width.
-        let full = content.layout(tree, renderer, limits);
-        let lines = full.size().height;
-        let (mut narrow, mut wide) = (0.0, full.size().width);
+        content.layout(child, renderer, limits);
+        let full = child.size;
+        let (mut narrow, mut wide) = (0.0, full.width);
         while wide - narrow > PRECISION {
             let width = (narrow + wide) / 2.0;
-            if content.layout(tree, renderer, &within(width)).size().height > lines {
+            content.layout(child, renderer, &within(width));
+            if child.size.height > full.height {
                 narrow = width;
             } else {
                 wide = width;
             }
         }
         // The last layout is the one the content draws with.
-        content.layout(tree, renderer, &within(wide))
+        content.layout(child, renderer, &within(wide));
+        tree.size = child.size;
     }
 
     fn draw(
@@ -76,11 +73,11 @@ where
         renderer: &mut Renderer,
         theme: &Theme,
         style: &renderer::Style,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        self.content.as_widget().draw(
+        self.content.draw(
             &tree.children[0],
             renderer,
             theme,
@@ -89,17 +86,5 @@ where
             cursor,
             viewport,
         );
-    }
-}
-
-impl<'a, Message, Theme, Renderer> From<Balance<'a, Message, Theme, Renderer>>
-    for Element<'a, Message, Theme, Renderer>
-where
-    Message: 'a,
-    Theme: 'a,
-    Renderer: renderer::Renderer + 'a,
-{
-    fn from(balance: Balance<'a, Message, Theme, Renderer>) -> Self {
-        Element::new(balance)
     }
 }

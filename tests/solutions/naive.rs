@@ -11,7 +11,7 @@
 use std::collections::VecDeque;
 
 use elevato::{Building, Elevator, Message, elevator};
-use iced::{Element, Subscription, Task};
+use iced::{Subscription, Task, Widget};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -49,7 +49,7 @@ impl Program {
         }
     }
 
-    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+    pub fn view(&self, building: &Building) -> impl Widget<Message> {
         elevato::view(building)
     }
 

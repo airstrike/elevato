@@ -4,67 +4,59 @@
 //! interaction only fills in when the content reports none, and a text
 //! editor always reports the text cursor.)
 
-use iced::advanced::layout::{Limits, Node};
-use iced::advanced::widget::{Operation, Tree};
+use iced::advanced::layout::Limits;
+use iced::advanced::widget::{Meta, Operation, Tree};
 use iced::advanced::{Layout, Shell, Widget, overlay, renderer};
 use iced::mouse::{self, Cursor};
-use iced::{Element, Event, Length, Rectangle, Size, Vector};
+use iced::{Event, Length, Rectangle, Size, Vector};
 
 /// Wraps `content`, forcing `interaction` while the cursor is over it
 /// (pass `None` to change nothing).
-pub fn pointer<'a, Message, Theme, Renderer>(
-    content: impl Into<Element<'a, Message, Theme, Renderer>>,
-    interaction: Option<mouse::Interaction>,
-) -> Pointer<'a, Message, Theme, Renderer>
-where
-    Renderer: renderer::Renderer,
-{
+pub fn pointer<W>(content: W, interaction: Option<mouse::Interaction>) -> Pointer<W> {
     Pointer {
-        content: content.into(),
+        content,
         interaction,
     }
 }
 
 /// See [`pointer`].
-#[allow(missing_debug_implementations)]
-pub struct Pointer<'a, Message, Theme = iced::Theme, Renderer = iced::Renderer>
-where
-    Renderer: renderer::Renderer,
-{
-    content: Element<'a, Message, Theme, Renderer>,
+#[derive(Debug)]
+pub struct Pointer<W> {
+    content: W,
     interaction: Option<mouse::Interaction>,
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for Pointer<'a, Message, Theme, Renderer>
+impl<W> Meta for Pointer<W> {}
+
+impl<Message, Theme, Renderer, W> Widget<Message, Theme, Renderer> for Pointer<W>
 where
     Renderer: renderer::Renderer,
+    W: Widget<Message, Theme, Renderer>,
 {
     fn diff(&mut self, tree: &mut Tree) {
         tree.diff_children(std::slice::from_mut(&mut self.content));
     }
 
     fn size(&self) -> Size<Length> {
-        self.content.as_widget().size()
+        self.content.size()
     }
 
-    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
-        self.content
-            .as_widget_mut()
-            .layout(&mut tree.children[0], renderer, limits)
+    fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) {
+        self.content.layout(&mut tree.children[0], renderer, limits);
+        tree.size = tree.children[0].size;
     }
 
     fn update(
         &mut self,
         tree: &mut Tree,
         event: &Event,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         renderer: &Renderer,
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
-        self.content.as_widget_mut().update(
+        self.content.update(
             &mut tree.children[0],
             event,
             layout,
@@ -78,7 +70,7 @@ where
     fn mouse_interaction(
         &self,
         tree: &Tree,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         viewport: &Rectangle,
         renderer: &Renderer,
@@ -88,13 +80,8 @@ where
         {
             return interaction;
         }
-        self.content.as_widget().mouse_interaction(
-            &tree.children[0],
-            layout,
-            cursor,
-            viewport,
-            renderer,
-        )
+        self.content
+            .mouse_interaction(&tree.children[0], layout, cursor, viewport, renderer)
     }
 
     fn draw(
@@ -103,11 +90,11 @@ where
         renderer: &mut Renderer,
         theme: &Theme,
         style: &renderer::Style,
-        layout: Layout<'_>,
+        layout: Layout,
         cursor: Cursor,
         viewport: &Rectangle,
     ) {
-        self.content.as_widget().draw(
+        self.content.draw(
             &tree.children[0],
             renderer,
             theme,
@@ -121,41 +108,31 @@ where
     fn operate(
         &mut self,
         tree: &mut Tree,
-        layout: Layout<'_>,
+        layout: Layout,
+        viewport: &Rectangle,
         renderer: &Renderer,
-        operation: &mut dyn Operation<()>,
+        operation: &mut dyn Operation,
     ) {
         self.content
-            .as_widget_mut()
-            .operate(&mut tree.children[0], layout, renderer, operation);
+            .operate(&mut tree.children[0], layout, viewport, renderer, operation);
     }
 
     fn overlay<'b>(
         &'b mut self,
         tree: &'b mut Tree,
-        layout: Layout<'b>,
+        layout: Layout,
         renderer: &Renderer,
         viewport: &Rectangle,
         translation: Vector,
-    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
-        self.content.as_widget_mut().overlay(
+        window: Size,
+    ) -> Vec<overlay::Element<'b, Message, Theme, Renderer>> {
+        self.content.overlay(
             &mut tree.children[0],
             layout,
             renderer,
             viewport,
             translation,
+            window,
         )
-    }
-}
-
-impl<'a, Message, Theme, Renderer> From<Pointer<'a, Message, Theme, Renderer>>
-    for Element<'a, Message, Theme, Renderer>
-where
-    Message: 'a,
-    Theme: 'a,
-    Renderer: renderer::Renderer + 'a,
-{
-    fn from(pointer: Pointer<'a, Message, Theme, Renderer>) -> Self {
-        Element::new(pointer)
     }
 }

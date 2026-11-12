@@ -6,7 +6,7 @@
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::widget::{column, text};
-use iced::{Element, Fill, Subscription, Task};
+use iced::{Fill, Subscription, Task, Widget};
 
 pub fn main() -> iced::Result {
     elevato::run(
@@ -94,7 +94,7 @@ impl Program {
         }
     }
 
-    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+    pub fn view(&self, building: &Building) -> impl Widget<Message> {
         column![
             text(format!("{} moved", self.moved)).size(12),
             elevato::view(building),
@@ -102,7 +102,6 @@ impl Program {
         .spacing(4)
         .width(Fill)
         .height(Fill)
-        .into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

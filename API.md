@@ -16,7 +16,7 @@ maps each of the original's callbacks and methods to what replaces it.
 ```rust
 // rawr
 use elevato::{Building, Elevator, Message, elevator};
-use iced::{Element, Subscription, Task};
+use iced::{Subscription, Task, Widget};
 
 pub fn main() -> iced::Result {
     elevato::run(
@@ -45,7 +45,7 @@ impl Program {
         }
     }
 
-    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+    pub fn view(&self, building: &Building) -> impl Widget<Message> {
         elevato::view(building)
     }
 

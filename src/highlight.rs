@@ -1,10 +1,10 @@
-//! Rust syntax highlighting for the editor - rung (a) of the plan's
-//! ladder: iced's [`highlighter::Highlighter`] trait implemented over
-//! syntect's parser, loading the embedded `assets/rust.sublime-syntax`
-//! grammar. Instead of syntect's theme machinery, each parsed scope is
-//! classified into a [`Kind`] and colored from [`crate::theme`]'s
-//! palette at format time, so tokens follow the app's light/dark theme
-//! without the highlighter having to know which theme is active.
+//! Rust syntax highlighting for the editor: iced's [`text::Parser`]
+//! implemented over syntect's parser, loading the embedded
+//! `assets/rust.sublime-syntax` grammar. Instead of syntect's theme
+//! machinery, each parsed scope is classified into a [`Kind`], which
+//! [`Kind::style`] colors from [`crate::theme`]'s palette as the editor
+//! draws, so tokens follow the app's light/dark theme without the parser
+//! knowing which theme is active.
 //!
 //! The incremental caching (snapshots every [`LINES_PER_SNAPSHOT`]
 //! lines, `current_line` tracking) mirrors `iced_highlighter`'s own
@@ -13,8 +13,8 @@
 use std::ops::Range;
 use std::sync::LazyLock;
 
-use iced::advanced::text::highlighter;
-use iced::{Font, Theme};
+use iced::Theme;
+use iced::advanced::text::{self, highlighter};
 use syntect::parsing::{
     ParseState, Scope, ScopeStack, ScopeStackOp, SyntaxDefinition, SyntaxReference, SyntaxSet,
     SyntaxSetBuilder,
@@ -60,8 +60,8 @@ static KINDS: LazyLock<[(Scope, Kind); 7]> = LazyLock::new(|| {
     ]
 });
 
-/// What a highlighted token is. The editor's format callback colors
-/// each kind from the current theme's palette.
+/// What a highlighted token is. [`Kind::style`] colors each kind from
+/// the current theme's palette.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     /// Line and block comments.
@@ -79,9 +79,9 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The text format for this kind under `theme` - a foreground
-    /// color only; the font stays the editor's monospace.
-    pub fn format(&self, theme: &Theme) -> highlighter::Format<Font> {
+    /// The style of this kind under `theme`: a foreground color only;
+    /// the font stays the editor's monospace.
+    pub fn style(self, theme: &Theme) -> highlighter::Style {
         let palette = theme::palette(theme);
         let color = match self {
             Kind::Comment => palette.syntax_comment,
@@ -91,25 +91,25 @@ impl Kind {
             Kind::Operator => palette.syntax_operator,
             Kind::Keyword => palette.syntax_keyword,
         };
-        highlighter::Format {
+        highlighter::Style {
             color: Some(color),
-            font: None,
+            style: None,
         }
     }
 }
 
-/// The Rust highlighter driven by the text editor via
-/// `.highlight_with::<highlight::Highlighter>(...)`.
+/// The Rust parser the text editor highlights with, through
+/// `.highlight_with::<highlight::Parser>((), Kind::style)`.
 #[derive(Debug)]
-pub struct Highlighter {
+pub struct Parser {
     /// Parse-state snapshots, one per [`LINES_PER_SNAPSHOT`] lines.
     caches: Vec<(ParseState, ScopeStack)>,
     current_line: usize,
 }
 
-impl highlighter::Highlighter for Highlighter {
+impl text::Parser for Parser {
     type Settings = ();
-    type Highlight = Kind;
+    type Output = Kind;
 
     type Iterator<'a> = Box<dyn Iterator<Item = (Range<usize>, Kind)> + 'a>;
 
@@ -144,7 +144,7 @@ impl highlighter::Highlighter for Highlighter {
         self.caches.push((parser, stack));
     }
 
-    fn highlight_line(&mut self, line: &str) -> Self::Iterator<'_> {
+    fn parse_line(&mut self, line: &str) -> Self::Iterator<'_> {
         if self.current_line / LINES_PER_SNAPSHOT >= self.caches.len() {
             let (parser, stack) = self.caches.last().expect("caches are never empty");
             self.caches.push((parser.clone(), stack.clone()));
@@ -244,11 +244,11 @@ mod tests {
     /// Feeds `lines` in order through a fresh highlighter, returning
     /// each line's classified tokens as (text, kind) pairs.
     fn tokens(lines: &[&str]) -> Vec<Vec<(String, Kind)>> {
-        let mut state = <Highlighter as highlighter::Highlighter>::new(&());
+        let mut state = <Parser as text::Parser>::new(&());
         lines
             .iter()
             .map(|line| {
-                highlighter::Highlighter::highlight_line(&mut state, line)
+                text::Parser::parse_line(&mut state, line)
                     .map(|(range, kind)| (line[range].to_string(), kind))
                     .collect()
             })

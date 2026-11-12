@@ -33,7 +33,7 @@ use std::sync::{Arc, Mutex};
 
 use elevato_api::Building;
 use elevato_api::simulation::{self, Simulation};
-use iced::{Element, Subscription, Task};
+use iced::{Element, Subscription, Task, Widget};
 
 use crate::core::challenge::{self, Challenge, Outcome};
 use crate::core::stats::Stats;
@@ -61,6 +61,24 @@ pub struct Program {
 }
 
 type Boot = dyn Fn(&Challenge, u64) -> Result<Box<dyn Run>, simulation::Error>;
+
+/// A program's `view`: any `Fn(&P, &Building) -> impl Widget<M>`, as an
+/// iced application takes its own.
+pub trait View<'a, P, M> {
+    /// The program's view of `building`.
+    fn view(&self, program: &'a P, building: &'a Building) -> impl Widget<M> + 'a;
+}
+
+impl<'a, T, P, M, W> View<'a, P, M> for T
+where
+    T: Fn(&'a P, &'a Building) -> W,
+    P: 'a,
+    W: Widget<M> + 'a,
+{
+    fn view(&self, program: &'a P, building: &'a Building) -> impl Widget<M> + 'a {
+        self(program, building)
+    }
+}
 
 /// A [`Simulation`] of the player's program and its view, seen without
 /// its state and message types.
@@ -112,7 +130,7 @@ struct Live<P, M, V> {
 impl<P, M, V> Run for Live<P, M, V>
 where
     M: Send + 'static,
-    V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M>,
+    V: for<'a> View<'a, P, M>,
 {
     fn frame(&mut self, substeps: usize) -> Result<(), simulation::Error> {
         self.simulation.frame(substeps)
@@ -131,7 +149,10 @@ where
     }
 
     fn view(&self) -> Element<'_, Input> {
-        (self.view)(self.simulation.program(), self.simulation.building()).map(Input::new)
+        self.view
+            .view(self.simulation.program(), self.simulation.building())
+            .map(Input::new)
+            .boxed()
     }
 
     fn send(&mut self, input: Input) {
@@ -153,7 +174,7 @@ impl Program {
     where
         P: 'static,
         M: Send + 'static,
-        V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M> + Clone + 'static,
+        V: for<'a> View<'a, P, M> + Clone + 'static,
     {
         Self {
             boot: Arc::new(move |challenge: &Challenge, seed| {
@@ -405,7 +426,7 @@ mod tests {
     struct Shuttle;
 
     fn shuttle() -> Program {
-        fn view<'a>(_: &'a Shuttle, building: &'a Building) -> Element<'a, Message> {
+        fn view<'a>(_: &'a Shuttle, building: &'a Building) -> impl Widget<Message> + 'a {
             crate::view(building)
         }
 
@@ -428,6 +449,12 @@ mod tests {
             view,
             |_: &Shuttle| Subscription::none(),
         )
+    }
+
+    #[test]
+    fn a_running_attempt_shows_the_programs_view() {
+        let playback = Playback::new(shuttle());
+        assert!(playback.view().is_some(), "the booted attempt has a view");
     }
 
     #[test]

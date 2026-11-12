@@ -15,11 +15,11 @@ use std::io;
 use elevato_api::simulation;
 use iced::keyboard::{self, key::Named};
 use iced::widget::{button, column, container, row, space, text, text_editor};
-use iced::{Element, Fill};
+use iced::{Element, Fill, Widget};
 
 use crate::action::Action;
 use crate::docs;
-use crate::highlight;
+use crate::highlight::{self, Kind};
 use crate::icon;
 use crate::playback;
 use crate::reload;
@@ -165,7 +165,7 @@ impl State {
         resolution::resolve(
             Scope::Program(&self.content.text()),
             position.line,
-            position.column,
+            position.index,
         )
     }
 
@@ -274,7 +274,7 @@ impl State {
                     text_editor::Binding::from_key_press(press)
                 }
             })
-            .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
+            .highlight_with::<highlight::Parser>((), Kind::style)
             .style(theme::text_editor::code);
 
         let buttons = row![
@@ -312,7 +312,7 @@ impl State {
         if let Some(error) = error {
             pane = pane.push(error_panel(error));
         }
-        pane.push(buttons).into()
+        pane.push(buttons.boxed()).boxed()
     }
 }
 
@@ -323,7 +323,7 @@ fn strip<'a>(status: &Status) -> Element<'a, Message> {
         .width(Fill)
         .padding(8)
         .style(theme::container::error_panel)
-        .into()
+        .boxed()
 }
 
 /// The strip's line for `status`.
@@ -346,7 +346,7 @@ fn error_panel<'a>(error: &simulation::Error) -> Element<'a, Message> {
         .width(Fill)
         .padding(8)
         .style(theme::container::error_panel)
-        .into()
+        .boxed()
 }
 
 #[cfg(test)]

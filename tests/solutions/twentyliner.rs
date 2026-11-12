@@ -8,7 +8,7 @@
 //! one trip, replacing whatever trip it was on.
 
 use elevato::{Building, Elevator, Message, elevator, floor};
-use iced::{Element, Subscription, Task};
+use iced::{Subscription, Task, Widget};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -89,7 +89,7 @@ impl Program {
         self.plan()
     }
 
-    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+    pub fn view(&self, building: &Building) -> impl Widget<Message> {
         elevato::view(building)
     }
 

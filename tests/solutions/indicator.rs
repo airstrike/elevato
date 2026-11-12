@@ -11,7 +11,7 @@
 //! that trip.
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
-use iced::{Element, Subscription, Task};
+use iced::{Subscription, Task, Widget};
 
 pub struct Program {
     cars: Vec<Car>,
@@ -64,7 +64,7 @@ impl Program {
         }
     }
 
-    pub fn view(&self, building: &Building) -> Element<'_, Message> {
+    pub fn view(&self, building: &Building) -> impl Widget<Message> {
         elevato::view(building)
     }
 

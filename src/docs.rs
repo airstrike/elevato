@@ -4,10 +4,10 @@
 //! between them. [`crate::resolution`] decides where a jump lands.
 
 use iced::widget::text_editor;
-use iced::{Element, Fill};
+use iced::{Element, Fill, Widget};
 
 use crate::action::Action;
-use crate::highlight;
+use crate::highlight::{self, Kind};
 use crate::resolution::{self, Scope};
 use crate::theme;
 
@@ -114,7 +114,7 @@ impl State {
     /// performed) names.
     pub fn reference_at_cursor(&self) -> Option<(Page, usize)> {
         let position = self.content.cursor().position;
-        resolution::resolve(Scope::Page(self.page), position.line, position.column)
+        resolution::resolve(Scope::Page(self.page), position.line, position.index)
     }
 
     /// The selection, when it is exactly one identifier, and the
@@ -188,9 +188,9 @@ impl State {
             .size(13)
             .font(theme::MONO)
             .on_action(Message::Viewed)
-            .highlight_with::<highlight::Highlighter>((), |kind, theme| kind.format(theme))
+            .highlight_with::<highlight::Parser>((), Kind::style)
             .style(theme::text_editor::code)
-            .into()
+            .boxed()
     }
 }
 

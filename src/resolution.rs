@@ -33,14 +33,15 @@ pub enum Scope<'a> {
     Page(Page),
 }
 
-/// The definition the click at `column` of line `line` in `scope` names:
-/// its page and line.
-pub fn resolve(scope: Scope<'_>, line: usize, column: usize) -> Option<(Page, usize)> {
+/// The definition the click at byte `index` of line `line` in `scope`
+/// names: its page and line.
+pub fn resolve(scope: Scope<'_>, line: usize, index: usize) -> Option<(Page, usize)> {
     let source = match scope {
         Scope::Program(text) => text,
         Scope::Page(page) => page.source(),
     };
     let text = source.lines().nth(line)?;
+    let column = text.get(..index)?.chars().count();
     let clicked = Clicked::at(text, column)?;
 
     if clicked.method {

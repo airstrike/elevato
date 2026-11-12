@@ -15,7 +15,7 @@ use iced::widget::{
     stack, text, text_editor,
 };
 use iced::window;
-use iced::{Center, Element, Fill, Length, Subscription, Task};
+use iced::{Center, Element, Fill, Length, Subscription, Task, Widget};
 use iced_split::vertical_split;
 
 use elevato_api::Building;
@@ -227,7 +227,7 @@ pub fn run<P, M, V>(
 where
     P: 'static,
     M: Send + 'static,
-    V: for<'a> Fn(&'a P, &'a Building) -> Element<'a, M> + Clone + 'static,
+    V: for<'a> playback::View<'a, P, M> + Clone + 'static,
 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -255,9 +255,8 @@ where
         .settings(settings)
         .subscription(self::subscription)
         .theme(theme)
-        .font(theme::MONO_BYTES)
-        .font(icon::FONT)
-        .default_font(theme::MONO)
+        .fonts([theme::MONO_BYTES, icon::FONT])
+        .font(theme::MONO)
         .title("elevato.rs")
         .run()
 }
@@ -449,7 +448,7 @@ fn splash() -> Element<'static, Message> {
         .width(Fill)
         .height(Fill)
         .style(theme::container::root)
-        .into()
+        .boxed()
 }
 
 // ----------------------------------------------------------------- game
@@ -584,7 +583,7 @@ impl Game {
                 let jump = self.modifiers.command()
                     && matches!(
                         &message,
-                        docs::Message::Viewed(text_editor::Action::Click(_))
+                        docs::Message::Viewed(text_editor::Action::Click(..))
                     );
                 let action = self.docs.update(message);
                 if jump && let Some((page, line)) = self.docs.reference_at_cursor() {
@@ -599,7 +598,7 @@ impl Game {
                 let jump = self.modifiers.command()
                     && matches!(
                         &message,
-                        editor::Message::Edited(text_editor::Action::Click(_))
+                        editor::Message::Edited(text_editor::Action::Click(..))
                     );
                 let action = self.editor.update(message);
                 if jump && let Some((page, line)) = self.editor.reference_at_cursor() {
@@ -694,7 +693,7 @@ impl Game {
             .width(Fill)
             .height(Fill)
             .style(theme::container::root)
-            .into()
+            .boxed()
     }
 
     /// The identifier a double click (or double tap) left selected in
@@ -734,7 +733,7 @@ impl Game {
                         mouse_area(space().width(Fill).height(Fill)).on_press(Message::ToggleFiles)
                     ]
                 ]
-                .into()
+                .boxed()
             } else {
                 file
             }
@@ -744,11 +743,11 @@ impl Game {
                 file
             ]
             .spacing(8)
-            .into()
+            .boxed()
         } else {
             file
         };
-        column![self.file_header(), body].spacing(6).into()
+        column![self.file_header(), body].spacing(6).boxed()
     }
 
     /// The open files as tabs - `main.rs` first, then each library
@@ -791,7 +790,8 @@ impl Game {
                 )
                 .padding(padding::all(3).left(8).right(4))
                 .on_press(Message::Read(page))
-                .style(theme::button::tab(active)),
+                .style(theme::button::tab(active))
+                .boxed(),
             );
         }
         let mut header = row![
@@ -816,7 +816,8 @@ impl Game {
                 )
                 .padding([4, 6])
                 .on_press(Message::DocsJump(page, line))
-                .style(theme::button::link),
+                .style(theme::button::link)
+                .boxed(),
             );
         }
         if self.reading {
@@ -824,16 +825,18 @@ impl Game {
                 button(icon::arrow_left().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_back().then_some(Message::DocsBack))
-                    .style(theme::button::vanishing),
+                    .style(theme::button::vanishing)
+                    .boxed(),
             );
             header = header.push(
                 button(icon::arrow_right().size(13))
                     .padding([4, 6])
                     .on_press_maybe(self.docs.can_go_forward().then_some(Message::DocsForward))
-                    .style(theme::button::vanishing),
+                    .style(theme::button::vanishing)
+                    .boxed(),
             );
         }
-        header.into()
+        header.boxed()
     }
 
     /// The program's files: `src/main.rs`, the player's, and the
@@ -875,10 +878,11 @@ impl Game {
             let active = self.reading && self.docs.page() == page;
             tree = tree.push(
                 container(file(page.file_name(), active, Message::Read(page)))
-                    .padding(padding::left(12)),
+                    .padding(padding::left(12))
+                    .boxed(),
             );
         }
-        tree.into()
+        tree.boxed()
     }
 
     /// The library page being read, with a pointer cursor while command is held
@@ -890,18 +894,18 @@ impl Game {
                 .command()
                 .then_some(mouse::Interaction::Pointer),
         )
-        .into()
+        .boxed()
     }
 
     /// The running world: the program's view of the building, with the
     /// end-of-run banner stacked over it once the challenge decides.
     fn player_face(&self) -> Element<'_, Message> {
         let world: Element<'_, Message> = match self.playback.view() {
-            Some(view) => view.map(Message::Program),
-            None => space().into(),
+            Some(view) => view.map(Message::Program).boxed(),
+            None => space().boxed(),
         };
         if self.playback.ended() {
-            stack![world, center(banner(&self.playback))].into()
+            stack![world, center(banner(&self.playback))].boxed()
         } else {
             world
         }
@@ -934,7 +938,7 @@ impl Game {
         .width(Fill)
         .height(Fill)
         .style(theme::container::root)
-        .into()
+        .boxed()
     }
 
     /// The narrow toolbar: the picker on its own line, icon-only
@@ -987,7 +991,7 @@ impl Game {
             .width(Fill)
             .padding([8, 12])
             .style(theme::container::panel)
-            .into()
+            .boxed()
     }
 
     /// The narrow stats bar: the seven readouts in two rows.
@@ -1014,7 +1018,7 @@ impl Game {
             .width(Fill)
             .padding([6, 12])
             .style(theme::container::panel)
-            .into()
+            .boxed()
     }
 
     /// The editor side of the split, fed the program's panic when one
@@ -1026,7 +1030,7 @@ impl Game {
                 .command()
                 .then_some(mouse::Interaction::Pointer),
         )
-        .into()
+        .boxed()
     }
 
     fn toolbar(&self, mode: theme::Mode) -> Element<'_, Message> {
@@ -1089,7 +1093,7 @@ impl Game {
             .width(Fill)
             .padding([8, 12])
             .style(theme::container::panel)
-            .into()
+            .boxed()
     }
 
     fn stats_bar(&self) -> Element<'_, Message> {
@@ -1113,7 +1117,7 @@ impl Game {
             .width(Fill)
             .padding([6, 12])
             .style(theme::container::panel)
-            .into()
+            .boxed()
     }
 }
 
@@ -1122,7 +1126,7 @@ fn tab_button(label: &str, tab: Tab, active: Tab) -> Element<'_, Message> {
     button(text(label).size(13))
         .on_press(Message::Tab(tab))
         .style(theme::button::tab(tab == active))
-        .into()
+        .boxed()
 }
 
 /// One workspace card: the identical rounded surface both sides of
@@ -1133,7 +1137,7 @@ fn card(content: Element<'_, Message>) -> Element<'_, Message> {
         .height(Fill)
         .padding(8)
         .style(theme::container::pane)
-        .into()
+        .boxed()
 }
 
 /// The seed readout, marked once code changed under the attempt: the
@@ -1152,7 +1156,7 @@ fn stat(label: &str, value: String) -> Element<'_, Message> {
         text(value).size(14).style(theme::text::primary),
     ]
     .spacing(2)
-    .into()
+    .boxed()
 }
 
 // --------------------------------------------------------------- banner
@@ -1162,7 +1166,12 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
 
     let mut content = column![].spacing(12).align_x(Center);
     if success {
-        content = content.push(text("Success!").size(24).style(theme::text::outcome(true)));
+        content = content.push(
+            text("Success!")
+                .size(24)
+                .style(theme::text::outcome(true))
+                .boxed(),
+        );
         if playback.challenge_index() + 1 < playback.challenges().len() {
             content = content.push(
                 button(
@@ -1174,14 +1183,16 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
                     .align_y(Center),
                 )
                 .on_press(Message::NextChallenge)
-                .style(theme::button::primary),
+                .style(theme::button::primary)
+                .boxed(),
             );
         }
     } else {
         content = content.push(
             text("Challenge failed")
                 .size(18)
-                .style(theme::text::outcome(false)),
+                .style(theme::text::outcome(false))
+                .boxed(),
         );
         content = content.push(
             button(
@@ -1190,14 +1201,15 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
                     .align_y(Center),
             )
             .on_press(Message::Restart)
-            .style(theme::button::outline),
+            .style(theme::button::outline)
+            .boxed(),
         );
     }
 
     container(content)
         .padding(24)
         .style(theme::container::banner)
-        .into()
+        .boxed()
 }
 
 // --------------------------------------------------------------- shared
