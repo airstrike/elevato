@@ -39,6 +39,7 @@ use crate::building::Building;
 use crate::elevator::{self, Elevator};
 use crate::floor;
 use crate::hub::{self, Command, Hub};
+use crate::message::Message;
 
 /// Hard cap on delivery rounds per dispatch point: a program whose
 /// commands keep raising events past this many rounds has the rest
@@ -296,13 +297,13 @@ where
                 }
             }
             Event::UpButtonPressed { floor } => {
-                hub::broadcast(hub::Rider::Floor(floor, floor::Message::UpButtonPressed));
+                hub::broadcast(Message::Floor(floor, floor::Message::UpButtonPressed));
             }
             Event::DownButtonPressed { floor } => {
-                hub::broadcast(hub::Rider::Floor(floor, floor::Message::DownButtonPressed));
+                hub::broadcast(Message::Floor(floor, floor::Message::DownButtonPressed));
             }
             Event::FloorButtonPressed { elevator, floor } => {
-                hub::broadcast(hub::Rider::Elevator(
+                hub::broadcast(Message::Elevator(
                     Elevator::at(elevator),
                     elevator::Message::FloorButtonPressed(floor),
                 ));

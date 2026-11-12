@@ -10,19 +10,13 @@
 //! a time, to its first stop; a stop it should make on the way replaces
 //! that trip.
 
-use elevato::{Building, Direction, Elevator, elevator, floor};
-use iced::{Element, Function, Subscription, Task};
+use elevato::{Building, Direction, Elevator, Message, elevator, floor};
+use iced::{Element, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
     ups: Vec<usize>,
     downs: Vec<usize>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Elevator(Elevator, elevator::Message),
-    Floor(usize, floor::Message),
 }
 
 /// One car: where it is, the stops it will make in order, and the stop
@@ -39,10 +33,7 @@ impl Program {
         let (cars, starts): (Vec<Car>, Vec<Task<Message>>) = (0..elevators)
             .map(|_| {
                 let (elevator, start) = Elevator::new();
-                (
-                    Car::new(elevator),
-                    start.map(Message::Elevator.with(elevator)),
-                )
+                (Car::new(elevator), start)
             })
             .unzip();
         let program = Self {
@@ -67,7 +58,7 @@ impl Program {
                 let Some(car) = self.cars.iter_mut().find(|car| car.elevator == elevator) else {
                     return Task::none();
                 };
-                let task = car.update(message).map(Message::Elevator.with(elevator));
+                let task = car.update(message);
                 Task::batch([task, self.claim()])
             }
         }
@@ -78,7 +69,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 
     /// Hands the waiting calls to the first idle car: the up calls as
@@ -96,8 +87,7 @@ impl Program {
         } else {
             return Task::none();
         };
-        let elevator = car.elevator;
-        car.sweep(sweep).map(Message::Elevator.with(elevator))
+        car.sweep(sweep)
     }
 }
 
@@ -111,7 +101,7 @@ impl Car {
         }
     }
 
-    fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
+    fn update(&mut self, message: elevator::Message) -> Task<Message> {
         match message {
             elevator::Message::Idle => {
                 self.heading = None;
@@ -134,7 +124,7 @@ impl Car {
     }
 
     /// Takes a sweep of pickups, in the order given.
-    fn sweep(&mut self, floors: Vec<usize>) -> Task<elevator::Message> {
+    fn sweep(&mut self, floors: Vec<usize>) -> Task<Message> {
         for floor in floors {
             if !self.stops.contains(&floor) {
                 self.stops.push(floor);
@@ -145,7 +135,7 @@ impl Car {
 
     /// A rider's destination joins the stops in travel order, so the car
     /// sweeps one way instead of ping-ponging in press order.
-    fn drop_off(&mut self, floor: usize) -> Task<elevator::Message> {
+    fn drop_off(&mut self, floor: usize) -> Task<Message> {
         if self.stops.contains(&floor) {
             return Task::none();
         }
@@ -175,7 +165,7 @@ impl Car {
 
     /// Sends the car toward its first stop when it is not on its way to
     /// one, lamps lit for the way it goes from there.
-    fn next(&mut self) -> Task<elevator::Message> {
+    fn next(&mut self) -> Task<Message> {
         if self.heading.is_some() {
             return self.indicate();
         }
@@ -191,7 +181,7 @@ impl Car {
 
     /// Lights the lamps for the direction the car leaves its first stop
     /// in: both when that stop is its last.
-    fn indicate(&self) -> Task<elevator::Message> {
+    fn indicate(&self) -> Task<Message> {
         let direction = match self.stops.as_slice() {
             [first, second, ..] if second > first => Some(Direction::Up),
             [first, second, ..] if second < first => Some(Direction::Down),

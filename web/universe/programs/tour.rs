@@ -4,9 +4,9 @@
 //! steering boarding with its indicators, and the view says how many
 //! riders it moved above the building.
 
-use elevato::{Building, Direction, Elevator, elevator, floor};
+use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::widget::{column, text};
-use iced::{Element, Fill, Function, Subscription, Task};
+use iced::{Element, Fill, Subscription, Task};
 
 pub fn main() -> iced::Result {
     elevato::run(
@@ -23,12 +23,6 @@ pub struct Program {
     moved: usize,
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    Elevator(Elevator, elevator::Message),
-    Floor(usize, floor::Message),
-}
-
 impl Program {
     pub fn new(elevators: usize) -> (Self, Task<Message>) {
         let mut cars = Vec::new();
@@ -36,7 +30,7 @@ impl Program {
         for _ in 1..elevators {
             let (elevator, start) = Elevator::new();
             cars.push(elevator);
-            starts.push(start.map(Message::Elevator.with(elevator)));
+            starts.push(start);
         }
         let spare = if elevators > 0 {
             Some(Elevator::default())
@@ -62,7 +56,6 @@ impl Program {
                     elevator.set_going_down_indicator(!going_up),
                     elevator.go_to_floor(next),
                 ])
-                .map(Message::Elevator.with(elevator))
             }
             Message::Elevator(
                 elevator,
@@ -76,7 +69,7 @@ impl Program {
             ) => {
                 self.moved += exited;
                 if full || load_factor > 0.9 || (boarded == 0 && floor == 0) {
-                    elevator.stop().map(Message::Elevator.with(elevator))
+                    elevator.stop()
                 } else {
                     Task::none()
                 }
@@ -84,14 +77,14 @@ impl Program {
             Message::Elevator(elevator, elevator::Message::PassingFloor(floor, direction)) => {
                 match direction {
                     Direction::Up if floor + 1 == building.floors() => {
-                        elevator.stop().map(Message::Elevator.with(elevator))
+                        elevator.stop()
                     }
                     Direction::Up | Direction::Down => Task::none(),
                 }
             }
             Message::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
                 if self.cars.contains(&elevator) && Some(elevator) != self.spare {
-                    elevator.go_to_floor(floor).map(Message::Elevator.with(elevator))
+                    elevator.go_to_floor(floor)
                 } else {
                     Task::none()
                 }
@@ -113,6 +106,6 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 }

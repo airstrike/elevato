@@ -1,5 +1,7 @@
 //! Power on an elevator with `Elevator::new`. Return a command's `Task`
-//! to run it.
+//! to run it. Its news reaches your `update` as an
+//! `elevato::Message::Elevator`, with the car and one of this module's
+//! messages.
 
 /// What a car tells your program.
 pub enum Message {
@@ -45,7 +47,7 @@ impl Elevator {
     /// to do. A car past the bank never enters the building.
     ///
     ///     let (elevator, start) = Elevator::new();
-    pub fn new() -> (Elevator, Task<Message>);
+    pub fn new() -> (Elevator, Task<elevato::Message>);
 
     /// Powers on the bank's next car without its news.
     pub fn default() -> Elevator;
@@ -55,18 +57,18 @@ impl Elevator {
     /// `StoppedAtFloor` when it gets there; a replaced trip's task ends
     /// with no more messages. A floor past the top is the top floor.
     ///
-    ///     elevator.go_to_floor(3).map(Message::Elevator.with(elevator))
-    pub fn go_to_floor(self, floor: usize) -> Task<Message>;
+    ///     elevator.go_to_floor(3)
+    pub fn go_to_floor(self, floor: usize) -> Task<elevato::Message>;
 
     /// Halts the car where it can - usually between floors, doors shut -
     /// and aborts its trip, whose task ends with no more messages. The
     /// car says `Idle`.
-    pub fn stop(self) -> Task<Message>;
+    pub fn stop(self) -> Task<elevato::Message>;
 
     /// Sets the up lamp. Both lamps start on. A car stopping with a lamp
     /// lit takes on riders going that way and clears that call button.
-    pub fn set_going_up_indicator(self, on: bool) -> Task<Message>;
+    pub fn set_going_up_indicator(self, on: bool) -> Task<elevato::Message>;
 
     /// Sets the down lamp. See `set_going_up_indicator`.
-    pub fn set_going_down_indicator(self, on: bool) -> Task<Message>;
+    pub fn set_going_down_indicator(self, on: bool) -> Task<elevato::Message>;
 }

@@ -5,22 +5,16 @@
 //!
 //! Each car is its own small iced component: [`Car`] owns the floors it
 //! has to visit, its `update` takes an [`elevator::Message`], and the
-//! program routes each car's messages to it and maps its tasks back. A
-//! car makes one trip at a time, the next one whenever it is idle.
+//! program routes each car's messages to it. A car makes one trip at a
+//! time, the next one whenever it is idle.
 
 use std::collections::VecDeque;
 
-use elevato::{Building, Elevator, elevator, floor};
-use iced::{Element, Function, Subscription, Task};
+use elevato::{Building, Elevator, Message, elevator};
+use iced::{Element, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Elevator(Elevator, elevator::Message),
-    Floor(usize, floor::Message),
 }
 
 /// One car and the floors it still has to visit, in the order asked.
@@ -34,10 +28,7 @@ impl Program {
         let (cars, starts): (Vec<Car>, Vec<Task<Message>>) = (0..elevators)
             .map(|_| {
                 let (elevator, start) = Elevator::new();
-                (
-                    Car::new(elevator),
-                    start.map(Message::Elevator.with(elevator)),
-                )
+                (Car::new(elevator), start)
             })
             .unzip();
         (Self { cars }, Task::batch(starts))
@@ -49,7 +40,7 @@ impl Program {
                 let Some(car) = self.cars.iter_mut().find(|car| car.elevator == elevator) else {
                     return Task::none();
                 };
-                car.update(message).map(Message::Elevator.with(elevator))
+                car.update(message)
             }
             Message::Floor(floor, _) => {
                 self.cars[0].visit(floor);
@@ -63,7 +54,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 }
 
@@ -82,7 +73,7 @@ impl Car {
         }
     }
 
-    fn update(&mut self, message: elevator::Message) -> Task<elevator::Message> {
+    fn update(&mut self, message: elevator::Message) -> Task<Message> {
         match message {
             elevator::Message::Idle => {
                 let next = self.stops.pop_front().unwrap_or(0);

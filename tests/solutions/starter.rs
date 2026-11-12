@@ -4,8 +4,8 @@
 //! draws the building, and `subscription` listens to the riders. `main`
 //! hands the four to elevato, which runs the game around them.
 
-use elevato::{Building, Elevator, elevator, floor};
-use iced::{Element, Function, Subscription, Task};
+use elevato::{Building, Elevator, Message, elevator};
+use iced::{Element, Subscription, Task};
 
 pub fn main() -> iced::Result {
     elevato::run(
@@ -19,21 +19,11 @@ pub fn main() -> iced::Result {
 /// Our state. We keep nothing so far.
 pub struct Program;
 
-/// Everything that can happen to us.
-#[derive(Debug, Clone)]
-pub enum Message {
-    /// Something about an elevator: it is idle, a trip is under way, or
-    /// a rider inside pressed a button.
-    Elevator(Elevator, elevator::Message),
-    /// A rider on a floor calling a car.
-    Floor(usize, floor::Message),
-}
-
 impl Program {
     pub fn new(_elevators: usize) -> (Self, Task<Message>) {
-        let (elevator, start) = Elevator::new();
+        let (_, start) = Elevator::new();
 
-        (Self, start.map(Message::Elevator.with(elevator)))
+        (Self, start)
     }
 
     pub fn update(&mut self, message: Message, building: &Building) -> Task<Message> {
@@ -47,9 +37,7 @@ impl Program {
                     0
                 };
 
-                elevator
-                    .go_to_floor(next)
-                    .map(Message::Elevator.with(elevator))
+                elevator.go_to_floor(next)
             }
             // We normally don't need to do anything here
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
@@ -61,6 +49,6 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 }

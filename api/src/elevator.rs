@@ -4,8 +4,8 @@
 use iced_runtime::Task;
 use iced_runtime::futures::futures::channel::mpsc;
 
-use crate::Direction;
 use crate::hub::{self, Command};
+use crate::{Direction, message};
 
 /// What a car tells the program.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -40,8 +40,9 @@ pub enum Message {
 /// A car of the challenge's bank.
 ///
 /// [`Elevator::new`] powers on the bank's next car. Each command returns
-/// a [`Task`], and nothing happens until the program hands that task back
-/// from `new` or `update`.
+/// a [`Task`] of the program's [`Message`](message::Message), and nothing
+/// happens before the program hands that task back from `new` or
+/// `update`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Elevator(usize);
 
@@ -53,9 +54,10 @@ impl Elevator {
     /// The challenge's bank holds as many cars as `new` was told. A car
     /// asked for past that never enters the building: it says nothing,
     /// and its commands do nothing.
-    pub fn new() -> (Self, Task<Message>) {
+    pub fn new() -> (Self, Task<message::Message>) {
         let (sender, receiver) = mpsc::unbounded();
-        (hub::power_on(Some(sender)), Task::stream(receiver))
+        let elevator = hub::power_on(Some(sender));
+        (elevator, elevator.news(Task::stream(receiver)))
     }
 
     /// The car at this index of the bank.
@@ -68,13 +70,18 @@ impl Elevator {
         self.0
     }
 
+    /// The car's own news, as the program's messages about this car.
+    fn news(self, task: Task<Message>) -> Task<message::Message> {
+        task.map(move |message| message::Message::Elevator(self, message))
+    }
+
     /// A trip to `floor`, replacing the car's current trip, whose task
     /// then ends with no further message. A floor past the top is the top
     /// floor, as in the original.
     ///
     /// The task streams [`Message::PassingFloor`] while the car travels
     /// and ends with [`Message::StoppedAtFloor`] when it gets there.
-    pub fn go_to_floor(self, floor: usize) -> Task<Message> {
+    pub fn go_to_floor(self, floor: usize) -> Task<message::Message> {
         let (sender, receiver) = mpsc::unbounded();
         let (trip, handle) = Task::stream(receiver).abortable();
         hub::command(Command::GoToFloor {
@@ -83,26 +90,26 @@ impl Elevator {
             sender,
             handle,
         })
-        .chain(trip)
+        .chain(self.news(trip))
     }
 
     /// Stops the car where it can, usually between floors, and aborts its
     /// trip: that task ends with no further message, and the car reports
     /// [`Message::Idle`].
-    pub fn stop(self) -> Task<Message> {
+    pub fn stop(self) -> Task<message::Message> {
         hub::command(Command::Stop { elevator: self })
     }
 
     /// Lights or darkens the up indicator. Both start lit. A car stopping
     /// with its up indicator lit takes on riders going up and clears the
     /// floor's up call.
-    pub fn set_going_up_indicator(self, on: bool) -> Task<Message> {
+    pub fn set_going_up_indicator(self, on: bool) -> Task<message::Message> {
         hub::command(Command::GoingUpIndicator { elevator: self, on })
     }
 
     /// Lights or darkens the down indicator; the twin of
     /// [`Elevator::set_going_up_indicator`].
-    pub fn set_going_down_indicator(self, on: bool) -> Task<Message> {
+    pub fn set_going_down_indicator(self, on: bool) -> Task<message::Message> {
         hub::command(Command::GoingDownIndicator { elevator: self, on })
     }
 }

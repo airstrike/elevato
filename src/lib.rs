@@ -2,8 +2,9 @@
 //! iced program of your own, and watch the simulation clear (or fail)
 //! the challenges.
 //!
-//! A program uses the API re-exported here - [`Elevator`], [`Building`],
-//! the [`elevator`] and [`floor`] messages, [`riders()`] and [`view()`] -
+//! A program uses the API re-exported here - [`Message`], [`Elevator`],
+//! [`Building`], the [`elevator`] and [`floor`] messages, [`riders()`]
+//! and [`view()`] -
 //! and hands its functions to [`run`], which opens the game with the
 //! program running the elevators.
 
@@ -21,7 +22,7 @@ pub mod theme;
 pub mod widget;
 
 pub use app::run;
-pub use elevato_api::{Building, Direction, Elevator, elevator, floor, riders};
+pub use elevato_api::{Building, Direction, Elevator, Message, elevator, floor, riders};
 pub use elevato_core as core;
 
 use iced::widget::canvas;
@@ -29,7 +30,7 @@ use iced::{Element, Fill};
 
 /// The building drawn: its floors and their call lamps, the cars the
 /// program powered on, and the riders.
-pub fn view<'a, Message: 'a>(building: &Building) -> Element<'a, Message> {
+pub fn view<'a>(building: &Building) -> Element<'a, Message> {
     canvas(sim::View::new(building.world().clone()))
         .width(Fill)
         .height(Fill)

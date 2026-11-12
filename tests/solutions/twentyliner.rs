@@ -7,19 +7,13 @@
 //! claimed, and the car is sent there with its lamps set to match: its
 //! one trip, replacing whatever trip it was on.
 
-use elevato::{Building, Elevator, elevator, floor};
-use iced::{Element, Function, Subscription, Task};
+use elevato::{Building, Elevator, Message, elevator, floor};
+use iced::{Element, Subscription, Task};
 
 pub struct Program {
     cars: Vec<Car>,
     /// Lit call buttons: `+level` up, `-level` down.
     calls: Vec<i64>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Elevator(Elevator, elevator::Message),
-    Floor(usize, floor::Message),
 }
 
 /// What the program knows of one car.
@@ -48,7 +42,7 @@ impl Program {
                     target: None,
                     lamps: (true, true),
                 };
-                (car, start.map(Message::Elevator.with(elevator)))
+                (car, start)
             })
             .unzip();
         let program = Self {
@@ -100,7 +94,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 
     fn plan(&mut self) -> Task<Message> {
@@ -153,14 +147,11 @@ impl Program {
             car.target = Some(best.abs());
             car.lamps = lamps;
             let elevator = car.elevator;
-            tasks.push(
-                Task::batch([
-                    elevator.set_going_down_indicator(lamps.1),
-                    elevator.set_going_up_indicator(lamps.0),
-                    elevator.go_to_floor(best.unsigned_abs() as usize),
-                ])
-                .map(Message::Elevator.with(elevator)),
-            );
+            tasks.push(Task::batch([
+                elevator.set_going_down_indicator(lamps.1),
+                elevator.set_going_up_indicator(lamps.0),
+                elevator.go_to_floor(best.unsigned_abs() as usize),
+            ]));
         }
         Task::batch(tasks)
     }

@@ -12,8 +12,7 @@ use iced_runtime::futures::MaybeSend;
 use iced_runtime::futures::futures::channel::mpsc;
 use iced_runtime::{Task, task};
 
-use crate::elevator::{self, Elevator};
-use crate::floor;
+use crate::{Elevator, Message, elevator};
 
 /// The commands submitted, the cars handed out, and the riders'
 /// subscribers.
@@ -21,17 +20,7 @@ use crate::floor;
 pub(crate) struct Hub {
     commands: Vec<Command>,
     cars: usize,
-    riders: Vec<mpsc::UnboundedSender<Rider>>,
-}
-
-/// Something a rider did: pressed a call button on a floor, or a
-/// destination button inside a car.
-#[derive(Debug, Clone)]
-pub(crate) enum Rider {
-    /// A rider at this floor pressed a call button that was not lit.
-    Floor(usize, floor::Message),
-    /// A rider in this car pressed a destination button that was not lit.
-    Elevator(Elevator, elevator::Message),
+    riders: Vec<mpsc::UnboundedSender<Message>>,
 }
 
 /// An instruction to one car, submitted by the task that carries it.
@@ -134,19 +123,19 @@ pub(crate) fn commands() -> Vec<Command> {
     })
 }
 
-/// Sends `rider` to every live [`riders`] stream.
-pub(crate) fn broadcast(rider: Rider) {
+/// Sends what a rider did to every live [`riders`] stream.
+pub(crate) fn broadcast(rider: Message) {
     CURRENT.with_borrow_mut(|hub| {
         if let Some(hub) = hub {
             hub.riders
-                .retain(|subscriber| subscriber.unbounded_send(rider.clone()).is_ok());
+                .retain(|subscriber| subscriber.unbounded_send(rider).is_ok());
         }
     });
 }
 
 /// A new stream of riders, subscribed to the current hub. Outside one it
 /// ends at once.
-pub(crate) fn riders() -> mpsc::UnboundedReceiver<Rider> {
+pub(crate) fn riders() -> mpsc::UnboundedReceiver<Message> {
     let (sender, receiver) = mpsc::unbounded();
     CURRENT.with_borrow_mut(|hub| {
         if let Some(hub) = hub {

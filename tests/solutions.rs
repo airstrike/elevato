@@ -24,7 +24,7 @@ mod twentyliner;
 
 use elevato::core::challenge::{self, Outcome};
 use elevato::core::stats::Stats;
-use elevato::{Building, Direction, Elevator, elevator, floor};
+use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use elevato_api::Simulation;
 use elevato_api::simulation::Error;
 use iced::{Subscription, Task};
@@ -128,24 +128,24 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
     assert_eq!(pin(run.stats()), (30, 84, 59950, 23283, 9510));
 }
 
-/// What a car told a test program, in order.
-type Log = Vec<(Elevator, elevator::Message)>;
+/// What a test program heard, in order.
+type Log = Vec<Message>;
 
 /// A program that powers on one car without listening to its news, runs
 /// `start` with it once, and records every message its trips send.
 fn recorder(
     challenge: usize,
-    start: impl FnOnce(Elevator) -> Task<elevator::Message>,
-) -> Simulation<Log, (Elevator, elevator::Message)> {
+    start: impl FnOnce(Elevator) -> Task<Message>,
+) -> Simulation<Log, Message> {
     Simulation::new(
         &challenge::roster()[challenge],
         SEED,
         |_: usize| {
             let car = Elevator::default();
-            (Log::new(), start(car).map(move |message| (car, message)))
+            (Log::new(), start(car))
         },
-        |log: &mut Log, entry: (Elevator, elevator::Message), _: &Building| {
-            log.push(entry);
+        |log: &mut Log, message: Message, _: &Building| {
+            log.push(message);
             Task::none()
         },
         |_: &Log| Subscription::none(),
@@ -161,7 +161,7 @@ fn drive<P, M: Send + 'static>(simulation: &mut Simulation<P, M>, frames: usize)
 }
 
 /// The floors a log's trips stopped at, in order.
-fn stops(simulation: &Simulation<Log, (Elevator, elevator::Message)>) -> Vec<usize> {
+fn stops(simulation: &Simulation<Log, Message>) -> Vec<usize> {
     simulation_log(simulation)
         .into_iter()
         .filter_map(|message| match message {
@@ -209,20 +209,15 @@ fn a_new_trip_replaces_the_one_under_way() {
         SEED,
         |_: usize| {
             let car = Elevator::default();
-            (
-                Log::new(),
-                car.go_to_floor(2).map(move |message| (car, message)),
-            )
+            (Log::new(), car.go_to_floor(2))
         },
-        |log: &mut Log, (car, message): (Elevator, elevator::Message), _: &Building| {
-            log.push((car, message));
+        |log: &mut Log, message: Message, _: &Building| {
+            log.push(message);
             match message {
-                elevator::Message::PassingFloor(floor, _) => {
-                    car.go_to_floor(floor).map(move |message| (car, message))
+                Message::Elevator(car, elevator::Message::PassingFloor(floor, _)) => {
+                    car.go_to_floor(floor)
                 }
-                elevator::Message::Idle
-                | elevator::Message::FloorButtonPressed(_)
-                | elevator::Message::StoppedAtFloor { .. } => Task::none(),
+                Message::Elevator(..) | Message::Floor(..) => Task::none(),
             }
         },
         |_: &Log| Subscription::none(),
@@ -249,20 +244,17 @@ fn a_car_says_it_is_idle_when_powered_on_and_after_each_trip() {
         &challenge::roster()[0],
         SEED,
         |_: usize| {
-            let (car, start) = Elevator::new();
-            (Log::new(), start.map(move |message| (car, message)))
+            let (_, start) = Elevator::new();
+            (Log::new(), start)
         },
-        |log: &mut Log, (car, message): (Elevator, elevator::Message), _: &Building| {
-            log.push((car, message));
+        |log: &mut Log, message: Message, _: &Building| {
+            log.push(message);
             match message {
                 // The first time only: one trip, then idle again.
-                elevator::Message::Idle if log.len() == 1 => {
-                    car.go_to_floor(1).map(move |message| (car, message))
+                Message::Elevator(car, elevator::Message::Idle) if log.len() == 1 => {
+                    car.go_to_floor(1)
                 }
-                elevator::Message::Idle
-                | elevator::Message::FloorButtonPressed(_)
-                | elevator::Message::PassingFloor(..)
-                | elevator::Message::StoppedAtFloor { .. } => Task::none(),
+                Message::Elevator(..) | Message::Floor(..) => Task::none(),
             }
         },
         |_: &Log| Subscription::none(),
@@ -289,13 +281,10 @@ fn a_car_past_the_bank_never_enters_the_building() {
         |_: usize| {
             let _first = Elevator::default();
             let (second, start) = Elevator::new();
-            (
-                Log::new(),
-                Task::batch([start, second.go_to_floor(2)]).map(move |message| (second, message)),
-            )
+            (Log::new(), Task::batch([start, second.go_to_floor(2)]))
         },
-        |log: &mut Log, entry: (Elevator, elevator::Message), _: &Building| {
-            log.push(entry);
+        |log: &mut Log, message: Message, _: &Building| {
+            log.push(message);
             Task::none()
         },
         |_: &Log| Subscription::none(),
@@ -322,20 +311,15 @@ fn stop_aborts_the_trip_it_interrupts() {
         SEED,
         |_: usize| {
             let car = Elevator::default();
-            (
-                (car, Log::new()),
-                car.go_to_floor(2).map(move |message| (car, message)),
-            )
+            ((car, Log::new()), car.go_to_floor(2))
         },
-        |(car, log): &mut (Elevator, Log), entry: (Elevator, elevator::Message), _: &Building| {
-            let passing = matches!(entry.1, elevator::Message::PassingFloor(..));
-            log.push(entry);
-            if passing {
-                let car = *car;
-                car.stop().map(move |message| (car, message))
-            } else {
-                Task::none()
-            }
+        |(car, log): &mut (Elevator, Log), message: Message, _: &Building| {
+            let passing = matches!(
+                message,
+                Message::Elevator(_, elevator::Message::PassingFloor(..))
+            );
+            log.push(message);
+            if passing { car.stop() } else { Task::none() }
         },
         |_: &(Elevator, Log)| Subscription::none(),
     )
@@ -372,27 +356,21 @@ fn a_task_does_nothing_until_the_program_returns_it() {
 
 #[test]
 fn riders_call_cars_and_press_their_buttons() {
-    #[derive(Debug, Clone)]
-    enum Call {
-        Floor(usize, floor::Message),
-        Elevator(Elevator, elevator::Message),
-    }
-
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
         |_: usize| (Elevator::default(), Task::none()),
-        |car: &mut Elevator, call: Call, _: &Building| match call {
-            Call::Floor(
+        |car: &mut Elevator, message: Message, _: &Building| match message {
+            Message::Floor(
                 floor,
                 floor::Message::UpButtonPressed | floor::Message::DownButtonPressed,
             ) => car.go_to_floor(floor).discard(),
-            Call::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
+            Message::Elevator(elevator, elevator::Message::FloorButtonPressed(floor)) => {
                 elevator.go_to_floor(floor).discard()
             }
-            Call::Elevator(..) => Task::none(),
+            Message::Elevator(..) => Task::none(),
         },
-        |_: &Elevator| elevato::riders(Call::Elevator, Call::Floor),
+        |_: &Elevator| elevato::riders(),
     )
     .expect("the program boots");
     drive(&mut simulation, 3700);
@@ -408,11 +386,9 @@ fn a_panicking_program_ends_the_run_with_its_message() {
             let car = Elevator::default();
             ((), car.go_to_floor(1))
         },
-        |_: &mut (), message: elevator::Message, _: &Building| match message {
-            elevator::Message::StoppedAtFloor { .. } => panic!("kaboom"),
-            elevator::Message::Idle
-            | elevator::Message::FloorButtonPressed(_)
-            | elevator::Message::PassingFloor(..) => Task::none(),
+        |_: &mut (), message: Message, _: &Building| match message {
+            Message::Elevator(_, elevator::Message::StoppedAtFloor { .. }) => panic!("kaboom"),
+            Message::Elevator(..) | Message::Floor(..) => Task::none(),
         },
         |_: &()| Subscription::none(),
     )
@@ -428,12 +404,13 @@ fn a_panicking_program_ends_the_run_with_its_message() {
 }
 
 /// The messages a [`recorder`] logged, without their car.
-fn simulation_log(
-    simulation: &Simulation<Log, (Elevator, elevator::Message)>,
-) -> Vec<elevator::Message> {
+fn simulation_log(simulation: &Simulation<Log, Message>) -> Vec<elevator::Message> {
     simulation
         .program()
         .iter()
-        .map(|&(_, message)| message)
+        .filter_map(|message| match *message {
+            Message::Elevator(_, message) => Some(message),
+            Message::Floor(..) => None,
+        })
         .collect()
 }

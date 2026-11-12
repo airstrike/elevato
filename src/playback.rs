@@ -399,12 +399,10 @@ fn step(timescale: usize, factor: f64) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elevato_api::{Elevator, elevator};
+    use elevato_api::{Elevator, Message, elevator};
 
     /// A program that shuttles every car between the lobby and the top.
     struct Shuttle;
-
-    type Message = (Elevator, elevator::Message);
 
     fn shuttle() -> Program {
         fn view<'a>(_: &'a Shuttle, building: &'a Building) -> Element<'a, Message> {
@@ -413,26 +411,19 @@ mod tests {
 
         Program::new(
             |elevators: usize| {
-                let news = (0..elevators).map(|_| {
-                    let (elevator, news) = Elevator::new();
-                    news.map(move |message| (elevator, message))
-                });
+                let news = (0..elevators).map(|_| Elevator::new().1);
                 (Shuttle, Task::batch(news))
             },
-            |_: &mut Shuttle, (elevator, message): Message, building: &Building| match message {
-                elevator::Message::Idle => {
+            |_: &mut Shuttle, message: Message, building: &Building| match message {
+                Message::Elevator(elevator, elevator::Message::Idle) => {
                     let next = if building.floor_of(elevator) == 0 {
                         building.floors() - 1
                     } else {
                         0
                     };
-                    elevator
-                        .go_to_floor(next)
-                        .map(move |message| (elevator, message))
+                    elevator.go_to_floor(next)
                 }
-                elevator::Message::FloorButtonPressed(_)
-                | elevator::Message::PassingFloor(..)
-                | elevator::Message::StoppedAtFloor { .. } => Task::none(),
+                Message::Elevator(..) | Message::Floor(..) => Task::none(),
             },
             view,
             |_: &Shuttle| Subscription::none(),

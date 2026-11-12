@@ -15,8 +15,8 @@ maps each of the original's callbacks and methods to what replaces it.
 
 ```rust
 // rawr
-use elevato::{Building, Elevator, elevator, floor};
-use iced::{Element, Function, Subscription, Task};
+use elevato::{Building, Elevator, Message, elevator};
+use iced::{Element, Subscription, Task};
 
 pub fn main() -> iced::Result {
     elevato::run(
@@ -29,23 +29,17 @@ pub fn main() -> iced::Result {
 
 pub struct Program;
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    Elevator(Elevator, elevator::Message),
-    Floor(usize, floor::Message),
-}
-
 impl Program {
     pub fn new(_elevators: usize) -> (Self, Task<Message>) {
-        let (elevator, start) = Elevator::new();
-        (Self, start.map(Message::Elevator.with(elevator)))
+        let (_, start) = Elevator::new();
+        (Self, start)
     }
 
     pub fn update(&mut self, message: Message, building: &Building) -> Task<Message> {
         match message {
             Message::Elevator(elevator, elevator::Message::Idle) => {
                 let next = (building.floor_of(elevator) + 1) % building.floors();
-                elevator.go_to_floor(next).map(Message::Elevator.with(elevator))
+                elevator.go_to_floor(next)
             }
             Message::Elevator(..) | Message::Floor(..) => Task::none(),
         }
@@ -56,7 +50,7 @@ impl Program {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        elevato::riders(Message::Elevator, Message::Floor)
+        elevato::riders()
     }
 }
 ```
@@ -92,11 +86,17 @@ code").
 
 ## Where each message comes from
 
+A program's `update` takes `elevato::Message`: `Message::Elevator(car,
+elevator::Message)` for news from a car, `Message::Floor(level,
+floor::Message)` for a call from a floor. Every command's task and
+`elevato::riders()` produce it already wrapped, so a program returns
+them as they are.
+
 | Message | Cause | Channel |
 |---|---|---|
-| `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders(..)`, through the program's floor constructor |
+| `floor::Message::UpButtonPressed` / `DownButtonPressed` | A rider spawns, or one a full car left behind presses again | `elevato::riders()`, as `Message::Floor` |
 | `elevator::Message::Idle` | A car has nothing to do: when powered on, and after each trip or stop | The task from `Elevator::new` |
-| `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders(..)`, through the program's elevator constructor |
+| `elevator::Message::FloorButtonPressed(floor)` | A rider who boarded picks a floor, about a second later | `elevato::riders()`, as `Message::Elevator` |
 | `elevator::Message::PassingFloor(floor, direction)` | A car the program sent is about to pass a floor | Streamed by the task from `go_to_floor` |
 | `elevator::Message::StoppedAtFloor { .. }` | That car arriving | The same task's final message, after riders got off and on |
 
