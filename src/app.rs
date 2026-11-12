@@ -8,12 +8,12 @@
 use iced::event::{self, Event};
 use iced::keyboard::{self, key::Named};
 use iced::mouse;
+use iced::padding;
 use iced::time::{self, milliseconds};
 use iced::widget::{
-    Id, button, center, column, container, mouse_area, pick_list, row, scrollable, selector,
-    space, stack, text, text_editor,
+    Id, button, center, column, container, mouse_area, pick_list, row, scrollable, selector, space,
+    stack, text, text_editor,
 };
-use iced::padding;
 use iced::window;
 use iced::{Center, Element, Fill, Length, Subscription, Task};
 use iced_split::vertical_split;
@@ -587,13 +587,7 @@ impl Game {
                         docs::Message::Viewed(text_editor::Action::Click(_))
                     );
                 let action = self.docs.update(message);
-                if jump
-                    && let Some((page, line)) = self
-                        .docs
-                        .identifier_at_cursor()
-                        .as_deref()
-                        .and_then(|name| docs::resolve(name, Some(self.docs.page())))
-                {
+                if jump && let Some((page, line)) = self.docs.reference_at_cursor() {
                     self.docs.open(page, line);
                     self.reveal();
                 }
@@ -608,13 +602,7 @@ impl Game {
                         editor::Message::Edited(text_editor::Action::Click(_))
                     );
                 let action = self.editor.update(message);
-                if jump
-                    && let Some((page, line)) = self
-                        .editor
-                        .identifier_at_cursor()
-                        .as_deref()
-                        .and_then(|name| docs::resolve(name, None))
-                {
+                if jump && let Some((page, line)) = self.editor.reference_at_cursor() {
                     self.docs.open(page, line);
                     self.reveal();
                     self.reading = true;
@@ -715,13 +703,11 @@ impl Game {
         if self.viewport_width < NARROW && self.tab != Tab::Code {
             return None;
         }
-        let (name, preference) = if self.reading {
-            (self.docs.selected_identifier()?, Some(self.docs.page()))
+        if self.reading {
+            self.docs.selected_reference()
         } else {
-            (self.editor.selected_identifier()?, None)
-        };
-        let (page, line) = docs::resolve(&name, preference)?;
-        Some((name, page, line))
+            self.editor.selected_reference()
+        }
     }
 
     /// The code card: a header naming the open file over the file, with
@@ -745,8 +731,7 @@ impl Game {
                     file,
                     row![
                         drawer,
-                        mouse_area(space().width(Fill).height(Fill))
-                            .on_press(Message::ToggleFiles)
+                        mouse_area(space().width(Fill).height(Fill)).on_press(Message::ToggleFiles)
                     ]
                 ]
                 .into()
@@ -857,16 +842,22 @@ impl Game {
         let folder = |name| {
             row![
                 icon::folder().size(12).style(theme::text::secondary),
-                text(name).size(12).font(theme::MONO).style(theme::text::secondary),
+                text(name)
+                    .size(12)
+                    .font(theme::MONO)
+                    .style(theme::text::secondary),
             ]
             .spacing(6)
             .align_y(Center)
         };
         let file = |name, active, message| {
             button(
-                row![icon::file_code().size(12), text(name).size(12).font(theme::MONO)]
-                    .spacing(6)
-                    .align_y(Center),
+                row![
+                    icon::file_code().size(12),
+                    text(name).size(12).font(theme::MONO)
+                ]
+                .spacing(6)
+                .align_y(Center),
             )
             .width(Fill)
             .padding([3, 6])
@@ -930,16 +921,10 @@ impl Game {
         ]
         .spacing(4);
 
-        let workspace = container(
-            column![
-                tabs,
-                card(face)
-            ]
-            .spacing(6),
-        )
-        .width(Fill)
-        .height(Fill)
-        .padding(8);
+        let workspace = container(column![tabs, card(face)].spacing(6))
+            .width(Fill)
+            .height(Fill)
+            .padding(8);
 
         container(column![
             self.compact_toolbar(mode),

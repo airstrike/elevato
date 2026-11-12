@@ -16,6 +16,7 @@ pub mod highlight;
 pub mod icon;
 pub mod playback;
 pub mod reload;
+pub mod resolution;
 pub mod sim;
 pub mod storage;
 pub mod theme;

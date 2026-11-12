@@ -1,17 +1,14 @@
-//! The API reference: three Rust-voiced pages (`lib.rs`,
-//! `elevator.rs`, `floor.rs`) rendered read-only through the same
-//! highlighter as the code pane, plus the jump registry behind
-//! cmd+click - types, `Message` variants, commands, and the program's
-//! entry points all navigate, from the reference or from the editor.
-
-use std::collections::HashMap;
-use std::sync::LazyLock;
+//! The library's pages - `lib.rs`, `building.rs`, `elevator.rs`,
+//! `floor.rs`, Rust-voiced - rendered read-only through the same
+//! highlighter as the code pane, with the history of cmd+click's jumps
+//! between them. [`crate::resolution`] decides where a jump lands.
 
 use iced::widget::text_editor;
 use iced::{Element, Fill};
 
 use crate::action::Action;
 use crate::highlight;
+use crate::resolution::{self, Scope};
 use crate::theme;
 
 /// One page of the reference.
@@ -53,140 +50,14 @@ impl Page {
     }
 }
 
-/// Name → every definition site carrying it. `Message` exists on two
-/// pages; [`resolve`] picks by preference.
-static REGISTRY: LazyLock<HashMap<String, Vec<(Page, usize)>>> = LazyLock::new(|| {
-    let mut registry: HashMap<String, Vec<(Page, usize)>> = HashMap::new();
-    let mut insert = |name: String, page, line| {
-        let sites = registry.entry(name).or_default();
-        // First sighting per page wins (overloads share an entry).
-        if !sites.iter().any(|&(p, _)| p == page) {
-            sites.push((page, line));
-        }
-    };
-    for &page in Page::ALL {
-        for (line, text) in page.source().lines().enumerate() {
-            let Some(name) = definition_name(text) else {
-                continue;
-            };
-            insert(name.to_string(), page, line);
-            // Enum variants are bare CamelCase lines; the original's JS
-            // named the same events in snake_case - register both.
-            let variant = text
-                .trim_start()
-                .starts_with(|c: char| c.is_ascii_uppercase());
-            if variant {
-                insert(snake_case(name), page, line);
-            }
-        }
-    }
-    // Entry-point parameters read like names of their own in a program;
-    // point them at their declaring signature on the program's page.
-    for (alias, target) in [
-        ("message", "update"),
-        ("building", "update"),
-        ("elevators", "new"),
-    ] {
-        if let Some(&(page, line)) = registry
-            .get(target)
-            .and_then(|sites| sites.iter().find(|&&(page, _)| page == Page::Lib))
-        {
-            registry
-                .entry(alias.to_string())
-                .or_default()
-                .push((page, line));
-        }
-    }
-    registry
-});
-
-/// The definition site for `name`, preferring `preferred`'s page (so a
-/// click on `Event` inside `floor.rs` stays on `floor.rs`), then the
-/// [`Page::ALL`] order.
-pub fn resolve(name: &str, preferred: Option<Page>) -> Option<(Page, usize)> {
-    let sites = REGISTRY.get(name)?;
-    preferred
-        .and_then(|page| sites.iter().find(|&&(p, _)| p == page))
-        .or_else(|| sites.first())
-        .copied()
-}
-
-/// Extracts the defined name from one line of a page: `pub struct X`,
-/// `pub enum X`, `pub x: T`, `pub fn x(…)`, `fn x(…)`, or a bare
-/// CamelCase enum-variant line.
-fn definition_name(line: &str) -> Option<&str> {
-    let trimmed = line.trim_start();
-    if trimmed.is_empty() || trimmed.starts_with("//") {
-        return None;
-    }
-    let mut rest = trimmed;
-    for keyword in ["pub ", "struct ", "enum ", "fn "] {
-        rest = rest.strip_prefix(keyword).unwrap_or(rest);
-    }
-    let end = rest
-        .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .unwrap_or(rest.len());
-    if end == 0 {
-        return None;
-    }
-    let name = &rest[..end];
-    if rest == trimmed {
-        // No keyword was stripped: only bare CamelCase variant lines
-        // count as definitions (`Idle,`, `PassingFloor { … }`).
-        return name
-            .starts_with(|c: char| c.is_ascii_uppercase())
-            .then_some(name);
-    }
-    Some(name)
-}
-
-/// `FloorButtonPressed` → `floor_button_pressed`.
-fn snake_case(name: &str) -> String {
-    let mut snake = String::with_capacity(name.len() + 4);
-    for (index, c) in name.chars().enumerate() {
-        if c.is_ascii_uppercase() {
-            if index > 0 {
-                snake.push('_');
-            }
-            snake.push(c.to_ascii_lowercase());
-        } else {
-            snake.push(c);
-        }
-    }
-    snake
-}
-
 /// `text` when it is exactly one identifier - what a double click (or
 /// double tap) leaves selected on a name.
-pub fn identifier(text: &str) -> Option<&str> {
+pub fn identifier(text: &str) -> Option<String> {
     let word = text.trim();
     (!word.is_empty()
         && !word.starts_with(|c: char| c.is_ascii_digit())
         && word.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-    .then_some(word)
-}
-
-/// The identifier under `column` in `line`, if any. Shared by the docs
-/// pane and the editor: both resolve cmd+clicks the same way.
-pub fn identifier_in(line: &str, column: usize) -> Option<String> {
-    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
-    let chars: Vec<char> = line.chars().collect();
-    // A click lands *between* characters; probe the char at the cursor
-    // and, failing that, the one before it (end-of-word clicks).
-    let mut at = column.min(chars.len().saturating_sub(1));
-    if chars.get(at).is_none_or(|&c| !is_word(c)) {
-        at = column.checked_sub(1)?;
-        if chars.get(at).is_none_or(|&c| !is_word(c)) {
-            return None;
-        }
-    }
-    let start = (0..=at).rev().take_while(|&i| is_word(chars[i])).last()?;
-    let end = (at..chars.len())
-        .take_while(|&i| is_word(chars[i]))
-        .last()?;
-    let word: String = chars[start..=end].iter().collect();
-    // Identifiers don't start with a digit.
-    (!word.starts_with(|c: char| c.is_ascii_digit())).then_some(word)
+    .then(|| word.to_owned())
 }
 
 /// The docs pane's state.
@@ -239,18 +110,19 @@ impl State {
         }
     }
 
-    /// The identifier under the cursor (set by the click just
-    /// performed), for cmd+click resolution.
-    pub fn identifier_at_cursor(&self) -> Option<String> {
+    /// The definition the name under the cursor (set by the click just
+    /// performed) names.
+    pub fn reference_at_cursor(&self) -> Option<(Page, usize)> {
         let position = self.content.cursor().position;
-        identifier_in(&self.content.line(position.line)?.text, position.column)
+        resolution::resolve(Scope::Page(self.page), position.line, position.column)
     }
 
-    /// The selection, when it is exactly one identifier - the
-    /// double-tap jump affordance's input.
-    pub fn selected_identifier(&self) -> Option<String> {
-        let selection = self.content.selection()?;
-        Some(identifier(&selection)?.to_string())
+    /// The selection, when it is exactly one identifier, and the
+    /// definition it names - the double-tap jump affordance's input.
+    pub fn selected_reference(&self) -> Option<(String, Page, usize)> {
+        let name = identifier(&self.content.selection()?)?;
+        let (page, line) = self.reference_at_cursor()?;
+        Some((name, page, line))
     }
 
     /// Opens `page` (switching files if needed), moves the cursor to
@@ -332,97 +204,28 @@ impl Default for State {
 mod tests {
     use super::*;
 
-    /// The API contract: every name a program can touch, and the page
-    /// its documentation lives on. A rename or addition in `api/` that
-    /// forgets the reference fails here.
-    const CONTRACT: &[(&str, Page)] = &[
-        ("run", Page::Lib),
-        ("new", Page::Elevator),
-        ("update", Page::Lib),
-        ("view", Page::Lib),
-        ("subscription", Page::Lib),
-        ("message", Page::Lib),
-        ("elevators", Page::Lib),
-        ("building", Page::Lib),
-        ("Building", Page::Building),
-        ("floors", Page::Building),
-        ("floor_of", Page::Building),
-        ("riders", Page::Lib),
-        ("Direction", Page::Lib),
-        ("Up", Page::Lib),
-        ("Down", Page::Lib),
-        ("Elevator", Page::Elevator),
-        ("default", Page::Elevator),
-        ("go_to_floor", Page::Elevator),
-        ("stop", Page::Elevator),
-        ("set_going_up_indicator", Page::Elevator),
-        ("set_going_down_indicator", Page::Elevator),
-        ("Idle", Page::Elevator),
-        ("FloorButtonPressed", Page::Elevator),
-        ("PassingFloor", Page::Elevator),
-        ("StoppedAtFloor", Page::Elevator),
-        ("UpButtonPressed", Page::Floor),
-        ("DownButtonPressed", Page::Floor),
-    ];
-
-    #[test]
-    fn every_name_in_the_api_contract_resolves_to_its_page() {
-        let misplaced: Vec<_> = CONTRACT
-            .iter()
-            .filter(|&&(name, page)| resolve(name, None).map(|(p, _)| p) != Some(page))
-            .collect();
-        assert!(misplaced.is_empty(), "wrong or missing: {misplaced:?}");
-    }
-
-    #[test]
-    fn page_preference_falls_back_when_the_name_lives_elsewhere() {
-        // Clicking `riders` inside elevator.rs still lands on lib.rs -
-        // preference only applies when the clicked page actually
-        // defines the name.
-        let (page, _) = resolve("riders", Some(Page::Elevator)).unwrap();
-        assert_eq!(page, Page::Lib);
-        // `Message` is on two pages; the preferred one wins.
-        let (page, _) = resolve("Message", Some(Page::Floor)).unwrap();
-        assert_eq!(page, Page::Floor);
-    }
-
-    #[test]
-    fn camel_case_variants_register_their_snake_case_names_too() {
-        let (page, camel) = resolve("StoppedAtFloor", None).unwrap();
-        let (_, snake) = resolve("stopped_at_floor", None).unwrap();
-        assert_eq!(page, Page::Elevator);
-        assert_eq!(camel, snake, "both spellings share the variant line");
-    }
-
-    #[test]
-    fn definitions_resolve_to_their_own_lines() {
-        let (page, line) = resolve("go_to_floor", None).unwrap();
-        let text = page.source().lines().nth(line).unwrap();
-        assert!(text.contains("go_to_floor"));
-        assert!(!text.trim_start().starts_with("//"));
-    }
-
-    #[test]
-    fn identifiers_resolve_under_and_just_after_the_word() {
-        let line = "    pub fn go_to_floor(&self, n: i64);";
-        assert_eq!(identifier_in(line, 13).as_deref(), Some("go_to_floor"));
-        assert_eq!(identifier_in(line, 22).as_deref(), Some("go_to_floor"));
-        assert_eq!(identifier_in(line, 2), None);
+    /// Where `path`, written in a program that imports the starter's
+    /// names, resolves.
+    fn site(path: &str) -> (Page, usize) {
+        let source =
+            format!("use elevato::{{Building, Elevator, Message, elevator, floor}};\n{path}");
+        resolution::resolve(Scope::Program(&source), 1, path.len())
+            .unwrap_or_else(|| panic!("{path} resolves"))
     }
 
     #[test]
     fn forward_undoes_back_until_a_fresh_jump_forks_the_timeline() {
         let mut state = State::new();
-        let (page, line) = resolve("go_to_floor", None).unwrap();
+        let (page, line) = site("Elevator::go_to_floor");
         state.open(page, line);
-        let (page, line) = resolve("UpButtonPressed", None).unwrap();
+        let (page, line) = site("floor::Message::UpButtonPressed");
         state.open(page, line);
         state.back();
         assert!(state.can_go_forward());
         state.forward();
         assert_eq!(state.page(), Page::Floor);
         state.back();
-        let (page, line) = resolve("new", None).unwrap();
+        let (page, line) = site("Elevator::new");
         state.open(page, line);
         assert!(!state.can_go_forward(), "a fresh jump clears forward");
     }
@@ -431,9 +234,9 @@ mod tests {
     fn back_returns_through_the_jump_history() {
         let mut state = State::new();
         assert!(!state.can_go_back());
-        let (page, line) = resolve("stop", None).unwrap();
+        let (page, line) = site("Elevator::stop");
         state.open(page, line);
-        let (page, line) = resolve("UpButtonPressed", None).unwrap();
+        let (page, line) = site("floor::Message::UpButtonPressed");
         state.open(page, line);
         assert_eq!(state.page(), Page::Floor);
         state.back();
@@ -446,7 +249,7 @@ mod tests {
     #[test]
     fn opening_a_page_lands_the_cursor_on_the_requested_line() {
         let mut state = State::new();
-        let (page, line) = resolve("StoppedAtFloor", None).unwrap();
+        let (page, line) = site("elevator::Message::StoppedAtFloor");
         state.open(page, line);
         assert_eq!(state.page(), Page::Elevator);
         assert_eq!(state.content.cursor().position.line, line);

@@ -23,6 +23,7 @@ use crate::highlight;
 use crate::icon;
 use crate::playback;
 use crate::reload;
+use crate::resolution::{self, Scope};
 use crate::theme;
 
 /// The editor pane's state.
@@ -157,18 +158,23 @@ impl State {
         };
     }
 
-    /// The identifier under the cursor (just set by a click), for the
-    /// parent's cmd+click documentation jumps.
-    pub fn identifier_at_cursor(&self) -> Option<String> {
+    /// The library definition the name under the cursor (just set by a
+    /// click) names, for the parent's cmd+click jumps.
+    pub fn reference_at_cursor(&self) -> Option<(docs::Page, usize)> {
         let position = self.content.cursor().position;
-        docs::identifier_in(&self.content.line(position.line)?.text, position.column)
+        resolution::resolve(
+            Scope::Program(&self.content.text()),
+            position.line,
+            position.column,
+        )
     }
 
-    /// The selection, when it is exactly one identifier - the
-    /// double-tap jump affordance's input.
-    pub fn selected_identifier(&self) -> Option<String> {
-        let selection = self.content.selection()?;
-        Some(docs::identifier(&selection)?.to_string())
+    /// The selection, when it is exactly one identifier, and the library
+    /// definition it names - the double-tap jump affordance's input.
+    pub fn selected_reference(&self) -> Option<(String, docs::Page, usize)> {
+        let name = docs::identifier(&self.content.selection()?)?;
+        let (page, line) = self.reference_at_cursor()?;
+        Some((name, page, line))
     }
 
     /// Applies an editor message.
