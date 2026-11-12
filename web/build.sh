@@ -17,8 +17,12 @@ sh "$universe/programs.sh"
 
 # `run` builds the runner and then starts it, which a wasm32 module can't
 # be here: once the runner is built, that start is the one failure left.
+# rawr writes the built runner to $out/runner (RAWR_UNIVERSE_OUT), on a
+# fresh build and a cached one alike.
 log=target/web/universe.log
-mkdir -p target/web
+out=target/web/universe
+mkdir -p "$out"
+rm -f "$out/runner"
 status=0
 RUSTUP_TOOLCHAIN=nightly-2026-07-11 \
   CARGO_BUILD_TARGET=wasm32-unknown-unknown \
@@ -27,23 +31,18 @@ RUSTUP_TOOLCHAIN=nightly-2026-07-11 \
   CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=false \
   CARGO_PROFILE_DEV_OVERFLOW_CHECKS=false \
   RAWR_UNIVERSE_RUNNER=1 \
+  RAWR_UNIVERSE_OUT="$out" \
   "${RAWR_IMPORT:-rawr-import}" run "$universe" 2> "$log" || status=$?
 if [ "$status" -ne 0 ] && ! grep -q "runner exited before connecting its protocol socket" "$log"; then
   cat "$log" >&2
   exit "$status"
 fi
-# rawr keeps each build of the runner in its store, and older rawrs left
-# it in the runner's own target: the newest module is this build's.
-members=target/rawr/members/web/universe
-runner=$(find "$members" \
-  -path "$members/store/executions/*/target/debug/rawr-generated-runner" -o \
-  -path "$members/runner/target/wasm32-unknown-unknown/debug/universe.wasm" |
-  xargs ls -t 2>/dev/null | head -n 1)
-if [ -z "$runner" ]; then
+runner="$out/runner"
+if [ ! -f "$runner" ]; then
   echo "web/build.sh: no runner was built (see $log)" >&2
   exit 1
 fi
-lock="$members/runner/Cargo.lock"
+lock=target/rawr/members/web/universe/runner/Cargo.lock
 
 version=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3 }' "$lock")
 tools="target/web/tools/$version"
