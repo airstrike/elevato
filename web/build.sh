@@ -17,12 +17,12 @@ sh "$universe/programs.sh"
 
 # `run` builds the runner and then starts it, which a wasm32 module can't
 # be here: once the runner is built, that start is the one failure left.
-# rawr writes the built runner to $out/runner (RAWR_UNIVERSE_OUT), on a
-# fresh build and a cached one alike.
+# rawr writes the built runner to $built/runner (RAWR_UNIVERSE_OUT), on
+# a fresh build and a cached one alike.
 log=target/web/universe.log
-out=target/web/universe
-mkdir -p "$out"
-rm -f "$out/runner"
+built=target/web/universe
+mkdir -p "$built"
+rm -f "$built/runner"
 status=0
 RUSTUP_TOOLCHAIN=nightly-2026-07-11 \
   CARGO_BUILD_TARGET=wasm32-unknown-unknown \
@@ -31,13 +31,13 @@ RUSTUP_TOOLCHAIN=nightly-2026-07-11 \
   CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=false \
   CARGO_PROFILE_DEV_OVERFLOW_CHECKS=false \
   RAWR_UNIVERSE_RUNNER=1 \
-  RAWR_UNIVERSE_OUT="$out" \
+  RAWR_UNIVERSE_OUT="$built" \
   "${RAWR_IMPORT:-rawr-import}" run "$universe" 2> "$log" || status=$?
 if [ "$status" -ne 0 ] && ! grep -q "runner exited before connecting its protocol socket" "$log"; then
   cat "$log" >&2
   exit "$status"
 fi
-runner="$out/runner"
+runner="$built/runner"
 if [ ! -f "$runner" ]; then
   echo "web/build.sh: no runner was built (see $log)" >&2
   exit 1
