@@ -31,7 +31,7 @@ use iced::{Element, Fill};
 
 /// The building drawn: its floors and their call lamps, the cars the
 /// program powered on, and the riders.
-pub fn view<'a>(building: &Building) -> Element<'a, Message> {
+pub fn view<'a, Message: 'a>(building: &Building) -> Element<'a, Message> {
     canvas(sim::View::new(building.world().clone()))
         .width(Fill)
         .height(Fill)

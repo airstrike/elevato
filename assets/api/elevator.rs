@@ -63,12 +63,12 @@ impl Elevator {
     /// Halts the car where it can - usually between floors, doors shut -
     /// and aborts its trip, whose task ends with no more messages. The
     /// car says `Idle`.
-    pub fn stop(self) -> Task<elevato::Message>;
+    pub fn stop<T>(self) -> Task<T>;
 
     /// Sets the up lamp. Both lamps start on. A car stopping with a lamp
     /// lit takes on riders going that way and clears that call button.
-    pub fn set_going_up_indicator(self, on: bool) -> Task<elevato::Message>;
+    pub fn set_going_up_indicator<T>(self, on: bool) -> Task<T>;
 
     /// Sets the down lamp. See `set_going_up_indicator`.
-    pub fn set_going_down_indicator(self, on: bool) -> Task<elevato::Message>;
+    pub fn set_going_down_indicator<T>(self, on: bool) -> Task<T>;
 }

@@ -58,7 +58,7 @@ impl Program {
 
 /// The building drawn: its floors and their call lamps, the elevators
 /// you powered on, and the riders.
-pub fn view(building: &Building) -> Element<'_, Message>;
+pub fn view<Message>(building: &Building) -> Element<'_, Message>;
 
 /// Every button a rider presses that was not lit: a `Message::Floor`
 /// for a call on a floor (`UpButtonPressed` or `DownButtonPressed`), a

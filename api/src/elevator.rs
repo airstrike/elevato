@@ -2,6 +2,7 @@
 //! it answers with.
 
 use iced_runtime::Task;
+use iced_runtime::futures::MaybeSend;
 use iced_runtime::futures::futures::channel::mpsc;
 
 use crate::hub::{self, Command};
@@ -40,9 +41,9 @@ pub enum Message {
 /// A car of the challenge's bank.
 ///
 /// [`Elevator::new`] powers on the bank's next car. Each command returns
-/// a [`Task`] of the program's [`Message`](message::Message), and nothing
-/// happens before the program hands that task back from `new` or
-/// `update`.
+/// a [`Task`], and nothing happens before the program hands that task
+/// back from `new` or `update`. A trip's task and the car's news carry
+/// [`Message`](message::Message)s; the other commands' tasks carry none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Elevator(usize);
 
@@ -96,20 +97,20 @@ impl Elevator {
     /// Stops the car where it can, usually between floors, and aborts its
     /// trip: that task ends with no further message, and the car reports
     /// [`Message::Idle`].
-    pub fn stop(self) -> Task<message::Message> {
+    pub fn stop<T: MaybeSend + 'static>(self) -> Task<T> {
         hub::command(Command::Stop { elevator: self })
     }
 
     /// Lights or darkens the up indicator. Both start lit. A car stopping
     /// with its up indicator lit takes on riders going up and clears the
     /// floor's up call.
-    pub fn set_going_up_indicator(self, on: bool) -> Task<message::Message> {
+    pub fn set_going_up_indicator<T: MaybeSend + 'static>(self, on: bool) -> Task<T> {
         hub::command(Command::GoingUpIndicator { elevator: self, on })
     }
 
     /// Lights or darkens the down indicator; the twin of
     /// [`Elevator::set_going_up_indicator`].
-    pub fn set_going_down_indicator(self, on: bool) -> Task<message::Message> {
+    pub fn set_going_down_indicator<T: MaybeSend + 'static>(self, on: bool) -> Task<T> {
         hub::command(Command::GoingDownIndicator { elevator: self, on })
     }
 }
