@@ -64,8 +64,10 @@ struct Game {
     editor: editor::State,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
-    /// The workspace divider's position, as a ratio of the workspace's
-    /// width from the left: resizing the window keeps the proportion.
+    /// The workspace divider's position: the editor's share of the
+    /// width it splits with the world once the file sidebar's footprint
+    /// is set aside. The sidebar never counts toward the editor's half,
+    /// and resizing the window keeps the proportion.
     divider: f32,
     /// Which face the narrow layout's single card shows.
     tab: Tab,
@@ -92,10 +94,15 @@ struct Game {
 /// narrow layout (its two panes need 260 + 320 px just to exist).
 const NARROW: f32 = 700.0;
 
-/// The narrowest the wide layout's code and world cards get, in logical
-/// pixels: a drag of the divider stops short of them.
+/// The narrowest the wide layout's editor (beside any sidebar) and world
+/// card get, in logical pixels: a drag of the divider stops short of
+/// them.
 const CODE_MIN: f32 = 260.0;
 const WORLD_MIN: f32 = 320.0;
+
+/// The wide layout's gaps, in logical pixels: the workspace's margin,
+/// and the divider's handle between the cards.
+const GAP: f32 = 8.0;
 
 /// The faces of the narrow layout's single card. The wide layout shows
 /// both at once, the code card beside the world.
@@ -519,9 +526,13 @@ impl Game {
                 self.playback.previous_challenge();
             }
             Message::Program(input) => self.playback.send(input),
-            Message::SplitResized(ratio) => {
-                let width = self.viewport_width.max(CODE_MIN + WORLD_MIN);
-                self.divider = ratio.clamp(CODE_MIN / width, 1.0 - WORLD_MIN / width);
+            Message::SplitResized(split_at) => {
+                let (width, sidebar, shared) = self.workspace();
+                let editor = width * split_at - GAP / 2.0 - sidebar;
+                self.divider = (editor / shared).clamp(
+                    (CODE_MIN / shared).min(0.5),
+                    (1.0 - WORLD_MIN / shared).max(0.5),
+                );
             }
             Message::Tab(tab) => self.tab = tab,
             Message::Write => {
@@ -664,6 +675,23 @@ impl Game {
         }
     }
 
+    /// The wide workspace's width, the file sidebar's footprint in it
+    /// (none while hidden), and the width the editor and world share.
+    fn workspace(&self) -> (f32, f32, f32) {
+        let width = self.viewport_width - 2.0 * GAP;
+        let sidebar = if self.sidebar { SIDEBAR + GAP } else { 0.0 };
+        let shared = (width - GAP - sidebar).max(1.0);
+        (width, sidebar, shared)
+    }
+
+    /// The divider as iced_split takes it: a ratio of the whole
+    /// workspace, with the code card holding the sidebar beside the
+    /// editor's share.
+    fn split_at(&self) -> f32 {
+        let (width, sidebar, shared) = self.workspace();
+        (sidebar + self.divider * shared + GAP / 2.0) / width.max(1.0)
+    }
+
     /// Renders the game screen: the split workspace on wide
     /// viewports, the single tabbed card on narrow ones (phones).
     fn view(&self, mode: theme::Mode) -> Element<'_, Message> {
@@ -677,17 +705,17 @@ impl Game {
             vertical_split(
                 card(self.code_face()),
                 card(self.player_face()),
-                self.divider,
+                self.split_at(),
                 Message::SplitResized,
             )
             // The handle is the gap between the cards, as wide as the
             // workspace's margin.
-            .handle_width(8)
+            .handle_width(GAP)
             .style(theme::split::divider),
         )
         .width(Fill)
         .height(Fill)
-        .padding(8);
+        .padding(GAP);
 
         container(column![self.toolbar(mode), self.stats_bar(), workspace])
             .width(Fill)
@@ -742,7 +770,7 @@ impl Game {
                 container(self.file_tree()).width(SIDEBAR).height(Fill),
                 file
             ]
-            .spacing(8)
+            .spacing(GAP)
             .boxed()
         } else {
             file
