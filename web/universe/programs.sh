@@ -14,7 +14,10 @@ mkdir -p "$out"
   echo "//! The universe's programs, written by programs.sh."
   echo "#![allow(dead_code)]"
 } > "$universe/src/programs.rs"
-for program in "$root"/tests/solutions/*.rs "$universe"/programs/*.rs; do
+# In name order, as rustfmt orders the `mod` lines.
+for program in $(for path in "$root"/tests/solutions/*.rs "$universe"/programs/*.rs; do
+  echo "$(basename "$path") $path"
+done | sort | cut -d' ' -f2); do
   name="$(basename "$program" .rs)"
   {
     case "$(head -n 1 "$program")" in

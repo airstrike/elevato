@@ -49,7 +49,11 @@ impl Program {
         match message {
             Message::Elevator(elevator, elevator::Message::Idle) => {
                 let top = building.floors() - 1;
-                let next = if building.floor_of(elevator) < top { top } else { 0 };
+                let next = if building.floor_of(elevator) < top {
+                    top
+                } else {
+                    0
+                };
                 let going_up = next > building.floor_of(elevator);
                 Task::batch([
                     elevator.set_going_up_indicator(going_up),
@@ -76,9 +80,7 @@ impl Program {
             }
             Message::Elevator(elevator, elevator::Message::PassingFloor(floor, direction)) => {
                 match direction {
-                    Direction::Up if floor + 1 == building.floors() => {
-                        elevator.stop()
-                    }
+                    Direction::Up if floor + 1 == building.floors() => elevator.stop(),
                     Direction::Up | Direction::Down => Task::none(),
                 }
             }
