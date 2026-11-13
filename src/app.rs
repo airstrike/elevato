@@ -1,6 +1,6 @@
-//! The application shell around [`crate::playback`] and [`crate::editor`].
-//! The splash measures the viewport before opening the game, so its
-//! toolbar, building view, and editor use the right layout from the start.
+//! The application shell around [`crate::playback`] and [`crate::editor`]. The
+//! splash measures the viewport before opening the game, so its toolbar,
+//! building view, and editor use the right layout from the start.
 
 use iced::event::{self, Event};
 use iced::keyboard::{self, key::Named};
@@ -28,8 +28,8 @@ use crate::theme;
 use crate::widget::balance::balance;
 use crate::widget::pointer::pointer;
 
-/// The splash's full-bleed container; measuring it yields the viewport
-/// width that picks the game's wide or narrow layout.
+/// The splash's full-bleed container; measuring it yields the viewport width
+/// that picks the game's wide or narrow layout.
 const SPLASH: Id = Id::new("splash");
 
 /// Top-level application state.
@@ -61,48 +61,47 @@ struct Game {
     editor: editor::State,
     /// Picker entries, one per roster challenge, built once.
     choices: Vec<Choice>,
-    /// The workspace divider's position: the editor's share of the
-    /// width it splits with the world once the file sidebar's footprint
-    /// is set aside. The sidebar never counts toward the editor's half,
-    /// and resizing the window keeps the proportion.
+    /// The workspace divider's position: the editor's share of the width it
+    /// splits with the world once the file sidebar's footprint is set aside.
+    /// The sidebar never counts toward the editor's half, and resizing the
+    /// window keeps the proportion.
     divider: f32,
     /// Which face the narrow layout's single card shows.
     tab: Tab,
-    /// Whether the code card shows a page of the library rather than
-    /// the player's `main.rs`.
+    /// Whether the code card shows a page of the library rather than the
+    /// player's `main.rs`.
     reading: bool,
     /// The library's pages, read-only.
     docs: docs::State,
-    /// The library pages open as tabs beside `main.rs`, in the order
-    /// they were opened.
+    /// The library pages open as tabs beside `main.rs`, in the order they were
+    /// opened.
     tabs: Vec<docs::Page>,
     /// Whether the wide layout shows the file sidebar.
     sidebar: bool,
     /// Whether the narrow layout's file drawer is open.
     drawer: bool,
-    /// Live keyboard modifiers, tracked so clicks can tell whether the
-    /// command key is down (cmd+click = jump to documentation).
+    /// Live keyboard modifiers, tracked so clicks can tell whether the command
+    /// key is down (cmd+click = jump to documentation).
     modifiers: keyboard::Modifiers,
     /// The latest known viewport width, deciding wide vs narrow layout.
     viewport_width: f32,
 }
 
-/// Below this viewport width the split gives way to the single-card
-/// narrow layout (its two panes need 260 + 320 px just to exist).
+/// Below this viewport width the split gives way to the single-card narrow
+/// layout (its two panes need 260 + 320 px just to exist).
 const NARROW: f32 = 700.0;
 
-/// The narrowest the wide layout's editor (beside any sidebar) and world
-/// card get, in logical pixels: a drag of the divider stops short of
-/// them.
+/// The narrowest the wide layout's editor (beside any sidebar) and world card
+/// get, in logical pixels: a drag of the divider stops short of them.
 const CODE_MIN: f32 = 260.0;
 const WORLD_MIN: f32 = 320.0;
 
-/// The wide layout's gaps, in logical pixels: the workspace's margin,
-/// and the divider's handle between the cards.
+/// The wide layout's gaps, in logical pixels: the workspace's margin, and the
+/// divider's handle between the cards.
 const GAP: f32 = 8.0;
 
-/// The faces of the narrow layout's single card. The wide layout shows
-/// both at once, the code card beside the world.
+/// The faces of the narrow layout's single card. The wide layout shows both at
+/// once, the code card beside the world.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     /// The running world.
@@ -151,16 +150,15 @@ pub enum Message {
     Continue,
     /// The splash's homage link: open the original game in a new tab.
     OpenOriginal,
-    /// The splash measurement came back; build the game with it,
-    /// resuming the game rawr restarted for an edit when `restarted`
-    /// gives rawr's reason.
+    /// The splash measurement came back; build the game with it, resuming the
+    /// game rawr restarted for an edit when `restarted` gives rawr's reason.
     Measured {
         target: Option<selector::Target>,
         restarted: Option<String>,
     },
     /// One playback frame is due. Deliberately a unit variant: the tick
-    /// subscription's `Instant` is a different type on wasm, so it must
-    /// never ride along.
+    /// subscription's `Instant` is a different type on wasm, so it must never
+    /// ride along.
     Tick,
     /// Start/Pause was pressed.
     Toggle,
@@ -182,26 +180,25 @@ pub enum Message {
     SplitResized(f32),
     /// A face of the narrow layout's card was selected.
     Tab(Tab),
-    /// `main.rs` in the file tree or its tab: back to the player's
-    /// program.
+    /// `main.rs` in the file tree or its tab: back to the player's program.
     Write,
     /// A library page in the file tree or its tab.
     Read(docs::Page),
     /// A library page's tab was closed.
     Close(docs::Page),
-    /// The code card's header button: show or hide the file sidebar on
-    /// the wide layout, open or close the drawer on the narrow one.
+    /// The code card's header button: show or hide the file sidebar on the wide
+    /// layout, open or close the drawer on the narrow one.
     ToggleFiles,
     /// Back through the reference's jump history (the tab-bar arrow, a
-    /// keyboard's browser-back key, a mouse's back button, or the
-    /// cmd+O / cmd+[ chords).
+    /// keyboard's browser-back key, a mouse's back button, or the cmd+O / cmd+[
+    /// chords).
     DocsBack,
-    /// Forward again (arrow, browser-forward key, mouse forward
-    /// button, or the cmd+I / cmd+] chords).
+    /// Forward again (arrow, browser-forward key, mouse forward button, or the
+    /// cmd+I / cmd+] chords).
     DocsForward,
-    /// The tab-bar chip: jump to the selected name's definition - the
-    /// touch answer to cmd+click (a double tap selects the word, the
-    /// chip does the jump).
+    /// The tab-bar chip: jump to the selected name's definition - the touch
+    /// answer to cmd+click (a double tap selects the word, the chip does the
+    /// jump).
     DocsJump(docs::Page, usize),
     /// An API-reference pane message.
     Docs(docs::Message),
@@ -217,11 +214,11 @@ pub enum Message {
     Reloaded(reload::Outcome),
 }
 
-/// Opens the game with the player's program running the elevators:
-/// the program's `new`, `update`, `view` and `subscription`, as
+/// Opens the game with the player's program running the elevators: the
+/// program's `new`, `update`, `view` and `subscription`, as
 /// [`iced::application`] takes an application's. Every attempt boots the
-/// program afresh on the challenge's building, and the game hosts it as
-/// its child, its view where the building shows.
+/// program afresh on the challenge's building, and the game hosts it as its
+/// child, its view where the building shows.
 pub fn run<P, M, V>(
     new: impl Fn(usize) -> (P, Task<M>) + 'static,
     update: impl Fn(&mut P, M, &Building) -> Task<M> + Clone + 'static,
@@ -245,8 +242,8 @@ where
     }
 
     let settings = iced::Settings {
-        // Automatic WebGPU selection can render a black canvas on iOS.
-        // Use WebGL2 consistently across browsers.
+        // Automatic WebGPU selection can render a black canvas on iOS. Use
+        // WebGL2 consistently across browsers.
         #[cfg(target_arch = "wasm32")]
         backend: iced::Backend::Hardware(iced::backend::Api::OpenGL),
         ..iced::Settings::default()
@@ -263,8 +260,8 @@ where
         .run()
 }
 
-/// Boots onto the splash; the game (and the player's program underneath
-/// it) is only built once Continue hands over a measured viewport.
+/// Boots onto the splash; the game (and the player's program underneath it) is
+/// only built once Continue hands over a measured viewport.
 pub fn boot(program: Program) -> (App, Task<Message>) {
     (
         App {
@@ -278,8 +275,8 @@ pub fn boot(program: Program) -> (App, Task<Message>) {
     )
 }
 
-/// Applies a message to the state. All simulation work happens here -
-/// `view` only reads.
+/// Applies a message to the state. All simulation work happens here - `view`
+/// only reads.
 pub fn update(app: &mut App, message: Message) -> Task<Message> {
     match message {
         Message::Continue => {
@@ -298,8 +295,8 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             let _ = open::that(ORIGINAL);
         }
         Message::Measured { target, restarted } => {
-            // A game the web page restarts gets no measurement and falls
-            // back to the wide layout.
+            // A game the web page restarts gets no measurement and falls back
+            // to the wide layout.
             let width = target
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
@@ -319,8 +316,8 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             return task;
         }
         Message::Reloaded(outcome) => match (&mut app.screen, outcome) {
-            // A game rawr restarted for an edit goes straight back to
-            // the game, not the splash, once the splash is measured.
+            // A game rawr restarted for an edit goes straight back to the game,
+            // not the splash, once the splash is measured.
             (Screen::Splash, reload::Outcome::Restarted(reason)) => {
                 return selector::find(SPLASH).map(move |target| Message::Measured {
                     target,
@@ -341,11 +338,10 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
     Task::none()
 }
 
-/// Watches reloads on every screen. The game adds a 16 ms tick while
-/// playback runs, resizes, and hotkeys: Cmd+Page Down / Page Up step
-/// through the challenges; Ctrl+O / Ctrl+I, Cmd+[ / Cmd+], the browser
-/// back/forward keys and the mouse back/forward buttons walk the docs
-/// history.
+/// Watches reloads on every screen. The game adds a 16 ms tick while playback
+/// runs, resizes, and hotkeys: Cmd+Page Down / Page Up step through the
+/// challenges; Ctrl+O / Ctrl+I, Cmd+[ / Cmd+], the browser back/forward keys
+/// and the mouse back/forward buttons walk the docs history.
 pub fn subscription(app: &App) -> Subscription<Message> {
     let reloads = app.host.outcomes().map(Message::Reloaded);
     let Screen::Game(game) = &app.screen else {
@@ -367,9 +363,9 @@ pub fn subscription(app: &App) -> Subscription<Message> {
                 keyboard::Key::Named(Named::PageUp) if modifiers.command() => {
                     Some(Message::PreviousChallenge)
                 }
-                // Vim's jump list is ctrl+O/ctrl+I on every OS; the
-                // bracket pair follows the platform command key
-                // (JetBrains/Xcode dialect).
+                // Vim's jump list is ctrl+O/ctrl+I on every OS; the bracket
+                // pair follows the platform command key (JetBrains/Xcode
+                // dialect).
                 keyboard::Key::Character("o") if modifiers.control() => Some(Message::DocsBack),
                 keyboard::Key::Character("i") if modifiers.control() => Some(Message::DocsForward),
                 keyboard::Key::Character("[") if modifiers.command() => Some(Message::DocsBack),
@@ -455,10 +451,10 @@ fn splash() -> Element<'static, Message> {
 // ----------------------------------------------------------------- game
 
 impl Game {
-    /// Builds the game: the player's program on challenge 1, paused
-    /// until Start is pressed (the original's flow), its last-saved text
-    /// in the editor (else the built-in starter) and its last timescale,
-    /// laid out for the measured viewport.
+    /// Builds the game: the player's program on challenge 1, paused until Start
+    /// is pressed (the original's flow), its last-saved text in the editor
+    /// (else the built-in starter) and its last timescale, laid out for the
+    /// measured viewport.
     fn new(program: Program, host: reload::Host, viewport_width: Option<f32>) -> Self {
         let (code, timescale) = match storage::load() {
             Some(saved) => (saved.code, saved.timescale),
@@ -546,8 +542,8 @@ impl Game {
                 };
                 self.tabs.remove(index);
                 if self.reading && self.docs.page() == page {
-                    // The tab to the left takes its place; main.rs is
-                    // left of them all.
+                    // The tab to the left takes its place; main.rs is left of
+                    // them all.
                     match index.checked_sub(1).map(|left| self.tabs[left]) {
                         Some(left) => self.docs.open(left, 0),
                         None => self.reading = false,
@@ -582,8 +578,8 @@ impl Game {
             Message::ModifiersChanged(modifiers) => self.modifiers = modifiers,
             Message::Resized(width) => self.viewport_width = width,
             Message::Docs(message) => {
-                // A cmd+click in the reference keeps browsing: resolve
-                // the identifier the click landed on and jump to it.
+                // A cmd+click in the reference keeps browsing: resolve the
+                // identifier the click landed on and jump to it.
                 let jump = self.modifiers.command()
                     && matches!(
                         &message,
@@ -597,8 +593,8 @@ impl Game {
                 return action.task.map(Message::Docs);
             }
             Message::Editor(message) => {
-                // A cmd+click in the editor opens the clicked name's
-                // page of the library in the code card.
+                // A cmd+click in the editor opens the clicked name's page of
+                // the library in the code card.
                 let jump = self.modifiers.command()
                     && matches!(
                         &message,
@@ -635,8 +631,8 @@ impl Game {
             Message::Reloaded(outcome) => {
                 match &outcome {
                     reload::Outcome::Swapped => self.playback.edit(),
-                    // rawr restarted the process with the new code: resume
-                    // the challenge the edit was applied on, running.
+                    // rawr restarted the process with the new code: resume the
+                    // challenge the edit was applied on, running.
                     reload::Outcome::Restarted(_) => {
                         if let Some(challenge) = storage::load().and_then(|saved| saved.challenge) {
                             self.playback.select_challenge(challenge);
@@ -668,8 +664,8 @@ impl Game {
         }
     }
 
-    /// The wide workspace's width, the file sidebar's footprint in it
-    /// (none while hidden), and the width the editor and world share.
+    /// The wide workspace's width, the file sidebar's footprint in it (none
+    /// while hidden), and the width the editor and world share.
     fn workspace(&self) -> (f32, f32, f32) {
         let width = self.viewport_width - 2.0 * GAP;
         let sidebar = if self.sidebar { SIDEBAR + GAP } else { 0.0 };
@@ -677,16 +673,15 @@ impl Game {
         (width, sidebar, shared)
     }
 
-    /// The divider as iced_split takes it: a ratio of the whole
-    /// workspace, with the code card holding the sidebar beside the
-    /// editor's share.
+    /// The divider as iced_split takes it: a ratio of the whole workspace, with
+    /// the code card holding the sidebar beside the editor's share.
     fn split_at(&self) -> f32 {
         let (width, sidebar, shared) = self.workspace();
         (sidebar + self.divider * shared + GAP / 2.0) / width.max(1.0)
     }
 
-    /// Renders the game screen: the split workspace on wide
-    /// viewports, the single tabbed card on narrow ones (phones).
+    /// Renders the game screen: the split workspace on wide viewports, the
+    /// single tabbed card on narrow ones (phones).
     fn view(&self, mode: theme::Mode) -> Element<'_, Message> {
         if self.viewport_width < NARROW {
             return self.narrow_view(mode);
@@ -715,8 +710,8 @@ impl Game {
             .boxed()
     }
 
-    /// The identifier a double click (or double tap) left selected in
-    /// the code card's file, resolved to its definition.
+    /// The identifier a double click (or double tap) left selected in the code
+    /// card's file, resolved to its definition.
     fn selected_reference(&self) -> Option<(String, docs::Page, usize)> {
         if self.viewport_width < NARROW && self.tab != Tab::Code {
             return None;
@@ -728,9 +723,9 @@ impl Game {
         }
     }
 
-    /// The code card: a header naming the open file over the file, with
-    /// the file tree beside it - a collapsible sidebar on the wide
-    /// layout, a drawer over the file on the narrow one.
+    /// The code card: a header naming the open file over the file, with the
+    /// file tree beside it - a collapsible sidebar on the wide layout, a drawer
+    /// over the file on the narrow one.
     fn code_face(&self) -> Element<'_, Message> {
         let file = if self.reading {
             self.docs_face()
@@ -769,11 +764,10 @@ impl Game {
         column![self.file_header(), body].spacing(6).boxed()
     }
 
-    /// The open files as tabs - `main.rs` first, then each library
-    /// page opened - after the file tree's button: the sidebar's toggle
-    /// on the wide layout, the drawer's opener on the narrow one. At its
-    /// end, the selection-jump chip and, while a page is read, the
-    /// history arrows.
+    /// The open files as tabs - `main.rs` first, then each library page
+    /// opened - after the file tree's button: the sidebar's toggle on the wide
+    /// layout, the drawer's opener on the narrow one. At its end, the
+    /// selection-jump chip and, while a page is read, the history arrows.
     fn file_header(&self) -> Element<'_, Message> {
         let toggle = if self.viewport_width < NARROW {
             button(icon::folder().size(14))
@@ -858,8 +852,8 @@ impl Game {
         header.boxed()
     }
 
-    /// The program's files: `src/main.rs`, the player's, and the
-    /// library's read-only pages under `api/`.
+    /// The program's files: `src/main.rs`, the player's, and the library's
+    /// read-only pages under `api/`.
     fn file_tree(&self) -> Element<'_, Message> {
         let folder = |name| {
             row![
@@ -904,8 +898,8 @@ impl Game {
         tree.boxed()
     }
 
-    /// The library page, with a pointer cursor while command is held to
-    /// signal that cmd+click opens a definition.
+    /// The library page, with a pointer cursor while command is held to signal
+    /// that cmd+click opens a definition.
     fn docs_face(&self) -> Element<'_, Message> {
         pointer(
             self.docs.view().map(Message::Docs),
@@ -930,8 +924,8 @@ impl Game {
         }
     }
 
-    /// The narrow (phone) layout: compact toolbar and stats over one
-    /// card where the world and the code are tabs.
+    /// The narrow (phone) layout: compact toolbar and stats over one card where
+    /// the world and the code are tabs.
     fn narrow_view(&self, mode: theme::Mode) -> Element<'_, Message> {
         let face: Element<'_, Message> = match self.tab {
             Tab::Player => self.player_face(),
@@ -960,8 +954,8 @@ impl Game {
         .boxed()
     }
 
-    /// The narrow toolbar: the picker on its own line, icon-only
-    /// controls beneath it.
+    /// The narrow toolbar: the picker on its own line, icon-only controls
+    /// beneath it.
     fn compact_toolbar(&self, mode: theme::Mode) -> Element<'_, Message> {
         let picker = pick_list(
             self.choices.get(self.playback.challenge_index()).cloned(),
@@ -1040,8 +1034,8 @@ impl Game {
             .boxed()
     }
 
-    /// The editor side of the split, fed the program's panic when one
-    /// stopped the running attempt.
+    /// The editor side of the split, fed the program's panic when one stopped
+    /// the running attempt.
     fn editor_pane(&self) -> Element<'_, Message> {
         pointer(
             self.editor.view(self.playback.error()).map(Message::Editor),
@@ -1060,8 +1054,8 @@ impl Game {
         )
         .on_select(Message::ChallengePicked)
         .text_size(13)
-        // The longest challenge labels are wider than a default window;
-        // the picker gives way so the controls always fit.
+        // The longest challenge labels are wider than a default window; the
+        // picker gives way so the controls always fit.
         .width(Length::FillPortion(3).max(640));
 
         let toggle = if self.playback.is_running() {
@@ -1077,8 +1071,7 @@ impl Game {
             theme::Mode::Light => icon::moon(),
         };
 
-        // The main action anchors the row's end: …, Restart, then
-        // Start.
+        // The main action anchors the row's end: …, Restart, then Start.
         let bar = row![
             picker,
             space::horizontal(),
@@ -1148,8 +1141,8 @@ fn tab_button(label: &str, tab: Tab, active: Tab) -> Element<'_, Message> {
         .boxed()
 }
 
-/// One workspace card: the identical rounded surface both sides of
-/// the split live on.
+/// One workspace card: the identical rounded surface both sides of the split
+/// live on.
 fn card(content: Element<'_, Message>) -> Element<'_, Message> {
     container(content)
         .width(Fill)
@@ -1159,9 +1152,8 @@ fn card(content: Element<'_, Message>) -> Element<'_, Message> {
         .boxed()
 }
 
-/// The seed readout, marked once code changed mid-attempt: the seed and
-/// the program on disk no longer reproduce it, and Restart is the clean
-/// path.
+/// The seed readout, marked once code changed mid-attempt: the seed and the
+/// program on disk no longer reproduce it, and Restart is the clean path.
 fn seed(playback: &Playback) -> String {
     if playback.edited() {
         format!("{} (edited)", playback.seed())
@@ -1234,8 +1226,8 @@ fn banner(playback: &Playback) -> Element<'_, Message> {
 
 // --------------------------------------------------------------- shared
 
-/// The original's condition descriptions, verbatim (`challenges.js`
-/// condition templates).
+/// The original's condition descriptions, verbatim (`challenges.js` condition
+/// templates).
 fn describe(condition: Condition) -> String {
     match condition {
         Condition::UserCountWithinTime {

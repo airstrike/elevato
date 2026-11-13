@@ -1,5 +1,5 @@
-//! A car of the bank: the commands a program gives it, and the messages
-//! it answers with.
+//! A car of the bank: the commands a program gives it, and the messages it
+//! answers with.
 
 use iced_runtime::Task;
 use iced_runtime::futures::MaybeSend;
@@ -11,18 +11,18 @@ use crate::{Direction, message};
 /// What a car tells the program.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
-    /// The car has nothing to do: on power-on, after its doors close with
-    /// no trip waiting, or when [`Elevator::stop`] halts it. Arrives through
-    /// the task [`Elevator::new`] returns.
+    /// The car has nothing to do: on power-on, after its doors close with no
+    /// trip waiting, or when [`Elevator::stop`] halts it. Arrives through the
+    /// task [`Elevator::new`] returns.
     Idle,
-    /// A rider presses an unlit destination button for this floor.
-    /// Arrives through [`riders()`](crate::riders) after the boarding walk.
+    /// A rider presses an unlit destination button for this floor. Arrives
+    /// through [`riders()`](crate::riders) after the boarding walk.
     FloorButtonPressed(usize),
-    /// The car is about to pass this floor without stopping, heading in
-    /// this direction. A trip's task streams one per floor it passes.
+    /// The car is about to pass this floor without stopping, heading in this
+    /// direction. A trip's task streams one per floor it passes.
     PassingFloor(usize, Direction),
-    /// The trip's last message, sent at its destination after riders get
-    /// off and on.
+    /// The trip's last message, sent at its destination after riders get off
+    /// and on.
     StoppedAtFloor {
         /// Where the car stopped.
         floor: usize,
@@ -41,19 +41,19 @@ pub enum Message {
 /// A car of the challenge's bank.
 ///
 /// [`Elevator::new`] powers on the bank's next car. Movement and indicator
-/// commands run only when the program returns their [`Task`]s from `new`
-/// or `update`. Car and trip tasks carry [`Message`](message::Message)s;
-/// other command tasks carry none.
+/// commands run only when the program returns their [`Task`]s from `new` or
+/// `update`. Car and trip tasks carry [`Message`](message::Message)s; other
+/// command tasks carry none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Elevator(usize);
 
 impl Elevator {
-    /// Powers on the bank's next car, standing at the lobby, and returns
-    /// it with the task that streams its news: [`Message::Idle`] at once,
-    /// and again whenever it has nothing left to do.
+    /// Powers on the bank's next car, standing at the lobby, and returns it
+    /// with the task that streams its news: [`Message::Idle`] at once, and
+    /// again whenever it has nothing left to do.
     ///
-    /// The bank size is the argument to the program's `new`. Cars beyond
-    /// that limit never enter the building, send messages, or act on commands.
+    /// The bank size is the argument to the program's `new`. Cars beyond that
+    /// limit never enter the building, send messages, or act on commands.
     pub fn new() -> (Self, Task<message::Message>) {
         let (sender, receiver) = mpsc::unbounded();
         let elevator = hub::power_on(Some(sender));
@@ -74,12 +74,12 @@ impl Elevator {
         task.map(move |message| message::Message::Elevator(self, message))
     }
 
-    /// Starts a trip to `floor`, replacing the current trip and ending
-    /// its task without further messages. Floors above the top are clamped
-    /// to the top floor.
+    /// Starts a trip to `floor`, replacing the current trip and ending its task
+    /// without further messages. Floors above the top are clamped to the top
+    /// floor.
     ///
-    /// The task streams [`Message::PassingFloor`] while the car travels
-    /// and ends with [`Message::StoppedAtFloor`] when it gets there.
+    /// The task streams [`Message::PassingFloor`] while the car travels and
+    /// ends with [`Message::StoppedAtFloor`] when it gets there.
     pub fn go_to_floor(self, floor: usize) -> Task<message::Message> {
         let (sender, receiver) = mpsc::unbounded();
         let (trip, handle) = Task::stream(receiver).abortable();
@@ -92,16 +92,16 @@ impl Elevator {
         .chain(self.news(trip))
     }
 
-    /// Stops the car where it can, usually between floors, and aborts its
-    /// trip: that task ends with no further message, and the car reports
+    /// Stops the car where it can, usually between floors, and aborts its trip:
+    /// that task ends with no further message, and the car reports
     /// [`Message::Idle`].
     pub fn stop<T: MaybeSend + 'static>(self) -> Task<T> {
         hub::command(Command::Stop { elevator: self })
     }
 
-    /// Lights or darkens the up indicator. Both start lit. A car stopping
-    /// with its up indicator lit takes on riders going up and clears the
-    /// floor's up call.
+    /// Lights or darkens the up indicator. Both start lit. A car stopping with
+    /// its up indicator lit takes on riders going up and clears the floor's up
+    /// call.
     pub fn set_going_up_indicator<T: MaybeSend + 'static>(self, on: bool) -> Task<T> {
         hub::command(Command::GoingUpIndicator { elevator: self, on })
     }

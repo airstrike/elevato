@@ -30,9 +30,9 @@ fn a_live_playback_of_n_ticks_equals_the_same_frames_driven_directly() {
 
     let mut run = direct(playback.seed());
 
-    // 2000 ticks × timescale 2 substeps ≈ 66.7 simulated seconds -
-    // comfortably past challenge 1's 60 s decision, so the run also
-    // proves both sides freeze identically once the challenge ends.
+    // 2000 ticks × timescale 2 substeps ≈ 66.7 simulated seconds - comfortably
+    // past challenge 1's 60 s decision, so the run also proves both sides
+    // freeze identically once the challenge ends.
     let timescale = playback.timescale();
     for _ in 0..2000 {
         playback.tick();

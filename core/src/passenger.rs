@@ -1,20 +1,20 @@
 //! Passengers from spawn to removal. Walk timers affect button presses,
 //! boarding eligibility, and wait statistics.
 //!
-//! A passenger spawns waiting on a floor, boards by walking to an elevator
-//! slot over exactly 1.0 s (only then pressing the in-elevator destination
-//! button), rides, and on arriving at its destination exits and walks off
-//! over `1.0 + rand·0.5` s before removal. Wait time - `elapsed − spawn
-//! time` - keeps feeding the every-step `max_wait_time` refresh through
-//! the entire lifecycle, walk-off included; mid-walk ("busy") passengers
-//! are skipped by boarding attempts.
+//! A passenger spawns waiting on a floor, boards by walking to an elevator slot
+//! over exactly 1.0 s (only then pressing the in-elevator destination button),
+//! rides, and on arriving at its destination exits and walks off over `1.0 +
+//! rand·0.5` s before removal. Wait time - `elapsed − spawn time` - keeps
+//! feeding the every-step `max_wait_time` refresh through the entire lifecycle,
+//! walk-off included; mid-walk ("busy") passengers are skipped by boarding
+//! attempts.
 
-/// Seconds a boarder spends walking to its slot before pressing the
-/// in-elevator destination button.
+/// Seconds a boarder spends walking to its slot before pressing the in-elevator
+/// destination button.
 const BOARD_WALK: f64 = 1.0;
 
-/// Cosmetic appearance drawn at spawn. The draw affects the random
-/// sequence even though the simulation does not use the result.
+/// Cosmetic appearance drawn at spawn. The draw affects the random sequence
+/// even though the simulation does not use the result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
     /// 1-in-41 chance per spawn.
@@ -38,20 +38,19 @@ enum State {
         slot: usize,
         walk_remaining: f64,
     },
-    /// Aboard with the destination button pressed, riding until the
-    /// elevator stops at the destination floor.
+    /// Aboard with the destination button pressed, riding until the elevator
+    /// stops at the destination floor.
     Riding { elevator: usize, slot: usize },
-    /// Exited at the destination (already counted as transported), walking
-    /// off until removal.
+    /// Exited at the destination (already counted as transported), walking off
+    /// until removal.
     Exiting { walk_remaining: f64 },
 }
 
-/// A timer that ran out during [`Passenger::tick`], for the world to act
-/// on.
+/// A timer that ran out during [`Passenger::tick`], for the world to act on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Completion {
-    /// The walk to the slot finished: the passenger now presses the
-    /// elevator's destination button.
+    /// The walk to the slot finished: the passenger now presses the elevator's
+    /// destination button.
     BoardWalk { elevator: usize, destination: usize },
     /// The exit walk finished: remove the passenger from the world.
     ExitWalk,
@@ -87,8 +86,7 @@ impl Passenger {
     }
 
     /// Body weight, a uniform integer in 55–100. Feeds
-    /// [`crate::elevator::Elevator::load_factor`] only - never blocks
-    /// boarding.
+    /// [`crate::elevator::Elevator::load_factor`] only - never blocks boarding.
     pub fn weight(&self) -> u32 {
         self.weight
     }
@@ -98,8 +96,8 @@ impl Passenger {
         self.appearance
     }
 
-    /// The floor the passenger is on (or boarded from, while aboard).
-    /// Updated to the destination on exit.
+    /// The floor the passenger is on (or boarded from, while aboard). Updated
+    /// to the destination on exit.
     pub fn current_floor(&self) -> usize {
         self.current_floor
     }
@@ -119,8 +117,8 @@ impl Passenger {
         matches!(self.state, State::Waiting)
     }
 
-    /// The elevator the passenger is aboard (walking to its slot or
-    /// riding), if any.
+    /// The elevator the passenger is aboard (walking to its slot or riding), if
+    /// any.
     pub fn aboard(&self) -> Option<usize> {
         match self.state {
             State::Boarding { elevator, .. } | State::Riding { elevator, .. } => Some(elevator),
@@ -128,15 +126,15 @@ impl Passenger {
         }
     }
 
-    /// Whether the passenger has exited (already transported) and is
-    /// walking off before removal.
+    /// Whether the passenger has exited (already transported) and is walking
+    /// off before removal.
     pub fn is_walking_off(&self) -> bool {
         matches!(self.state, State::Exiting { .. })
     }
 
-    /// The elevator slot occupied while aboard (boarding or riding), if
-    /// any - read by the world's exit path and by renderers placing
-    /// riders in their slots.
+    /// The elevator slot occupied while aboard (boarding or riding), if any -
+    /// read by the world's exit path and by renderers placing riders in their
+    /// slots.
     pub fn slot(&self) -> Option<usize> {
         match self.state {
             State::Boarding { slot, .. } | State::Riding { slot, .. } => Some(slot),
@@ -144,8 +142,8 @@ impl Passenger {
         }
     }
 
-    /// Boards: the slot is already occupied on the elevator's side; the
-    /// 1.0 s walk to it starts now.
+    /// Boards: the slot is already occupied on the elevator's side; the 1.0 s
+    /// walk to it starts now.
     pub(crate) fn board(&mut self, elevator: usize, slot: usize) {
         self.state = State::Boarding {
             elevator,
@@ -154,8 +152,8 @@ impl Passenger {
         };
     }
 
-    /// Exits at `floor` and walks off for `walk` seconds. The slot must
-    /// already be free; stats record the exit before the walk completes.
+    /// Exits at `floor` and walks off for `walk` seconds. The slot must already
+    /// be free; stats record the exit before the walk completes.
     pub(crate) fn exit(&mut self, floor: usize, walk: f64) {
         self.current_floor = floor;
         self.state = State::Exiting {
@@ -163,8 +161,8 @@ impl Passenger {
         };
     }
 
-    /// Advances walk timers and reports completion only when a timer
-    /// falls below zero, matching the dwell timer's strict boundary.
+    /// Advances walk timers and reports completion only when a timer falls
+    /// below zero, matching the dwell timer's strict boundary.
     pub(crate) fn tick(&mut self, dt: f64) -> Option<Completion> {
         match &mut self.state {
             State::Waiting | State::Riding { .. } => None,

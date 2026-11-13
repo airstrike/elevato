@@ -1,11 +1,11 @@
-//! The Rust editor owns its text, undo history, Reset backup, and error
-//! strip. The parent writes saves requested through [`Instruction`] and
-//! reports them through [`State::saved`] and [`State::reloaded`].
-//! [`State::view`] borrows any panic that ends the player's run.
+//! The Rust editor owns its text, undo history, Reset backup, and error strip.
+//! The parent writes saves requested through [`Instruction`] and reports them
+//! through [`State::saved`] and [`State::reloaded`]. [`State::view`] borrows
+//! any panic that ends the player's run.
 //!
-//! Save (the button, or Cmd+S) writes the program; under `rawr run`
-//! that write is what applies the edit. Cmd+Enter saves too, and starts
-//! the run when it isn't running.
+//! Save (the button, or Cmd+S) writes the program; under `rawr run` that write
+//! is what applies the edit. Cmd+Enter saves too, and starts the run when it
+//! isn't running.
 
 use std::io;
 
@@ -26,14 +26,14 @@ use crate::theme;
 /// The editor pane's state.
 pub struct State {
     content: text_editor::Content,
-    /// Whether the text has changed since the parent last confirmed a
-    /// save ([`State::saved`]); gates Save.
+    /// Whether the text has changed since the parent last confirmed a save
+    /// ([`State::saved`]); gates Save.
     dirty: bool,
-    /// The text Reset replaced, kept for Undo reset. `Content` is not
-    /// `Clone`, so backups travel as text snapshots.
+    /// The text Reset replaced, kept for Undo reset. `Content` is not `Clone`,
+    /// so backups travel as text snapshots.
     backup: Option<String>,
-    /// Text snapshots from before each edit burst. Consecutive typing
-    /// shares one entry; restoring places the cursor at the buffer start.
+    /// Text snapshots from before each edit burst. Consecutive typing shares
+    /// one entry; restoring places the cursor at the buffer start.
     undo: Vec<String>,
     /// Snapshots available for redo; cleared by any fresh edit.
     redo: Vec<String>,
@@ -81,13 +81,12 @@ fn edit_kind(action: &text_editor::Action) -> Edit {
 pub enum Message {
     /// The text editor performed an action (edit, cursor move, …).
     Edited(text_editor::Action),
-    /// Save was pressed, or Cmd+S typed: write the current text as the
-    /// program.
+    /// Save was pressed, or Cmd+S typed: write the current text as the program.
     Save,
     /// Cmd+Enter: save, and start the run when it isn't running.
     Run,
-    /// Reset was pressed: back the current text up, restore the
-    /// starter program.
+    /// Reset was pressed: back the current text up, restore the starter
+    /// program.
     Reset,
     /// Undo reset was pressed: restore the backed-up text.
     UndoReset,
@@ -99,11 +98,11 @@ pub enum Message {
 
 /// What the parent must do on the editor's behalf.
 pub enum Instruction {
-    /// Save this source as the program (whether or not it compiles);
-    /// answer with [`State::saved`].
+    /// Save this source as the program (whether or not it compiles); answer
+    /// with [`State::saved`].
     Save(String),
-    /// Start the run when it isn't running, first saving this source
-    /// when there are unsaved edits (answer with [`State::saved`]).
+    /// Start the run when it isn't running, first saving this source when there
+    /// are unsaved edits (answer with [`State::saved`]).
     Run(Option<String>),
 }
 
@@ -126,9 +125,9 @@ impl State {
         self.content.text()
     }
 
-    /// Reports the write requested by [`Instruction::Save`]. Success
-    /// clears write errors only; reload outcomes clear compiler errors.
-    /// Saving unchanged text produces no reload outcome.
+    /// Reports the write requested by [`Instruction::Save`]. Success clears
+    /// write errors only; reload outcomes clear compiler errors. Saving
+    /// unchanged text produces no reload outcome.
     pub fn saved(&mut self, written: io::Result<()>) {
         match written {
             Ok(()) => {
@@ -141,8 +140,8 @@ impl State {
         }
     }
 
-    /// rawr's verdict on a save, from this editor or any other. Only a
-    /// refusal shows.
+    /// rawr's verdict on a save, from this editor or any other. Only a refusal
+    /// shows.
     pub fn reloaded(&mut self, outcome: reload::Outcome) {
         self.status = match outcome {
             reload::Outcome::Failed(failure) => Some(Status::Failed(failure)),
@@ -224,8 +223,8 @@ impl State {
         }
     }
 
-    /// Records the text before an edit. Consecutive typing shares the
-    /// burst's first snapshot; other edits each get one. Any edit clears redo.
+    /// Records the text before an edit. Consecutive typing shares the burst's
+    /// first snapshot; other edits each get one. Any edit clears redo.
     fn record(&mut self, kind: Edit) {
         self.redo.clear();
         if kind == Edit::Other || self.last_edit != Some(Edit::Typing) {
@@ -237,10 +236,10 @@ impl State {
         self.last_edit = Some(kind);
     }
 
-    /// The pane: editor, the strip (when there is something to show),
-    /// the error panel (when `error` is present), and the
-    /// Save/Reset/Undo-reset row. `error` is the program's panic
-    /// that stopped the run, owned by the parent.
+    /// The pane: editor, the strip (when there is something to show), the error
+    /// panel (when `error` is present), and the Save/Reset/Undo-reset row.
+    /// `error` is the program's panic that stopped the run, owned by the
+    /// parent.
     pub fn view<'a>(&'a self, error: Option<&'a simulation::Error>) -> Element<'a, Message> {
         let editor = text_editor(&self.content)
             .height(Fill)
@@ -308,8 +307,7 @@ impl State {
     }
 }
 
-/// The strip under the editor: a refused edit's error, or a failed
-/// write.
+/// The strip under the editor: a refused edit's error, or a failed write.
 fn strip<'a>(status: &Status) -> Element<'a, Message> {
     container(text(describe(status)).size(12).style(theme::text::failure))
         .width(Fill)

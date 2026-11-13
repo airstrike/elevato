@@ -1,7 +1,7 @@
-//! The building canvas uses Elevator Saga's geometry: 50 px floors,
-//! cars starting at x = 200 with 20 px gaps, and 10 px of car width per
-//! passenger slot. The drawing shrinks uniformly to fit the canvas.
-//! Solid colors only: gradients silently no-op on wasm.
+//! The building canvas uses Elevator Saga's geometry: 50 px floors, cars
+//! starting at x = 200 with 20 px gaps, and 10 px of car width per passenger
+//! slot. The drawing shrinks uniformly to fit the canvas. Solid colors only:
+//! gradients silently no-op on wasm.
 
 use iced::widget::{canvas, text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, alignment, mouse};
@@ -53,9 +53,9 @@ impl<Message> canvas::Program<Message> for View {
     }
 }
 
-/// Maps world coordinates (y-down px, floor 0 at the largest y - i.e.
-/// at the *bottom* of the screen) into the canvas: a uniform shrink-only
-/// scale plus a centering offset.
+/// Maps world coordinates (y-down px, floor 0 at the largest y - i.e. at the
+/// *bottom* of the screen) into the canvas: a uniform shrink-only scale plus a
+/// centering offset.
 struct Camera {
     scale: f32,
     offset: iced::Vector,
@@ -151,9 +151,9 @@ fn draw_world(frame: &mut canvas::Frame, world: &World, palette: theme::Palette)
         draw_elevator(frame, &camera, elevator, x, palette);
     }
 
-    // Passengers: riders sit in their slots; everyone else queues on
-    // their floor's baseline - waiters leftward from the elevators,
-    // walk-offs (faded) rightward from the call buttons.
+    // Passengers: riders sit in their slots; everyone else queues on their
+    // floor's baseline - waiters leftward from the elevators, walk-offs (faded)
+    // rightward from the call buttons.
     let floor_count = world.floors().len();
     let mut waiting = vec![0usize; floor_count];
     let mut exiting = vec![0usize; floor_count];

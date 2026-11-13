@@ -1,11 +1,11 @@
-//! The wiki's "easy solution": every car serves its own riders' buttons
-//! and returns to the lobby when idle. Every floor call goes to the first
-//! car. It ignores direction and load, clearing only the first challenges.
+//! The wiki's "easy solution": every car serves its own riders' buttons and
+//! returns to the lobby when idle. Every floor call goes to the first car. It
+//! ignores direction and load, clearing only the first challenges.
 //!
-//! Each car is its own small iced component: [`Car`] owns the floors it
-//! has to visit, its `update` takes an [`elevator::Message`], and the
-//! program routes each car's messages to it. A car makes one trip at a
-//! time, the next one whenever it is idle.
+//! Each car is its own small iced component: [`Car`] owns the floors it has to
+//! visit, its `update` takes an [`elevator::Message`], and the program routes
+//! each car's messages to it. A car makes one trip at a time, the next one
+//! whenever it is idle.
 
 use std::collections::VecDeque;
 

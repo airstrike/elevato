@@ -1,8 +1,8 @@
 //! Where a program's tasks meet the simulation running them.
 //!
-//! [`Simulation`](crate::Simulation) makes its hub current on the thread
-//! while running player code. Tasks submit commands on their first poll;
-//! car allocation and [`riders`] subscriptions use the same hub.
+//! [`Simulation`](crate::Simulation) makes its hub current on the thread while
+//! running player code. Tasks submit commands on their first poll; car
+//! allocation and [`riders`] subscriptions use the same hub.
 
 use std::cell::RefCell;
 
@@ -12,8 +12,7 @@ use iced_runtime::{Task, task};
 
 use crate::{Elevator, Message, elevator};
 
-/// The commands submitted, the cars handed out, and the riders'
-/// subscribers.
+/// The commands submitted, the cars handed out, and the riders' subscribers.
 #[derive(Debug, Default)]
 pub(crate) struct Hub {
     commands: Vec<Command>,
@@ -30,8 +29,8 @@ pub(crate) enum Command {
         elevator: Elevator,
         news: Option<mpsc::UnboundedSender<elevator::Message>>,
     },
-    /// Start a trip, replacing the car's current one. The trip's messages
-    /// go to `sender`; `handle` aborts its task.
+    /// Start a trip, replacing the car's current one. The trip's messages go to
+    /// `sender`; `handle` aborts its task.
     GoToFloor {
         elevator: Elevator,
         floor: usize,
@@ -79,8 +78,7 @@ pub(crate) fn enter<T>(hub: &mut Hub, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// A task that submits `command` when it first runs, and produces
-/// nothing.
+/// A task that submits `command` when it first runs, and produces nothing.
 pub(crate) fn command<T>(command: Command) -> Task<T>
 where
     T: MaybeSend + 'static,
@@ -129,8 +127,8 @@ pub(crate) fn broadcast(rider: Message) {
     });
 }
 
-/// A new stream of riders, subscribed to the current hub. Outside one it
-/// ends at once.
+/// A new stream of riders, subscribed to the current hub. Outside one it ends
+/// at once.
 pub(crate) fn riders() -> mpsc::UnboundedReceiver<Message> {
     let (sender, receiver) = mpsc::unbounded();
     CURRENT.with_borrow_mut(|hub| {

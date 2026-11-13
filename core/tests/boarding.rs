@@ -1,18 +1,17 @@
-//! Passenger-lifecycle integration tests: direction-filtered boarding,
-//! overflow re-pressing and the re-arrival scan, the 1 s board-walk
-//! before the destination button press, and the walk-off feeding
-//! `max_wait_time` until removal. All runs go through the headless
-//! runner - it is the only driver.
+//! Passenger-lifecycle integration tests: direction-filtered boarding, overflow
+//! re-pressing and the re-arrival scan, the 1 s board-walk before the
+//! destination button press, and the walk-off feeding `max_wait_time` until
+//! removal. All runs go through the headless runner - it is the only driver.
 
 use elevato_core::challenge::{Challenge, Condition};
 use elevato_core::controller::Controller;
 use elevato_core::event::Event;
 use elevato_core::{World, headless};
 
-/// Sweeps its single elevator 0 → 1 → 2 → 3 → 0 forever, forcing the
-/// down indicator off at every stop (during `StoppedAtFloor` dispatch -
-/// before that same arrival's boarding runs), and audits at every event
-/// that no down-going passenger is ever aboard.
+/// Sweeps its single elevator 0 → 1 → 2 → 3 → 0 forever, forcing the down
+/// indicator off at every stop (during `StoppedAtFloor` dispatch - before that
+/// same arrival's boarding runs), and audits at every event that no down-going
+/// passenger is ever aboard.
 struct UpSweeper {
     violations: usize,
     saw_waiting_down_goer: bool,
@@ -37,8 +36,8 @@ impl Controller for UpSweeper {
             | Event::UpButtonPressed { .. }
             | Event::DownButtonPressed { .. } => {}
         }
-        // A passenger's current_floor stays the boarding floor while
-        // aboard, so "aboard and bound lower" means a down-goer boarded.
+        // A passenger's current_floor stays the boarding floor while aboard, so
+        // "aboard and bound lower" means a down-goer boarded.
         for passenger in world.passengers() {
             let down_goer = passenger.destination_floor() < passenger.current_floor();
             if passenger.aboard().is_some() && down_goer {
@@ -88,8 +87,8 @@ enum Stage {
     /// The four-slot elevator descends blind and parks at floor 0 without
     /// clearing the button or boarding anyone.
     Park,
-    /// Up indicators restored; the one-slot elevator descends to trigger
-    /// the overflow.
+    /// Up indicators restored; the one-slot elevator descends to trigger the
+    /// overflow.
     Descend,
     /// Watching for the re-press and the re-dispatched standing elevator.
     Watch,
@@ -97,8 +96,8 @@ enum Stage {
 
 struct Choreographer {
     stage: Stage,
-    /// Spawn-order index of the passenger expected to overflow the
-    /// one-slot elevator.
+    /// Spawn-order index of the passenger expected to overflow the one-slot
+    /// elevator.
     overflow: Option<usize>,
     repress_seen: bool,
     rearrival_seen: bool,
@@ -154,9 +153,9 @@ impl Controller for Choreographer {
                         floor: 0,
                     })
                 {
-                    // Boarding runs right after this dispatch: the first
-                    // waiter (spawn order) takes the single slot, the
-                    // second overflows.
+                    // Boarding runs right after this dispatch: the first waiter
+                    // (spawn order) takes the single slot, the second
+                    // overflows.
                     let waiting: Vec<usize> = world
                         .passengers()
                         .iter()
@@ -229,8 +228,8 @@ fn a_full_elevator_leaves_the_overflow_passenger_to_re_press_and_a_standing_elev
 }
 
 /// Records when the first arrival and the first in-elevator button press
-/// happen; commands nothing (floor-0 spawns board the parked elevator
-/// through the re-arrival rule on their own).
+/// happen; commands nothing (floor-0 spawns board the parked elevator through
+/// the re-arrival rule on their own).
 struct Recorder {
     first_stop: Option<f64>,
     first_press: Option<f64>,
@@ -282,8 +281,8 @@ fn the_destination_button_press_lands_one_second_after_boarding_not_at_boarding(
     );
 }
 
-/// A naive single-elevator ferry that also samples
-/// `(elapsed, max_wait_time, transported, present)` once per frame.
+/// A naive single-elevator ferry that also samples `(elapsed, max_wait_time,
+/// transported, present)` once per frame.
 struct Ferry {
     history: Vec<(f64, f64, usize, usize)>,
 }
@@ -315,9 +314,9 @@ impl Controller for Ferry {
 
 #[test]
 fn max_wait_time_keeps_climbing_through_the_walk_off_and_plateaus_at_removal() {
-    // Spawn interval 10 s: the first passenger is delivered, walks off,
-    // and is removed while nobody else exists - so every change (and the
-    // plateau) is attributable to the walk-off alone.
+    // Spawn interval 10 s: the first passenger is delivered, walks off, and is
+    // removed while nobody else exists - so every change (and the plateau) is
+    // attributable to the walk-off alone.
     let challenge = Challenge::new(3, 1, vec![4], 0.1, Condition::Demo).unwrap();
     let mut world = World::new(&challenge, 5);
     let mut ferry = Ferry {
@@ -354,8 +353,8 @@ fn max_wait_time_keeps_climbing_through_the_walk_off_and_plateaus_at_removal() {
         mid.1
     );
 
-    // Walk-offs cap at 1.5 s: two seconds after the exit the world is
-    // empty and the maximum plateaus exactly.
+    // Walk-offs cap at 1.5 s: two seconds after the exit the world is empty and
+    // the maximum plateaus exactly.
     let after = ferry
         .history
         .iter()

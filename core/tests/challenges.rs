@@ -1,7 +1,7 @@
-//! End-to-end challenge runs through the headless runner, driven by a
-//! native port of the naive community solution (research §5.1). The pair
-//! of assertions is deliberate: a sim that lets the naive strategy clear
-//! challenge 5 is as broken as one that fails it challenge 1.
+//! End-to-end challenge runs through the headless runner, driven by a native
+//! port of the naive community solution (research §5.1). The pair of assertions
+//! is deliberate: a sim that lets the naive strategy clear challenge 5 is as
+//! broken as one that fails it challenge 1.
 
 use std::collections::VecDeque;
 
@@ -10,11 +10,11 @@ use elevato_core::controller::Controller;
 use elevato_core::event::Event;
 use elevato_core::{World, headless};
 
-/// Research §5.1, one trip at a time: every elevator serves its own
-/// pressed buttons, idles back to floor 0, and every floor call is
-/// blindly given to elevator 0. The controller keeps each car's list of
-/// floors to visit and hands the car the next one whenever it is idle.
-/// No direction awareness, no load awareness.
+/// Research §5.1, one trip at a time: every elevator serves its own pressed
+/// buttons, idles back to floor 0, and every floor call is blindly given to
+/// elevator 0. The controller keeps each car's list of floors to visit and
+/// hands the car the next one whenever it is idle. No direction awareness, no
+/// load awareness.
 #[derive(Default)]
 struct Naive {
     stops: Vec<VecDeque<usize>>,

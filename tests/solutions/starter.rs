@@ -1,8 +1,8 @@
 // rawr
-//! Your program. It is an iced program: `new` powers on the elevators it
-//! uses, `update` handles each message and answers with tasks, `view`
-//! draws the building, and `subscription` listens to the riders. `main`
-//! hands the four to elevato, which runs the game around them.
+//! Your program. It is an iced program: `new` powers on the elevators it uses,
+//! `update` handles each message and answers with tasks, `view` draws the
+//! building, and `subscription` listens to the riders. `main` hands the four to
+//! elevato, which runs the game around them.
 
 use elevato::{Building, Elevator, Message, elevator};
 use iced::{Subscription, Task, Widget};

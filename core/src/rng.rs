@@ -1,11 +1,11 @@
-//! Seeded randomness using PCG-XSH-RR 64/32 with a fixed stream,
-//! hand-rolled per the conservative-deps rule. The original's
-//! `Math.random` is unseeded, so its runs never reproduce.
+//! Seeded randomness using PCG-XSH-RR 64/32 with a fixed stream, hand-rolled
+//! per the conservative-deps rule. The original's `Math.random` is unseeded, so
+//! its runs never reproduce.
 //!
-//! Replay depends on the order of draws in [`crate::world`]. Each spawn
-//! draws weight, appearance, spawn floor, then destination. Call-button
-//! events draw a scan offset; suitable boarding attempts draw a slot
-//! offset, even for a full car; exits draw a walk duration.
+//! Replay depends on the order of draws in [`crate::world`]. Each spawn draws
+//! weight, appearance, spawn floor, then destination. Call-button events draw a
+//! scan offset; suitable boarding attempts draw a slot offset, even for a full
+//! car; exits draw a walk duration.
 
 /// A PCG-XSH-RR 64/32 generator on a fixed stream, minted from a seed.
 #[derive(Debug, Clone)]
@@ -20,8 +20,8 @@ impl Pcg32 {
     /// known-answer test below can check against published output.
     const STREAM: u64 = 54;
 
-    /// Seeds the generator (reference `pcg32_srandom_r` with the fixed
-    /// stream). The same seed always yields the same sequence.
+    /// Seeds the generator (reference `pcg32_srandom_r` with the fixed stream).
+    /// The same seed always yields the same sequence.
     pub fn new(seed: u64) -> Self {
         let mut rng = Self {
             state: 0,
@@ -45,9 +45,9 @@ impl Pcg32 {
     }
 
     /// Uniform integer with **both ends inclusive**, matching lodash
-    /// `_.random(lower, upper)` semantics (including swapping reversed
-    /// bounds). Uses a widening multiply to scale; the residual bias is
-    /// below `span / 2^32` - irrelevant at simulation ranges.
+    /// `_.random(lower, upper)` semantics (including swapping reversed bounds).
+    /// Uses a widening multiply to scale; the residual bias is below `span /
+    /// 2^32` - irrelevant at simulation ranges.
     pub fn random_inclusive(&mut self, lower: u32, upper: u32) -> u32 {
         let (lower, upper) = if lower <= upper {
             (lower, upper)
@@ -59,9 +59,9 @@ impl Pcg32 {
         lower + scaled as u32
     }
 
-    /// Uniform float in `[0, 1)`, mirroring JS `Math.random()` (the
-    /// original's exit-walk duration draw). One raw 32-bit draw scaled by
-    /// 2⁻³² - 32 bits of granularity is plenty for a walk timer.
+    /// Uniform float in `[0, 1)`, mirroring JS `Math.random()` (the original's
+    /// exit-walk duration draw). One raw 32-bit draw scaled by 2⁻³² - 32 bits
+    /// of granularity is plenty for a walk timer.
     pub fn random_f64(&mut self) -> f64 {
         f64::from(self.next_u32()) / (f64::from(u32::MAX) + 1.0)
     }

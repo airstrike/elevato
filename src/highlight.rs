@@ -1,17 +1,16 @@
-//! Rust syntax highlighting for the editor: iced's [`text::Parser`]
-//! implemented over syntect's parser, loading Sublime Text's Rust
-//! grammar (`assets/rust.sublime-syntax`). Instead of syntect's theme
-//! machinery, each parsed scope is classified into a [`Kind`], which
-//! [`Kind::style`] colors as the editor draws, so tokens follow the
-//! app's light/dark theme without the parser knowing which is active.
+//! Rust syntax highlighting for the editor: iced's [`text::Parser`] implemented
+//! over syntect's parser, loading Sublime Text's Rust grammar
+//! (`assets/rust.sublime-syntax`). Instead of syntect's theme machinery, each
+//! parsed scope is classified into a [`Kind`], which [`Kind::style`] colors as
+//! the editor draws, so tokens follow the app's light/dark theme without the
+//! parser knowing which is active.
 //!
-//! The colors are the Tokyo City themes' - its dark theme for elevato's
-//! dark one, Tokyo City Lighter for the light - through
+//! The colors are the Tokyo City themes' - its dark theme for elevato's dark
+//! one, Tokyo City Lighter for the light - through
 //! [`grade`](crate::grade::grade), elevato's color grade.
 //!
-//! The incremental caching (snapshots every [`LINES_PER_SNAPSHOT`]
-//! lines, `current_line` tracking) mirrors `iced_highlighter`'s own
-//! implementation.
+//! The incremental caching (snapshots every [`LINES_PER_SNAPSHOT`] lines,
+//! `current_line` tracking) mirrors `iced_highlighter`'s own implementation.
 
 use std::ops::Range;
 use std::sync::LazyLock;
@@ -27,32 +26,32 @@ use crate::grade::{adjust, grade};
 use crate::theme;
 
 /// Sublime Text's Rust grammar (sublimehq/Packages, under the license in
-/// `assets/rust.sublime-syntax.LICENSE`), compiled into the binary so the
-/// wasm build needs no asset fetching.
+/// `assets/rust.sublime-syntax.LICENSE`), compiled into the binary so the wasm
+/// build needs no asset fetching.
 const GRAMMAR: &str = include_str!("../assets/rust.sublime-syntax");
 
-/// Lines per incremental parse snapshot (same rhythm as
-/// `iced_highlighter`): editing line N re-parses from the snapshot at
-/// the previous multiple of this, not from the top.
+/// Lines per incremental parse snapshot (same rhythm as `iced_highlighter`):
+/// editing line N re-parses from the snapshot at the previous multiple of this,
+/// not from the top.
 const LINES_PER_SNAPSHOT: usize = 50;
 
 /// Built once so edits and redraws do not rebuild the syntax set.
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     let mut builder = SyntaxSetBuilder::new();
     builder.add_plain_text_syntax();
-    // `false`: the editor hands lines over without trailing newlines.
-    // A malformed grammar degrades to plain text rather than panicking;
-    // the tests below pin that it actually loads.
+    // `false`: the editor hands lines over without trailing newlines. A
+    // malformed grammar degrades to plain text rather than panicking; the tests
+    // below pin that it actually loads.
     if let Ok(definition) = SyntaxDefinition::load_from_str(GRAMMAR, false, Some("Rust")) {
         builder.add(definition);
     }
     builder.build()
 });
 
-/// Scope-prefix → [`Kind`], checked in order; first match wins. Walked
-/// per stack scope from the innermost scope outwards, so a string's
-/// quotes and an attribute's `#` take their construct's kind before the
-/// general `punctuation` entry can claim them.
+/// Scope-prefix → [`Kind`], checked in order; first match wins. Walked per
+/// stack scope from the innermost scope outwards, so a string's quotes and an
+/// attribute's `#` take their construct's kind before the general `punctuation`
+/// entry can claim them.
 static KINDS: LazyLock<Vec<(Scope, Kind)>> = LazyLock::new(|| {
     let scope = |name: &str| Scope::new(name).expect("invariant: the scope literal parses");
     [
@@ -130,8 +129,8 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The style of this kind under `theme`: a foreground color only;
-    /// the font stays the editor's monospace.
+    /// The style of this kind under `theme`: a foreground color only; the font
+    /// stays the editor's monospace.
     pub fn style(self, theme: &Theme) -> highlighter::Style {
         let colors = if theme::is_dark(theme) {
             &*DARK
@@ -161,10 +160,9 @@ fn graded(kinds: [u32; 16], chroma: f32, steps: &[Step]) -> Colors {
     colors
 }
 
-/// Tokyo City's dark theme, graded. elevato's graphite is near-neutral
-/// where Tokyo City's slate carries its blue, so the palette takes less
-/// chroma, and its pale symbols, keywords and warm accents step quieter
-/// still.
+/// Tokyo City's dark theme, graded. elevato's graphite is near-neutral where
+/// Tokyo City's slate carries its blue, so the palette takes less chroma, and
+/// its pale symbols, keywords and warm accents step quieter still.
 static DARK: LazyLock<Colors> = LazyLock::new(|| {
     graded(
         [
@@ -204,9 +202,9 @@ static DARK: LazyLock<Colors> = LazyLock::new(|| {
     )
 });
 
-/// Tokyo City Lighter, graded. Functions step lighter than the fields
-/// they would otherwise match, as Tokyo City Lighter's blue does, and
-/// comments warm to the paper and step darker to stay legible on it.
+/// Tokyo City Lighter, graded. Functions step lighter than the fields they
+/// would otherwise match, as Tokyo City Lighter's blue does, and comments warm
+/// to the paper and step darker to stay legible on it.
 static LIGHT: LazyLock<Colors> = LazyLock::new(|| {
     graded(
         [
@@ -310,8 +308,8 @@ fn syntax() -> &'static SyntaxReference {
         .unwrap_or_else(|| SYNTAXES.find_syntax_plain_text())
 }
 
-/// Walks a parsed line's scope operations, yielding every non-plain
-/// range with its classified [`Kind`].
+/// Walks a parsed line's scope operations, yielding every non-plain range with
+/// its classified [`Kind`].
 fn kind_ranges<'a>(
     ops: Vec<(usize, ScopeStackOp)>,
     line: &str,
@@ -338,9 +336,9 @@ fn kind_ranges<'a>(
     })
 }
 
-/// Splits a line into the ranges between scope operations, pairing
-/// each range with the operation that begins it (a no-op for the
-/// leading range) - the same walk `iced_highlighter` performs.
+/// Splits a line into the ranges between scope operations, pairing each range
+/// with the operation that begins it (a no-op for the leading range) - the same
+/// walk `iced_highlighter` performs.
 struct Ranges {
     ops: Vec<(usize, ScopeStackOp)>,
     line_length: usize,
@@ -380,8 +378,8 @@ impl Iterator for Ranges {
 mod tests {
     use super::*;
 
-    /// Feeds `lines` in order through a fresh parser, returning each
-    /// line's classified tokens as (text, kind) pairs.
+    /// Feeds `lines` in order through a fresh parser, returning each line's
+    /// classified tokens as (text, kind) pairs.
     fn tokens(lines: &[&str]) -> Vec<Vec<(String, Kind)>> {
         let mut state = <Parser as text::Parser>::new(&());
         lines

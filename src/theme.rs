@@ -1,7 +1,7 @@
-//! Shared colors and widget styles for the app and simulation canvas.
-//! Every `.style()` call passes a named fn from this module, never an
-//! inline closure, and the canvas reads its colors from [`palette`].
-//! Solid colors only: gradients silently no-op on wasm.
+//! Shared colors and widget styles for the app and simulation canvas. Every
+//! `.style()` call passes a named fn from this module, never an inline closure,
+//! and the canvas reads its colors from [`palette`]. Solid colors only:
+//! gradients silently no-op on wasm.
 
 use iced::theme::palette::Seed;
 use iced::{Color, Font, Theme, color};
@@ -42,8 +42,8 @@ impl Mode {
         }
     }
 
-    /// Gives stock widgets elevato's seed colors. [`palette`] supplies
-    /// the additional surface colors.
+    /// Gives stock widgets elevato's seed colors. [`palette`] supplies the
+    /// additional surface colors.
     pub fn to_theme(self) -> Theme {
         let (name, seed) = match self {
             Self::Light => (
@@ -74,9 +74,9 @@ impl Mode {
 }
 
 /// Geist Mono for the editor, controls, and canvas labels (OFL,
-/// `assets/fonts/OFL.txt`). Bundled because fontdb has no system fonts in
-/// the browser. The cosmic-text fork selects the variable `wght` axis
-/// at the requested weight.
+/// `assets/fonts/OFL.txt`). Bundled because fontdb has no system fonts in the
+/// browser. The cosmic-text fork selects the variable `wght` axis at the
+/// requested weight.
 pub const MONO_BYTES: &[u8] = include_bytes!("../assets/fonts/GeistMono-Variable.ttf");
 
 /// The bundled face by family name.
@@ -118,8 +118,8 @@ pub struct Palette {
 /// Resolves the semantic palette for the current theme's brightness.
 pub fn palette(theme: &Theme) -> Palette {
     if is_dark(theme) {
-        // Machine room at night: warm graphite (no blue cast), ivory
-        // text, verdigris lamp-green accents - old elevator-hall lamps.
+        // Machine room at night: warm graphite (no blue cast), ivory text,
+        // verdigris lamp-green accents - old elevator-hall lamps.
         Palette {
             text_primary: color!(0xece7db),
             text_secondary: color!(0x98948a),
@@ -219,9 +219,8 @@ pub mod container {
 
     use super::palette;
 
-    /// The root backdrop behind everything: the panel shade, so the
-    /// workspace cards (drawn in the canvas shade) read as raised
-    /// surfaces against it.
+    /// The root backdrop behind everything: the panel shade, so the workspace
+    /// cards (drawn in the canvas shade) read as raised surfaces against it.
     pub fn root(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {
@@ -278,8 +277,8 @@ pub mod text_editor {
 
     use super::palette;
 
-    /// A transparent editor so its workspace card supplies the surface
-    /// and border, matching the world canvas.
+    /// A transparent editor so its workspace card supplies the surface and
+    /// border, matching the world canvas.
     pub fn code(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
         let _ = status;
@@ -297,8 +296,8 @@ pub mod text_editor {
 }
 
 pub mod button {
-    //! Button emphasis: filled `primary` for the main action, `outline`
-    //! for secondary actions, and `ghost` for quieter controls.
+    //! Button emphasis: filled `primary` for the main action, `outline` for
+    //! secondary actions, and `ghost` for quieter controls.
 
     use iced::widget::button::{Status, Style};
     use iced::{Border, Theme, border};
@@ -371,10 +370,10 @@ pub mod button {
         }
     }
 
-    /// [`ghost`], except a disabled button disappears entirely while
-    /// still occupying its space - for paired affordances (the
-    /// reference's back/forward arrows) whose layout must not shift as
-    /// each end of the history is reached.
+    /// [`ghost`], except a disabled button disappears entirely while still
+    /// occupying its space - for paired affordances (the reference's
+    /// back/forward arrows) whose layout must not shift as each end of the
+    /// history is reached.
     pub fn vanishing(theme: &Theme, status: Status) -> Style {
         match status {
             Status::Disabled => Style {
@@ -387,8 +386,8 @@ pub mod button {
         }
     }
 
-    /// A text link: bare accent text that brightens on hover - the
-    /// splash's homage to the original.
+    /// A text link: bare accent text that brightens on hover - the splash's
+    /// homage to the original.
     pub fn link(theme: &Theme, status: Status) -> Style {
         let ladder = theme.palette();
         let base = Style {
@@ -407,8 +406,8 @@ pub mod button {
         }
     }
 
-    /// A face selector on the right card's tab bar: quiet when
-    /// inactive, raised on the panel shade when active.
+    /// A face selector on the right card's tab bar: quiet when inactive, raised
+    /// on the panel shade when active.
     pub fn tab(active: bool) -> impl Fn(&Theme, Status) -> Style {
         move |theme, status| {
             let palette = palette(theme);
@@ -460,8 +459,8 @@ pub mod split {
     use iced::{Color, Theme};
     use iced_split::{Style, StyleSheet};
 
-    /// No line at rest - the gap between the cards marks the split - and
-    /// the accent while the separator is hovered or dragged.
+    /// No line at rest - the gap between the cards marks the split - and the
+    /// accent while the separator is hovered or dragged.
     pub fn divider(theme: &Theme) -> Style {
         Style {
             unfocused: StyleSheet {

@@ -1,14 +1,14 @@
 //! Challenge configurations, success conditions, and outcomes.
 //!
-//! A [`Challenge`] validates floor and elevator counts, the capacity
-//! cycle, and the spawn rate before [`crate::World`] uses them. The 19
-//! playable challenges and three hidden fitness scenarios match Elevator
-//! Saga's `challenges.js` and `fitness.js`.
+//! A [`Challenge`] validates floor and elevator counts, the capacity cycle, and
+//! the spawn rate before [`crate::World`] uses them. The 19 playable challenges
+//! and three hidden fitness scenarios match Elevator Saga's `challenges.js` and
+//! `fitness.js`.
 //!
-//! A condition triggers when a value reaches (`>=`) a limit or the
-//! target, and succeeds if the target is met and every wait or move limit
-//! is respected (`<=`), so hitting a limit exactly passes. A time limit
-//! only triggers: the target met on that substep still passes.
+//! A condition triggers when a value reaches (`>=`) a limit or the target, and
+//! succeeds if the target is met and every wait or move limit is respected
+//! (`<=`), so hitting a limit exactly passes. A time limit only triggers: the
+//! target met on that substep still passes.
 
 use crate::stats::Stats;
 
@@ -27,22 +27,21 @@ pub enum Error {
     /// A zero-slot elevator could never board anyone.
     #[error("every elevator capacity needs at least one slot")]
     ZeroCapacity,
-    /// Spawn rate must be finite and non-negative (zero disables
-    /// spawning, for kinematics sandboxes).
+    /// Spawn rate must be finite and non-negative (zero disables spawning, for
+    /// kinematics sandboxes).
     #[error("spawn rate must be finite and non-negative, got {0}")]
     InvalidSpawnRate(f64),
 }
 
 /// When a running challenge decides, and how (original `challenges.js`
-/// condition templates). Evaluated after every substep's arrival
-/// processing.
+/// condition templates). Evaluated after every substep's arrival processing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Condition {
     /// "Transport N people in T seconds or less."
     UserCountWithinTime { user_count: usize, time_limit: f64 },
-    /// "Transport N people and let no one wait more than W seconds."
-    /// Reaching W ends the run; it passes only if N is also reached and
-    /// the maximum wait does not exceed W.
+    /// "Transport N people and let no one wait more than W seconds." Reaching W
+    /// ends the run; it passes only if N is also reached and the maximum wait
+    /// does not exceed W.
     UserCountWithMaxWaitTime {
         user_count: usize,
         max_wait_time: f64,
@@ -63,8 +62,8 @@ pub enum Condition {
 }
 
 impl Condition {
-    /// `None` = keep running; `Some(success)` the moment a trigger
-    /// boundary is reached.
+    /// `None` = keep running; `Some(success)` the moment a trigger boundary is
+    /// reached.
     pub fn evaluate(&self, stats: &Stats) -> Option<bool> {
         match *self {
             Condition::UserCountWithinTime {
@@ -99,8 +98,8 @@ impl Condition {
     }
 }
 
-/// How a challenge run stands. [`crate::World::ended`] is true once this
-/// leaves [`Outcome::Running`].
+/// How a challenge run stands. [`crate::World::ended`] is true once this leaves
+/// [`Outcome::Running`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     /// No condition boundary reached yet.
@@ -122,9 +121,9 @@ pub struct Challenge {
 }
 
 impl Challenge {
-    /// Requires at least two floors, one elevator, a nonempty cycle of
-    /// positive capacities, and a finite, non-negative spawn rate.
-    /// Returns an [`Error`] for invalid values. A zero rate disables spawning.
+    /// Requires at least two floors, one elevator, a nonempty cycle of positive
+    /// capacities, and a finite, non-negative spawn rate. Returns an [`Error`]
+    /// for invalid values. A zero rate disables spawning.
     pub fn new(
         floor_count: usize,
         elevator_count: usize,
@@ -169,9 +168,8 @@ impl Challenge {
         &self.capacities
     }
 
-    /// Capacity of elevator `elevator`: `capacities[elevator % len]`
-    /// (challenge 10's elevators are 4, 10; challenge 18's are
-    /// 6, 8, 6, 8, …).
+    /// Capacity of elevator `elevator`: `capacities[elevator % len]` (challenge
+    /// 10's elevators are 4, 10; challenge 18's are 6, 8, 6, 8, …).
     pub fn capacity(&self, elevator: usize) -> usize {
         self.capacities[elevator % self.capacities.len()]
     }
@@ -187,8 +185,7 @@ impl Challenge {
     }
 }
 
-/// The 19 playable challenges, verbatim from the original
-/// `challenges.js`.
+/// The 19 playable challenges, verbatim from the original `challenges.js`.
 pub fn roster() -> Vec<Challenge> {
     let within_time = |user_count, time_limit| Condition::UserCountWithinTime {
         user_count,
@@ -246,8 +243,8 @@ pub fn roster() -> Vec<Challenge> {
 }
 
 /// The three hidden headless "fitness" scenarios (`fitness.js`),
-/// small/medium/large. The original runs each for 12,000 fixed 1/60 s
-/// frames to score average wait time; no success condition, no UI.
+/// small/medium/large. The original runs each for 12,000 fixed 1/60 s frames to
+/// score average wait time; no success condition, no UI.
 pub fn fitness() -> Vec<Challenge> {
     let scenario = |floors, elevators, capacity: usize, spawn_rate| {
         Challenge::new(

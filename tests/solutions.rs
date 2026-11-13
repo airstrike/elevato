@@ -1,12 +1,12 @@
-//! Community solutions run through [`Simulation`] with fixed challenges
-//! and seeds. Expected outcomes and final statistics check the simulation's
+//! Community solutions run through [`Simulation`] with fixed challenges and
+//! seeds. Expected outcomes and final statistics check the simulation's
 //! delivery order and the solutions' behaviour together.
 //!
-//! The behaviour tests at the end drive the API with small programs
-//! written as closures.
+//! The behaviour tests at the end drive the API with small programs written as
+//! closures.
 
-// A program's messages carry more than each solution reads, and the
-// starter's `main` opens the game, which no test does.
+// A program's messages carry more than each solution reads, and the starter's
+// `main` opens the game, which no test does.
 #[path = "solutions/indicator.rs"]
 #[allow(dead_code)]
 mod indicator;
@@ -29,9 +29,8 @@ use iced::{Subscription, Task};
 
 const SEED: u64 = 1;
 
-/// Boots `$solution` on challenge `$challenge` (0-based) and drives it
-/// for at most `$frames` single-substep frames, breaking when the
-/// challenge decides.
+/// Boots `$solution` on challenge `$challenge` (0-based) and drives it for at
+/// most `$frames` single-substep frames, breaking when the challenge decides.
 macro_rules! run {
     ($solution:ident, $challenge:expr, $seed:expr, $frames:expr) => {{
         let mut simulation = Simulation::new(
@@ -52,8 +51,8 @@ macro_rules! run {
     }};
 }
 
-/// The pinned figures of a run: transported, moves, and the elapsed and
-/// wait times in whole milliseconds.
+/// The pinned figures of a run: transported, moves, and the elapsed and wait
+/// times in whole milliseconds.
 fn pin(stats: Stats) -> (usize, usize, u64, u64, u64) {
     let millis = |seconds: f64| (seconds * 1000.0).round() as u64;
     (
@@ -68,8 +67,8 @@ fn pin(stats: Stats) -> (usize, usize, u64, u64, u64) {
 #[test]
 fn the_starter_runs_challenge_one_to_its_time_limit() {
     let run = run!(starter, 0, SEED, 3700);
-    // A 0↔1 shuttle can never clear a 3-floor challenge, on any seed; the
-    // point is a clean run to the time limit that moves riders.
+    // A 0↔1 shuttle can never clear a 3-floor challenge, on any seed; the point
+    // is a clean run to the time limit that moves riders.
     assert_eq!(run.outcome(), Outcome::Failed);
     assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3372));
 }
@@ -90,9 +89,9 @@ fn the_naive_port_fails_challenge_five() {
 
 #[test]
 fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
-    // With 8 floors and 2 cars, steering boarding with the indicators
-    // beats blind dispatch: over seeds 1 to 10 the indicator port passes
-    // 7 and the naive 1. Seed 1 is decisive: indicator passes, naive fails.
+    // With 8 floors and 2 cars, steering boarding with the indicators beats
+    // blind dispatch: over seeds 1 to 10 the indicator port passes 7 and the
+    // naive 1. Seed 1 is decisive: indicator passes, naive fails.
     const CHALLENGE_FOUR: usize = 3;
     const DECISIVE_SEED: u64 = 1;
 
@@ -128,8 +127,8 @@ fn the_twentyliner_port_clears_challenges_one_through_four_and_six() {
 /// What a test program heard, in order.
 type Log = Vec<Message>;
 
-/// A program that powers on one car without listening to its news, runs
-/// `start` with it once, and records every message its trips send.
+/// A program that powers on one car without listening to its news, runs `start`
+/// with it once, and records every message its trips send.
 fn recorder(
     challenge: usize,
     start: impl FnOnce(Elevator) -> Task<Message>,
@@ -198,9 +197,9 @@ fn a_floor_past_the_top_is_the_top_floor() {
 
 #[test]
 fn a_new_trip_replaces_the_one_under_way() {
-    // Sent to floor 2, the car hears it is passing floor 1 and is sent
-    // there instead: the trip to 2 ends with no message, and only the
-    // trip to 1 stops.
+    // Sent to floor 2, the car hears it is passing floor 1 and is sent there
+    // instead: the trip to 2 ends with no message, and only the trip to 1
+    // stops.
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,
@@ -270,8 +269,8 @@ fn a_car_says_it_is_idle_when_powered_on_and_after_each_trip() {
 
 #[test]
 fn a_car_past_the_bank_never_enters_the_building() {
-    // Challenge 1 has one elevator: the second car says nothing and its
-    // trip does nothing, and the run goes on.
+    // Challenge 1 has one elevator: the second car says nothing and its trip
+    // does nothing, and the run goes on.
     let mut simulation = Simulation::new(
         &challenge::roster()[0],
         SEED,

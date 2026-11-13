@@ -1,7 +1,7 @@
-//! The library's pages - `lib.rs`, `building.rs`, `elevator.rs`,
-//! `floor.rs`, Rust-voiced - rendered read-only through the same
-//! highlighter as the code pane, with the history of cmd+click's jumps
-//! between them. [`crate::resolution`] decides where a jump lands.
+//! The library's pages - `lib.rs`, `building.rs`, `elevator.rs`, `floor.rs`,
+//! Rust-voiced - rendered read-only through the same highlighter as the code
+//! pane, with the history of cmd+click's jumps between them.
+//! [`crate::resolution`] decides where a jump lands.
 
 use iced::widget::text_editor;
 use iced::{Element, Fill, Widget};
@@ -50,8 +50,8 @@ impl Page {
     }
 }
 
-/// `text` when it is exactly one identifier - what a double click (or
-/// double tap) leaves selected on a name.
+/// `text` when it is exactly one identifier - what a double click (or double
+/// tap) leaves selected on a name.
 pub fn identifier(text: &str) -> Option<String> {
     let word = text.trim();
     (!word.is_empty()
@@ -96,9 +96,9 @@ impl State {
         self.page
     }
 
-    /// Applies a viewer message. Edits are silently dropped - the
-    /// reference is read-only; everything else (clicks, selection,
-    /// scrolling, copy) behaves like a normal editor.
+    /// Applies a viewer message. Edits are silently dropped - the reference is
+    /// read-only; everything else (clicks, selection, scrolling, copy) behaves
+    /// like a normal editor.
     pub fn update(&mut self, message: Message) -> Action<(), Message> {
         match message {
             Message::Viewed(action) => {
@@ -116,17 +116,17 @@ impl State {
         resolution::resolve(Scope::Page(self.page), position.line, position.index)
     }
 
-    /// The selection, when it is exactly one identifier, and the
-    /// definition it names - the double-tap jump affordance's input.
+    /// The selection, when it is exactly one identifier, and the definition it
+    /// names - the double-tap jump affordance's input.
     pub fn selected_reference(&self) -> Option<(String, Page, usize)> {
         let name = identifier(&self.content.selection()?)?;
         let (page, line) = self.reference_at_cursor()?;
         Some((name, page, line))
     }
 
-    /// Opens `page` (switching files if needed), moves the cursor to
-    /// `line`, and selects it, scrolling it into view. The spot being
-    /// left goes onto the back stack.
+    /// Opens `page` (switching files if needed), moves the cursor to `line`,
+    /// and selects it, scrolling it into view. The spot being left goes onto
+    /// the back stack.
     pub fn open(&mut self, page: Page, line: usize) {
         let from = (self.page, self.content.cursor().position.line);
         self.history.push(from);
@@ -202,8 +202,8 @@ impl Default for State {
 mod tests {
     use super::*;
 
-    /// Where `path`, written in a program that imports the starter's
-    /// names, resolves.
+    /// Where `path`, written in a program that imports the starter's names,
+    /// resolves.
     fn site(path: &str) -> (Page, usize) {
         let source =
             format!("use elevato::{{Building, Elevator, Message, elevator, floor}};\n{path}");

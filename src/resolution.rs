@@ -1,23 +1,21 @@
-//! Cmd+click lookup for documented API names. Imports and qualified paths
-//! lead to definitions on the library's pages; method calls require a
-//! unique documented name because this lookup does not infer types.
+//! Cmd+click lookup for documented API names. Imports and qualified paths lead
+//! to definitions on the library's pages; method calls require a unique
+//! documented name because this lookup does not infer types.
 //!
 //! A click takes the path that ends at the clicked name - `Message`,
-//! `elevator::Message::Idle`, `Elevator::new` - and resolves its first
-//! segment in the clicked file's scope:
+//! `elevator::Message::Idle`, `Elevator::new` - and resolves its first segment
+//! in the clicked file's scope:
 //!
-//! - In the player's `main.rs`: the names its `use elevato::…` items
-//!   import, and `elevato` itself. A name the file defines shadows an
-//!   import, and resolves only when it is `Program`, whose functions the
-//!   library documents.
-//! - On a page: the page's own items, then the crate root's, and
-//!   `elevato`.
+//! - In the player's `main.rs`: the names its `use elevato::…` items import,
+//!   and `elevato` itself. A name the file defines shadows an import, and
+//!   resolves only when it is `Program`, whose functions the library documents.
+//! - On a page: the page's own items, then the crate root's, and `elevato`.
 //!
-//! A module counts only before `::`, as in Rust's namespaces: a variable
-//! named `elevator` never opens `elevator.rs`. Each later segment walks
-//! into a module, then an item, then its variant or method. A method
-//! call (`.go_to_floor(…)`) has no type to walk from, so it resolves only
-//! when exactly one documented type has that method.
+//! A module counts only before `::`, as in Rust's namespaces: a variable named
+//! `elevator` never opens `elevator.rs`. Each later segment walks into a
+//! module, then an item, then its variant or method. A method call
+//! (`.go_to_floor(…)`) has no type to walk from, so it resolves only when
+//! exactly one documented type has that method.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -27,15 +25,15 @@ use crate::docs::Page;
 /// Where a click's path is resolved.
 #[derive(Debug, Clone, Copy)]
 pub enum Scope<'a> {
-    /// The player's program, with its whole text: its imports and its
-    /// own definitions decide what a name means.
+    /// The player's program, with its whole text: its imports and its own
+    /// definitions decide what a name means.
     Program(&'a str),
     /// A page of the library.
     Page(Page),
 }
 
-/// The definition the click at byte `index` of line `line` in `scope`
-/// names: its page and line.
+/// The definition the click at byte `index` of line `line` in `scope` names:
+/// its page and line.
 pub fn resolve(scope: Scope<'_>, line: usize, index: usize) -> Option<(Page, usize)> {
     let source = match scope {
         Scope::Program(text) => text,
@@ -66,16 +64,16 @@ pub fn resolve(scope: Scope<'_>, line: usize, index: usize) -> Option<(Page, usi
     target.site()
 }
 
-/// The identifier under `column` in `line`: the word a click landed in,
-/// or the one it landed just after.
+/// The identifier under `column` in `line`: the word a click landed in, or the
+/// one it landed just after.
 pub fn identifier_at(line: &str, column: usize) -> Option<String> {
     let chars: Vec<char> = line.chars().collect();
     let (start, end) = word_around(&chars, column)?;
     Some(chars[start..end].iter().collect())
 }
 
-/// A click's path: its segments up to the clicked one, whether a `::`
-/// follows the clicked one, and whether it is a method call.
+/// A click's path: its segments up to the clicked one, whether a `::` follows
+/// the clicked one, and whether it is a method call.
 struct Clicked {
     path: Vec<String>,
     before_path: bool,
@@ -284,8 +282,8 @@ impl Index {
     }
 }
 
-/// A top-level line's keyword and name: `pub enum X`, `pub struct X`,
-/// `pub fn x`, `impl X`.
+/// A top-level line's keyword and name: `pub enum X`, `pub struct X`, `pub fn
+/// x`, `impl X`.
 fn declaration(line: &str) -> Option<(&'static str, String)> {
     let line = line.strip_prefix("pub ").unwrap_or(line);
     ["enum", "struct", "fn", "impl", "type", "const"]
@@ -296,8 +294,8 @@ fn declaration(line: &str) -> Option<(&'static str, String)> {
         })
 }
 
-/// A member line one level into a block: `pub fn x`, `pub x: T`, or an
-/// enum's `Variant`. Deeper lines - a variant's fields - are not members.
+/// A member line one level into a block: `pub fn x`, `pub x: T`, or an enum's
+/// `Variant`. Deeper lines - a variant's fields - are not members.
 fn member(line: &str) -> Option<String> {
     let inner = line.strip_prefix("    ")?;
     if inner.starts_with(' ') || inner.starts_with("//") {
@@ -364,8 +362,8 @@ fn locals(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// The type whose `impl` block defines `name` at line `line`, when that
-/// line is its `fn name` - a click on a function's own definition.
+/// The type whose `impl` block defines `name` at line `line`, when that line is
+/// its `fn name` - a click on a function's own definition.
 fn defining_impl(source: &str, line: usize, name: &str) -> Option<String> {
     let lines: Vec<&str> = source.lines().collect();
     let text = lines.get(line)?.trim_start();
@@ -384,8 +382,8 @@ fn defining_impl(source: &str, line: usize, name: &str) -> Option<String> {
     })?
 }
 
-/// The bounds of the word around `column`: the one it is in, or the one
-/// it is just past.
+/// The bounds of the word around `column`: the one it is in, or the one it is
+/// just past.
 fn word_around(chars: &[char], column: usize) -> Option<(usize, usize)> {
     let at = if chars.get(column).is_some_and(|&c| is_word(c)) {
         column

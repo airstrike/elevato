@@ -1,5 +1,5 @@
-//! Native Rust strategies for tests and benchmarks. Player programs use
-//! the separate driver in `elevato_api::simulation`.
+//! Native Rust strategies for tests and benchmarks. Player programs use the
+//! separate driver in `elevato_api::simulation`.
 //!
 //! A controller receives `&mut World` everywhere so it can issue commands
 //! ([`crate::World::go_to_floor`] and friends) directly; the driver
@@ -9,23 +9,23 @@
 use crate::World;
 use crate::event::Event;
 
-/// User-strategy hooks, mirroring the original's `{ init, update }` code
-/// object plus its event subscriptions.
+/// User-strategy hooks, mirroring the original's `{ init, update }` code object
+/// plus its event subscriptions.
 pub trait Controller {
-    /// Called once before the first frame, with every car of the bank
-    /// standing in the world; each car's [`Event::Idle`] is delivered
-    /// right after it returns.
+    /// Called once before the first frame, with every car of the bank standing
+    /// in the world; each car's [`Event::Idle`] is delivered right after it
+    /// returns.
     fn init(&mut self, world: &mut World);
 
-    /// Called once per frame with the *whole* frame dt, before that
-    /// frame's physics substeps - commands issued here take effect in this
-    /// frame. Optional; the default does nothing.
+    /// Called once per frame with the *whole* frame dt, before that frame's
+    /// physics substeps - commands issued here take effect in this frame.
+    /// Optional; the default does nothing.
     fn update(&mut self, world: &mut World, dt: f64) {
         let _ = (world, dt);
     }
 
-    /// Called for every event drained between substeps, in emission
-    /// order. Optional; the default does nothing.
+    /// Called for every event drained between substeps, in emission order.
+    /// Optional; the default does nothing.
     fn on_event(&mut self, world: &mut World, event: Event) {
         let _ = (world, event);
     }

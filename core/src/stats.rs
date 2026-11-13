@@ -2,13 +2,13 @@
 //!
 //! Wait time starts at spawn and includes riding and the walk after exit.
 //! `max_wait_time` tracks the longest wait across exits and everyone still
-//! present, including riders walking off. `avg_wait_time` is a mean taken
-//! at each exit. `transported_per_sec` updates only at exits; it does not
-//! decay between them. Challenge conditions read this snapshot after each
-//! substep's arrival processing.
+//! present, including riders walking off. `avg_wait_time` is a mean taken at
+//! each exit. `transported_per_sec` updates only at exits; it does not decay
+//! between them. Challenge conditions read this snapshot after each substep's
+//! arrival processing.
 
-/// A snapshot of the world's running statistics. Plain data - comparing
-/// two runs' final stats with `==` is the determinism check.
+/// A snapshot of the world's running statistics. Plain data - comparing two
+/// runs' final stats with `==` is the determinism check.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Stats {
     transported: usize,
@@ -35,8 +35,8 @@ impl Stats {
         self.transported_per_sec
     }
 
-    /// Longest wait observed so far, over exits *and* everyone still
-    /// present (refreshed every step).
+    /// Longest wait observed so far, over exits *and* everyone still present
+    /// (refreshed every step).
     pub fn max_wait_time(&self) -> f64 {
         self.max_wait_time
     }
@@ -55,15 +55,15 @@ impl Stats {
         self.elapsed += dt;
     }
 
-    /// Includes a present passenger's wait in the maximum, whether they
-    /// are waiting, riding, or walking off.
+    /// Includes a present passenger's wait in the maximum, whether they are
+    /// waiting, riding, or walking off.
     pub(crate) fn observe_wait(&mut self, wait: f64) {
         self.max_wait_time = self.max_wait_time.max(wait);
     }
 
-    /// Records one passenger exiting with the given wait: transported
-    /// count, per-second rate, maximum, and the incremental average
-    /// `(avg·(n−1) + wait) / n`.
+    /// Records one passenger exiting with the given wait: transported count,
+    /// per-second rate, maximum, and the incremental average `(avg·(n−1) +
+    /// wait) / n`.
     pub(crate) fn record_exit(&mut self, wait: f64) {
         self.transported += 1;
         self.transported_per_sec = self.transported as f64 / self.elapsed;

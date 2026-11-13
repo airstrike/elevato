@@ -1,9 +1,9 @@
-//! Two sorted lists separate up and down calls. An idle car claims a
-//! whole list as one sweep; riders' destinations join its stops in travel
-//! order. Indicators admit riders headed in the car's next direction.
+//! Two sorted lists separate up and down calls. An idle car claims a whole list
+//! as one sweep; riders' destinations join its stops in travel order.
+//! Indicators admit riders headed in the car's next direction.
 //!
-//! Each [`Car`] owns its stops and handles its [`elevator::Message`]s.
-//! A destination on the way to the current stop replaces that trip.
+//! Each [`Car`] owns its stops and handles its [`elevator::Message`]s. A
+//! destination on the way to the current stop replaces that trip.
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::{Subscription, Task, Widget};
@@ -14,8 +14,8 @@ pub struct Program {
     downs: Vec<usize>,
 }
 
-/// One car: where it is, the stops it will make in order, and the stop
-/// it is on its way to.
+/// One car: where it is, the stops it will make in order, and the stop it is on
+/// its way to.
 struct Car {
     elevator: Elevator,
     at: usize,
@@ -67,10 +67,10 @@ impl Program {
         elevato::riders()
     }
 
-    /// Hands the waiting calls to the first idle car: the up calls as
-    /// one ascending sweep, else the down calls as one descending sweep.
-    /// Riders a full car leaves behind press again, filling the lists
-    /// for the next idle car.
+    /// Hands the waiting calls to the first idle car: the up calls as one
+    /// ascending sweep, else the down calls as one descending sweep. Riders a
+    /// full car leaves behind press again, filling the lists for the next idle
+    /// car.
     fn claim(&mut self) -> Task<Message> {
         let Some(car) = self.cars.iter_mut().find(|car| car.stops.is_empty()) else {
             return Task::none();
@@ -128,8 +128,8 @@ impl Car {
         self.next()
     }
 
-    /// A rider's destination joins the stops in travel order, so the car
-    /// sweeps one way instead of ping-ponging in press order.
+    /// A rider's destination joins the stops in travel order, so the car sweeps
+    /// one way instead of ping-ponging in press order.
     fn drop_off(&mut self, floor: usize) -> Task<Message> {
         if self.stops.contains(&floor) {
             return Task::none();
@@ -157,8 +157,8 @@ impl Car {
         }
     }
 
-    /// Sends the car toward its first stop when it is not on its way to
-    /// one, lamps lit for the way it goes from there.
+    /// Sends the car toward its first stop when it is not on its way to one,
+    /// lamps lit for the way it goes from there.
     fn next(&mut self) -> Task<Message> {
         if self.heading.is_some() {
             return self.indicate();
@@ -173,8 +173,8 @@ impl Car {
         Task::batch([self.indicate(), self.elevator.go_to_floor(stop)])
     }
 
-    /// Lights the lamps for the direction the car leaves its first stop
-    /// in: both when that stop is its last.
+    /// Lights the lamps for the direction the car leaves its first stop in:
+    /// both when that stop is its last.
     fn indicate(&self) -> Task<Message> {
         let direction = match self.stops.as_slice() {
             [first, second, ..] if second > first => Some(Direction::Up),

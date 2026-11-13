@@ -1,29 +1,25 @@
-//! What becomes of an applied edit: whether rawr runs the player's
-//! program ([`Host`]), and what rawr did with each save ([`Outcome`]).
+//! What becomes of an applied edit: whether rawr runs the player's program
+//! ([`Host`]), and what rawr did with each save ([`Outcome`]).
 //!
-//! rawr decides every outcome. elevato never checks an edit's
-//! compatibility itself: it writes the file rawr watches and reports what
-//! rawr says, through the `rawr-reload` crate. On the web the page runs
-//! the program on rawr's universe: it compiles each save and either
-//! restarts the game with it or hands back the compiler's error. Under
-//! `cargo run` the program is compiled into the binary, so an edit can't
-//! reach the running game at all.
+//! rawr decides every outcome. elevato never checks an edit's compatibility
+//! itself: it writes the file rawr watches and reports what rawr says, through
+//! the `rawr-reload` crate. On the web the page runs the program on rawr's
+//! universe: it compiles each save and either restarts the game with it or
+//! hands back the compiler's error. Under `cargo run` the program is compiled
+//! into the binary, so an edit can't reach the running game at all.
 
 use iced::Subscription;
 
-/// How the player's program runs, which decides what an applied edit can
-/// do.
+/// How the player's program runs, which decides what an applied edit can do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Host {
-    /// `rawr run` interprets the program, reloads it on every save, and
-    /// says what each reload did.
+    /// `rawr run` interprets the program, reloads it on every save, and says
+    /// what each reload did.
     Rawr,
-    /// The web page runs the program on rawr's universe. A save that
-    /// compiles restarts the game with it; one that doesn't comes back as
-    /// its error.
+    /// The web page runs the program on rawr's universe. A save that compiles
+    /// restarts the game with it; one that doesn't comes back as its error.
     Page,
-    /// `cargo run` compiled the program in; edits wait for the next
-    /// build.
+    /// `cargo run` compiled the program in; edits wait for the next build.
     Compiled,
 }
 
@@ -31,23 +27,23 @@ pub enum Host {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     /// rawr restarted this process with the program's new code, for this
-    /// one-line reason. Only ever the first outcome, after an edit that
-    /// rawr couldn't keep the program's state across.
+    /// one-line reason. Only ever the first outcome, after an edit that rawr
+    /// couldn't keep the program's state across.
     Restarted(String),
-    /// The save compiled and waits for the program's next message, the
-    /// first call from the game into the new code.
+    /// The save compiled and waits for the program's next message, the first
+    /// call from the game into the new code.
     Queued,
     /// The new code is in and the program kept its state.
     Swapped,
-    /// rawr can't keep the program's state across this edit and restarts
-    /// the game with the new code, for this one-line reason.
+    /// rawr can't keep the program's state across this edit and restarts the
+    /// game with the new code, for this one-line reason.
     Restarting(String),
     /// The save didn't compile; the last good program keeps running.
     Failed(Failure),
 }
 
-/// A save rawr refused: its message, and where in the program it points
-/// when it points somewhere.
+/// A save rawr refused: its message, and where in the program it points when it
+/// points somewhere.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Failure {
     message: String,
@@ -82,8 +78,8 @@ pub fn host() -> Host {
 }
 
 impl Host {
-    /// rawr's outcomes for the saves it sees, from any editor, in order;
-    /// none for a compiled program.
+    /// rawr's outcomes for the saves it sees, from any editor, in order; none
+    /// for a compiled program.
     pub fn outcomes(self) -> Subscription<Outcome> {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
@@ -113,11 +109,11 @@ impl Host {
     }
 }
 
-/// The page that runs this game on rawr's universe, which sets the
-/// `elevato` global on the game's window before it starts it:
-/// `{ restarted: bool, failed?: string }`. The game hands the page each
-/// save as `{ elevato: "apply", source }`; the page answers a save that
-/// doesn't compile with `{ elevato: "failed", text }`.
+/// The page that runs this game on rawr's universe, which sets the `elevato`
+/// global on the game's window before it starts it: `{ restarted: bool,
+/// failed?: string }`. The game hands the page each save as `{ elevato:
+/// "apply", source }`; the page answers a save that doesn't compile with `{
+/// elevato: "failed", text }`.
 #[cfg(target_arch = "wasm32")]
 mod page {
     use iced::futures::channel::mpsc;
@@ -158,9 +154,9 @@ mod page {
         let _ = parent.post_message(&message, "*");
     }
 
-    /// The page's outcomes: `Restarted` first when the page restarted
-    /// the game for a save, then the failure it started with, then each
-    /// save it answered with an error.
+    /// The page's outcomes: `Restarted` first when the page restarted the game
+    /// for a save, then the failure it started with, then each save it answered
+    /// with an error.
     pub fn listen() -> mpsc::UnboundedReceiver<Outcome> {
         let (sender, receiver) = mpsc::unbounded();
         let Some(window) = web_sys::window() else {
@@ -198,8 +194,8 @@ mod page {
     }
 }
 
-/// rawr's reload stream, read on a thread of its own: each outcome blocks
-/// until rawr says what a save did.
+/// rawr's reload stream, read on a thread of its own: each outcome blocks until
+/// rawr says what a save did.
 #[cfg(not(target_arch = "wasm32"))]
 fn listen() -> iced::futures::channel::mpsc::UnboundedReceiver<Outcome> {
     let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
@@ -235,8 +231,8 @@ impl From<rawr_reload::Outcome> for Outcome {
 }
 
 impl Failure {
-    /// A refusal of `message`, pointing `at` a place in the program when
-    /// rawr says where.
+    /// A refusal of `message`, pointing `at` a place in the program when rawr
+    /// says where.
     pub fn new(message: impl Into<String>, at: Option<Position>) -> Self {
         Self {
             message: message.into(),
@@ -244,11 +240,11 @@ impl Failure {
         }
     }
 
-    /// The refusal a compiler's error `text` gives: its first error's
-    /// message, at the first place it points to, as rustc and rawr write
-    /// them (`error[E0425]: cannot find value` and ` --> src/main.rs:51:33`
-    /// or ` --> src/main.rs:51:33-51:36`).
-    /// Text in another shape is the message as it stands.
+    /// The refusal a compiler's error `text` gives: its first error's message,
+    /// at the first place it points to, as rustc and rawr write them
+    /// (`error[E0425]: cannot find value` and ` --> src/main.rs:51:33` or ` -->
+    /// src/main.rs:51:33-51:36`). Text in another shape is the message as it
+    /// stands.
     pub fn parse(text: &str) -> Self {
         let mut lines = text.lines();
         let headline = lines.by_ref().find_map(|line| {
@@ -266,8 +262,8 @@ impl Failure {
             .take_while(|line| !line.starts_with("error"))
             .find_map(|line| line.trim_start().strip_prefix("--> "))
             .and_then(|place| {
-                // rawr writes a span, `main.rs:59:17-59:22`; its start
-                // is the place.
+                // rawr writes a span, `main.rs:59:17-59:22`; its start is the
+                // place.
                 let place = place.trim();
                 let place = match place.rsplit_once('-') {
                     Some((start, end))

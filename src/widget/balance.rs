@@ -1,6 +1,6 @@
 //! Balances wrapped text like CSS `text-wrap: balance`. Uses the narrowest
-//! width that preserves the full-width line count, avoiding a short final
-//! line without adding another line.
+//! width that preserves the full-width line count, avoiding a short final line
+//! without adding another line.
 
 use iced::advanced::layout::Limits;
 use iced::advanced::widget::{Meta, Tree};
@@ -46,8 +46,8 @@ where
             ..*limits
         };
 
-        // Text's height counts its lines: a width is wide enough while the
-        // text stays as tall as it is at the full width.
+        // Text's height counts its lines: a width is wide enough while the text
+        // stays as tall as it is at the full width.
         content.layout(child, renderer, limits);
         let full = child.size;
         let (mut narrow, mut wide) = (0.0, full.width);

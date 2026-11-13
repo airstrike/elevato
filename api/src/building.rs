@@ -1,15 +1,14 @@
-//! The building as it stands, which a program's `update` and `view`
-//! borrow.
+//! The building as it stands, which a program's `update` and `view` borrow.
 
 use elevato_core::World;
 
 use crate::Elevator;
 
-/// The building as it stands: its floors, the cars the program powered
-/// on, and its riders.
+/// The building as it stands: its floors, the cars the program powered on, and
+/// its riders.
 ///
-/// `Clone` because `rawr run` hands a borrowed `Building` to the
-/// program's interpreted code as a copy.
+/// `Clone` because `rawr run` hands a borrowed `Building` to the program's
+/// interpreted code as a copy.
 #[derive(Debug, Clone)]
 pub struct Building {
     world: World,
@@ -25,8 +24,8 @@ impl Building {
         self.world.floors().len()
     }
 
-    /// The car's nearest floor, rounded while it travels. Returns 0 for
-    /// a car beyond the challenge's bank.
+    /// The car's nearest floor, rounded while it travels. Returns 0 for a car
+    /// beyond the challenge's bank.
     pub fn floor_of(&self, elevator: Elevator) -> usize {
         self.world
             .elevators()

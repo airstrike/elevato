@@ -2,26 +2,26 @@
 //! [`load`] and [`save`], with separate native and web storage.
 //!
 //! Natively the program is the marked file itself, `program/src/main.rs`:
-//! saving writes the file `rawr run` watches and `cargo build` compiles,
-//! and the timescale and challenge go to files under the platform config
-//! dir (`~/.config/elevato` or the OS equivalent). The wasm arm stores
-//! them in localStorage, mirroring the original game's persistence.
+//! saving writes the file `rawr run` watches and `cargo build` compiles, and
+//! the timescale and challenge go to files under the platform config dir
+//! (`~/.config/elevato` or the OS equivalent). The wasm arm stores them in
+//! localStorage, mirroring the original game's persistence.
 //!
 //! Save and Cmd+Enter write the program. A game rawr restarts for an edit
 //! resumes on the saved challenge.
 
-/// A persisted snapshot: the program's text (which need not compile -
-/// Save stores whatever the player wrote) and, when readable, the
-/// timescale and challenge.
+/// A persisted snapshot: the program's text (which need not compile - Save
+/// stores whatever the player wrote) and, when readable, the timescale and
+/// challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Saved {
     /// The program's text as last saved.
     pub code: String,
-    /// The timescale at save time; `None` when missing or corrupt so
-    /// the caller keeps its default.
+    /// The timescale at save time; `None` when missing or corrupt so the caller
+    /// keeps its default.
     pub timescale: Option<usize>,
-    /// The roster index of the challenge at save time; `None` when
-    /// missing or corrupt.
+    /// The roster index of the challenge at save time; `None` when missing or
+    /// corrupt.
     pub challenge: Option<usize>,
 }
 
@@ -30,16 +30,16 @@ pub fn load() -> Option<Saved> {
     platform::load()
 }
 
-/// Writes `code`, `timescale`, then `challenge`. A write error stops the
-/// save without undoing earlier writes.
+/// Writes `code`, `timescale`, then `challenge`. A write error stops the save
+/// without undoing earlier writes.
 pub fn save(code: &str, timescale: usize, challenge: usize) -> std::io::Result<()> {
     platform::save(code, timescale, challenge)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
-    //! The program lives at `program/src/main.rs`; timescale and challenge
-    //! each have a file under the platform config directory.
+    //! The program lives at `program/src/main.rs`; timescale and challenge each
+    //! have a file under the platform config directory.
 
     use std::fs;
     use std::io;
@@ -93,8 +93,8 @@ mod platform {
         challenge: usize,
     ) -> io::Result<()> {
         fs::write(program, code)?;
-        // The program saves even when there is no config directory for
-        // the timescale and challenge.
+        // The program saves even when there is no config directory for the
+        // timescale and challenge.
         let Some(directory) = directory else {
             return Ok(());
         };
@@ -166,8 +166,8 @@ mod platform {
 
     use super::Saved;
 
-    // `v3` holds iced programs. `v2` (the prelude API) and `v1` (Rhai)
-    // no longer compile, so they are left unread, not deleted.
+    // `v3` holds iced programs. `v2` (the prelude API) and `v1` (Rhai) no
+    // longer compile, so they are left unread, not deleted.
     const CODE_KEY: &str = "elevato_program_v3";
     const TIMESCALE_KEY: &str = "elevato_timescale";
     const CHALLENGE_KEY: &str = "elevato_challenge";
@@ -190,8 +190,8 @@ mod platform {
     }
 
     pub fn save(code: &str, timescale: usize, challenge: usize) -> io::Result<()> {
-        // No localStorage (disabled, sandboxed) means nowhere to save;
-        // a best-effort miss, like a missing config dir natively.
+        // No localStorage (disabled, sandboxed) means nowhere to save; a
+        // best-effort miss, like a missing config dir natively.
         let Some(storage) = storage() else {
             return Ok(());
         };

@@ -1,13 +1,13 @@
-//! Spawn-model distribution checks over a seeded run (loose bounds - the
-//! point is the shape of the distribution, not exact frequencies).
+//! Spawn-model distribution checks over a seeded run (loose bounds - the point
+//! is the shape of the distribution, not exact frequencies).
 
 use elevato_core::challenge::{Challenge, Condition};
 use elevato_core::controller::Controller;
 use elevato_core::{World, headless};
 
-/// Watches without commanding. Nobody is ever delivered (the parked
-/// elevator collects floor-0 spawns via re-arrivals but never moves), so
-/// the final passenger list is the complete spawn census.
+/// Watches without commanding. Nobody is ever delivered (the parked elevator
+/// collects floor-0 spawns via re-arrivals but never moves), so the final
+/// passenger list is the complete spawn census.
 struct Bystander;
 
 impl Controller for Bystander {

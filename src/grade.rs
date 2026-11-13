@@ -1,20 +1,20 @@
 //! Adapts syntax colors to elevato's graphite, paper, and verdigris palette.
-//! The grade keeps OKLab lightness before gamut clipping. [`HUES`] maps
-//! cool hues to distinct greens; [`TINT`] adds verdigris, `chroma` scales
+//! The grade keeps OKLab lightness before gamut clipping. [`HUES`] maps cool
+//! hues to distinct greens; [`TINT`] adds verdigris, `chroma` scales
 //! colorfulness, and [`WARMTH`] adds yellow to warm the greys.
 
 use iced::Color;
 
-/// elevato's verdigris lamp green (the dark theme's lit lamps): the hue
-/// every graded color leans toward.
+/// elevato's verdigris lamp green (the dark theme's lit lamps): the hue every
+/// graded color leans toward.
 const VERDIGRIS: Color = Color::from_packed_rgb8(0x50b481);
 
-/// The hue curve, as `(from, to)` degrees of OKLCH hue, linear between
-/// points. Its anchors are Tokyo City's hue families: strings (130°),
-/// macros (183°), types (215°), imports and fields (236°), functions
-/// (264°) and keywords (299°) land on yellow-green, herb, lichen, mint,
-/// verdigris and patina (104° to 192°; verdigris is 159°), keeping
-/// their order and close to their spacing. The ambers below make room.
+/// The hue curve, as `(from, to)` degrees of OKLCH hue, linear between points.
+/// Its anchors are Tokyo City's hue families: strings (130°), macros (183°),
+/// types (215°), imports and fields (236°), functions (264°) and keywords
+/// (299°) land on yellow-green, herb, lichen, mint, verdigris and patina (104°
+/// to 192°; verdigris is 159°), keeping their order and close to their spacing.
+/// The ambers below make room.
 const HUES: [(f32, f32); 11] = [
     (0.0, 0.0),
     (60.0, 60.0),

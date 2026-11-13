@@ -1,11 +1,10 @@
-//! Twentyliner-style routing: every message replans every car. Signed
-//! floor numbers encode call direction, with down calls negative. The
-//! lobby's up call has sign 0, so only a car with no direction takes it,
-//! a deliberate copy of the original's quirk. Cars under half load
-//! consider calls along their direction; the nearest useful floor wins.
-//! Claiming a call keeps other cars from taking it in the same planning
-//! pass. The chosen car gets matching indicators and one trip, replacing
-//! its current one.
+//! Twentyliner-style routing: every message replans every car. Signed floor
+//! numbers encode call direction, with down calls negative. The lobby's up call
+//! has sign 0, so only a car with no direction takes it, a deliberate copy of
+//! the original's quirk. Cars under half load consider calls along their
+//! direction; the nearest useful floor wins. Claiming a call keeps other cars
+//! from taking it in the same planning pass. The chosen car gets matching
+//! indicators and one trip, replacing its current one.
 
 use elevato::{Building, Elevator, Message, elevator, floor};
 use iced::{Subscription, Task, Widget};
@@ -76,8 +75,8 @@ impl Program {
                         car.load_factor = load_factor;
                         car.target = None;
                         car.pressed.retain(|&pressed| pressed != at);
-                        // The car cleared the calls its lamps answered; a
-                        // call of 0 is the lobby's up call.
+                        // The car cleared the calls its lamps answered; a call
+                        // of 0 is the lobby's up call.
                         let (up, down) = car.lamps;
                         self.calls.retain(|&call| {
                             !(call.abs() == at && ((call >= 0 && up) || (call < 0 && down)))
@@ -102,8 +101,8 @@ impl Program {
         let mut tasks = Vec::new();
         for car in &mut self.cars {
             let at = car.at;
-            // Direction: toward the last pressed floor that is not the
-            // current one (the original's `.pop()`); 0 when none is.
+            // Direction: toward the last pressed floor that is not the current
+            // one (the original's `.pop()`); 0 when none is.
             let mut direction = 0;
             for &pressed in &car.pressed {
                 if pressed != at {
@@ -111,8 +110,8 @@ impl Program {
                 }
             }
 
-            // Pickups only when lightly loaded; a directed car takes
-            // only same-direction calls at or beyond its position.
+            // Pickups only when lightly loaded; a directed car takes only
+            // same-direction calls at or beyond its position.
             let mut options = Vec::new();
             if car.load_factor < 0.5 {
                 for &call in &calls {
@@ -126,8 +125,8 @@ impl Program {
             }
             options.extend(car.pressed.iter().copied());
 
-            // The nearest useful floor wins; later entries win ties, like
-            // the original's reduce.
+            // The nearest useful floor wins; later entries win ties, like the
+            // original's reduce.
             let distance = |call: i64| (call.abs() - at).abs();
             let mut best: Option<i64> = None;
             for &option in &options {

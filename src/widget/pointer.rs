@@ -1,8 +1,8 @@
 //! A transparent wrapper that can force the mouse interaction over its
-//! content - the pointer-cursor affordance while the command key is
-//! held for cmd+click navigation. (`mouse_area` cannot do this: its
-//! interaction only fills in when the content reports none, and a text
-//! editor always reports the text cursor.)
+//! content - the pointer-cursor affordance while the command key is held for
+//! cmd+click navigation. (`mouse_area` cannot do this: its interaction only
+//! fills in when the content reports none, and a text editor always reports the
+//! text cursor.)
 
 use iced::advanced::layout::Limits;
 use iced::advanced::widget::{Meta, Operation, Tree};
@@ -10,8 +10,8 @@ use iced::advanced::{Layout, Shell, Widget, overlay, renderer};
 use iced::mouse::{self, Cursor};
 use iced::{Event, Length, Rectangle, Size, Vector};
 
-/// Wraps `content`, forcing `interaction` while the cursor is over it
-/// (pass `None` to change nothing).
+/// Wraps `content`, forcing `interaction` while the cursor is over it (pass
+/// `None` to change nothing).
 pub fn pointer<W>(content: W, interaction: Option<mouse::Interaction>) -> Pointer<W> {
     Pointer {
         content,

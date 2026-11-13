@@ -18,11 +18,11 @@ pub enum Direction {
 /// [`crate::World::drain_events`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    /// The elevator has nothing to do: fired when it is added, when its
-    /// dwell completes with no trip, and when a `stop` halts it.
+    /// The elevator has nothing to do: fired when it is added, when its dwell
+    /// completes with no trip, and when a `stop` halts it.
     Idle { elevator: usize },
-    /// The elevator is about to pass a floor it is not stopping at.
-    /// Detected from the braking-distance projection: fired when
+    /// The elevator is about to pass a floor it is not stopping at. Detected
+    /// from the braking-distance projection: fired when
     /// `trunc(future_floor_if_stopped)` changes, never for the current
     /// destination floor.
     PassingFloor {
@@ -30,16 +30,16 @@ pub enum Event {
         floor: usize,
         direction: Direction,
     },
-    /// The elevator physically arrived and snapped exactly onto a floor.
-    /// Fired before exit/boarding processing: the driver dispatches this,
-    /// then calls [`crate::World::process_arrivals`].
+    /// The elevator physically arrived and snapped exactly onto a floor. Fired
+    /// before exit/boarding processing: the driver dispatches this, then calls
+    /// [`crate::World::process_arrivals`].
     StoppedAtFloor { elevator: usize, floor: usize },
     /// A destination button inside the elevator went from unlit to lit.
     /// Pressing an already-lit button emits nothing.
     FloorButtonPressed { elevator: usize, floor: usize },
-    /// A floor's up call button went from unlit to lit - a passenger
-    /// spawned wanting to go up, or an overflow passenger re-pressed after
-    /// an arrival cleared the state. Pressing a lit button emits nothing.
+    /// A floor's up call button went from unlit to lit - a passenger spawned
+    /// wanting to go up, or an overflow passenger re-pressed after an arrival
+    /// cleared the state. Pressing a lit button emits nothing.
     UpButtonPressed { floor: usize },
     /// A floor's down call button went from unlit to lit; the down twin of
     /// [`Event::UpButtonPressed`].

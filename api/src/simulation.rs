@@ -1,20 +1,20 @@
-//! The host's side of the API: a program running against a challenge's
-//! world, one frame at a time.
+//! The host's side of the API: a program running against a challenge's world,
+//! one frame at a time.
 //!
-//! A [`Simulation`] holds the program and [`Building`]. It runs tasks on
-//! the calling thread at fixed points in each physics substep, so the
-//! same challenge, seed, and program reproduce the run. Delivery order:
+//! A [`Simulation`] holds the program and [`Building`]. It runs tasks on the
+//! calling thread at fixed points in each physics substep, so the same
+//! challenge, seed, and program reproduce the run. Delivery order:
 //!
 //! 1. physics steps the world;
-//! 2. riders' presses, passing floors and idle cars are delivered, and
-//!    the tasks they lead to run until none can make progress;
+//! 2. riders' presses, passing floors and idle cars are delivered, and the
+//!    tasks they lead to run until none can make progress;
 //! 3. riders get off and on at the cars that arrived;
 //! 4. each arrival ends its trip's task with
-//!    [`StoppedAtFloor`](elevator::Message::StoppedAtFloor), and the
-//!    program runs to rest again.
+//!    [`StoppedAtFloor`](elevator::Message::StoppedAtFloor), and the program
+//!    runs to rest again.
 //!
-//! Tasks that wait on anything but elevato's own commands never make
-//! progress: there is no clock and no I/O, only the building.
+//! Tasks that wait on anything but elevato's own commands never make progress:
+//! there is no clock and no I/O, only the building.
 
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
@@ -37,16 +37,15 @@ use crate::floor;
 use crate::hub::{self, Command, Hub};
 use crate::message::Message;
 
-/// Hard cap on delivery rounds per dispatch point: a program whose
-/// commands keep raising events past this many rounds has the rest
-/// delivered at the next dispatch point.
+/// Hard cap on delivery rounds per dispatch point: a program whose commands
+/// keep raising events past this many rounds has the rest delivered at the next
+/// dispatch point.
 const DISPATCH_ROUNDS: usize = 128;
 
 /// A program running against a challenge's world.
 ///
-/// Construction runs the program's `new` and polls its tasks until they
-/// rest. The program receives the challenge's bank size before any physics
-/// steps run.
+/// Construction runs the program's `new` and polls its tasks until they rest.
+/// The program receives the challenge's bank size before any physics steps run.
 pub struct Simulation<P, M> {
     hub: Hub,
     run: Run<P, M>,
@@ -79,8 +78,8 @@ struct Run<P, M> {
     receiver: mpsc::UnboundedReceiver<M>,
     /// Each powered car's news and current trip, by its bank index.
     cars: Vec<Car>,
-    /// Cars that stopped this substep, waiting for riders to get off and
-    /// on before their trips end.
+    /// Cars that stopped this substep, waiting for riders to get off and on
+    /// before their trips end.
     arrivals: Vec<Arrival>,
     failure: Option<Error>,
 }
@@ -92,8 +91,8 @@ struct Car {
     trip: Option<Trip>,
 }
 
-/// A trip's task: the floor it goes to, where its messages go, and how
-/// to abort it.
+/// A trip's task: the floor it goes to, where its messages go, and how to abort
+/// it.
 struct Trip {
     floor: usize,
     sender: mpsc::UnboundedSender<elevator::Message>,
@@ -112,8 +111,8 @@ struct Arrival {
     trip: Option<Trip>,
 }
 
-/// A stream or future the simulation polls, and whether it has been
-/// woken since.
+/// A stream or future the simulation polls, and whether it has been woken
+/// since.
 struct Live<T> {
     work: T,
     woken: Arc<Woken>,
@@ -202,8 +201,8 @@ where
     }
 
     /// Advances one frame of `substeps` × [`DT_MAX`] simulated seconds,
-    /// stopping the moment the challenge decides. A panic in the program
-    /// ends the run: this frame and every later one return the error.
+    /// stopping the moment the challenge decides. A panic in the program ends
+    /// the run: this frame and every later one return the error.
     pub fn frame(&mut self, substeps: usize) -> Result<(), Error> {
         let run = &mut self.run;
         hub::enter(&mut self.hub, || {
@@ -222,8 +221,8 @@ where
         })
     }
 
-    /// Hands the program a message from outside its tasks (its view's,
-    /// say); it arrives at the next dispatch point.
+    /// Hands the program a message from outside its tasks (its view's, say); it
+    /// arrives at the next dispatch point.
     pub fn send(&self, message: M) {
         let _ = self.run.sender.unbounded_send(message);
     }
@@ -258,8 +257,8 @@ impl<P, M> Run<P, M>
 where
     M: MaybeSend + 'static,
 {
-    /// Runs `f` unless an earlier panic ended the run, and ends the run
-    /// if `f` panics.
+    /// Runs `f` unless an earlier panic ended the run, and ends the run if `f`
+    /// panics.
     fn guarded(&mut self, f: impl FnOnce(&mut Self)) -> Result<(), Error> {
         if let Some(failure) = &self.failure {
             return Err(failure.clone());
@@ -334,8 +333,8 @@ where
         }
     }
 
-    /// Completes trip tasks after boarding, so their last messages carry
-    /// the arrival's rider counts and load.
+    /// Completes trip tasks after boarding, so their last messages carry the
+    /// arrival's rider counts and load.
     fn arrive(&mut self) {
         for arrival in std::mem::take(&mut self.arrivals) {
             let index = arrival.elevator.index();
@@ -365,8 +364,8 @@ where
             .count()
     }
 
-    /// Polls every woken task and subscription, delivering what they
-    /// produce, until nothing is left to wake.
+    /// Polls every woken task and subscription, delivering what they produce,
+    /// until nothing is left to wake.
     fn settle(&mut self) {
         loop {
             let mut progressed = false;
@@ -456,8 +455,8 @@ where
         self.listeners.extend(started.into_iter().map(Live::new));
     }
 
-    /// Applies the commands the program submitted, in order. A car past
-    /// the bank never enters the building, so its commands do nothing.
+    /// Applies the commands the program submitted, in order. A car past the
+    /// bank never enters the building, so its commands do nothing.
     fn apply(&mut self) {
         for command in hub::commands() {
             if command.elevator().index() >= self.cars.len()
@@ -513,8 +512,8 @@ where
     }
 }
 
-/// Contains panics from the player's code so the game can report them
-/// and keep running.
+/// Contains panics from the player's code so the game can report them and keep
+/// running.
 fn guard<T>(f: impl FnOnce() -> T) -> Result<T, Error> {
     panic::catch_unwind(AssertUnwindSafe(f)).map_err(|payload| {
         let message = payload

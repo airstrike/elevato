@@ -1,0 +1,3 @@
+# Code wraps at rustfmt's default 100 columns; comments at 80, as prose.
+comment_width = 80
+wrap_comments = true

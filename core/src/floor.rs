@@ -1,23 +1,22 @@
 //! Floors and the y-down pixel space they live in.
 //!
-//! Screen coordinates grow downward: floor 0 (ground) sits at the *largest*
-//! y, the top floor at y = 0. With [`HEIGHT`] fixed at 50.0, every physics
+//! Screen coordinates grow downward: floor 0 (ground) sits at the *largest* y,
+//! the top floor at y = 0. With [`HEIGHT`] fixed at 50.0, every physics
 //! constant from the original transcribes verbatim in px units.
 //!
 //! Each floor carries an up and a down call button (the original's
-//! `buttonStates`): passengers press them on spawn and on boarding
-//! overflow; a suitable elevator arrival clears the matching one. The
-//! world owns the press *events* and the re-arrival scan - a floor only
-//! tracks the lit/unlit state.
+//! `buttonStates`): passengers press them on spawn and on boarding overflow; a
+//! suitable elevator arrival clears the matching one. The world owns the press
+//! *events* and the re-arrival scan - a floor only tracks the lit/unlit state.
 
 use crate::event::Direction;
 
 /// Height of one floor in pixels. Never overridden by any challenge.
 pub const HEIGHT: f64 = 50.0;
 
-/// A floor in the building: its level (0 = ground/bottom), its fixed pixel
-/// y position, and its call-button states. Minted by the world; levels are
-/// always in range.
+/// A floor in the building: its level (0 = ground/bottom), its fixed pixel y
+/// position, and its call-button states. Minted by the world; levels are always
+/// in range.
 #[derive(Debug, Clone)]
 pub struct Floor {
     level: usize,
@@ -57,8 +56,8 @@ impl Floor {
     }
 
     /// Lights a call button, returning `true` only on the unlit → lit
-    /// transition (the world emits the press event - and runs the
-    /// re-arrival scan - only then).
+    /// transition (the world emits the press event - and runs the re-arrival
+    /// scan - only then).
     pub(crate) fn press(&mut self, direction: Direction) -> bool {
         let lit = match direction {
             Direction::Up => &mut self.up_pressed,
@@ -69,8 +68,8 @@ impl Floor {
         transitioned
     }
 
-    /// Clears a call button (an arrival whose matching indicator is on
-    /// does this *before* boarding, so overflow passengers can re-press).
+    /// Clears a call button (an arrival whose matching indicator is on does
+    /// this *before* boarding, so overflow passengers can re-press).
     pub(crate) fn clear(&mut self, direction: Direction) {
         match direction {
             Direction::Up => self.up_pressed = false,

@@ -1,6 +1,6 @@
-//! Playback owns the [`Simulation`], pause state, timescale, and seed
-//! policy. It runs without the app screen so tests can compare playback
-//! with a simulation driven directly.
+//! Playback owns the [`Simulation`], pause state, timescale, and seed policy.
+//! It runs without the app screen so tests can compare playback with a
+//! simulation driven directly.
 //!
 //! # Seed policy
 //!
@@ -8,18 +8,18 @@
 //! challenge switch. Runs vary but remain reproducible from the challenge,
 //! seed, and program. The stats bar displays the seed.
 //!
-//! Code that changes mid-attempt breaks that: the seed and the program
-//! on disk no longer reproduce it. [`Playback::edited`] marks its seed;
-//! Restart, booting the current program, is the clean path.
+//! Code that changes mid-attempt breaks that: the seed and the program on disk
+//! no longer reproduce it. [`Playback::edited`] marks its seed; Restart,
+//! booting the current program, is the clean path.
 //!
 //! # Timescale
 //!
-//! An integer in `[1, 39]`, default 2, stepped by the original's
-//! rounded golden-ratio ladder: `round(timescale × 1.618)` up,
-//! `round(timescale / 1.618)` down, clamped ("capped below 40"). One
-//! [`Playback::tick`] advances the simulation by exactly `timescale`
-//! substeps of [`DT_MAX`](crate::core::world::DT_MAX), so live and headless
-//! runs of the same program produce identical statistics.
+//! An integer in `[1, 39]`, default 2, stepped by the original's rounded
+//! golden-ratio ladder: `round(timescale × 1.618)` up, `round(timescale /
+//! 1.618)` down, clamped ("capped below 40"). One [`Playback::tick`] advances
+//! the simulation by exactly `timescale` substeps of
+//! [`DT_MAX`](crate::core::world::DT_MAX), so live and headless runs of the
+//! same program produce identical statistics.
 
 use std::any::Any;
 use std::fmt;
@@ -32,9 +32,9 @@ use iced::{Element, Subscription, Task, Widget};
 use crate::core::challenge::{self, Challenge, Outcome};
 use crate::core::stats::Stats;
 
-/// The built-in starter program - the Rust port of the original's
-/// default implementation, which Reset restores. The canonical copy
-/// lives with the solutions and is included verbatim.
+/// The built-in starter program - the Rust port of the original's default
+/// implementation, which Reset restores. The canonical copy lives with the
+/// solutions and is included verbatim.
 pub const STARTER: &str = include_str!("../tests/solutions/starter.rs");
 
 /// The original's timescale stepping ratio.
@@ -46,9 +46,8 @@ const TIMESCALE_MIN: usize = 1;
 /// Fastest playback (the original caps "below 40").
 const TIMESCALE_MAX: usize = 39;
 
-/// The player's program, ready to boot on any challenge: its `new`,
-/// `update`, `view` and `subscription`, whatever its state and message
-/// types.
+/// The player's program, ready to boot on any challenge: its `new`, `update`,
+/// `view` and `subscription`, whatever its state and message types.
 #[derive(Clone)]
 pub struct Program {
     boot: Arc<Boot>,
@@ -56,8 +55,8 @@ pub struct Program {
 
 type Boot = dyn Fn(&Challenge, u64) -> Result<Box<dyn Run>, simulation::Error>;
 
-/// A program's `view`: any `Fn(&P, &Building) -> impl Widget<M>`, as an
-/// iced application takes its own.
+/// A program's `view`: any `Fn(&P, &Building) -> impl Widget<M>`, as an iced
+/// application takes its own.
 pub trait View<'a, P, M> {
     /// The program's view of `building`.
     fn view(&self, program: &'a P, building: &'a Building) -> impl Widget<M> + 'a;
@@ -74,8 +73,8 @@ where
     }
 }
 
-/// A [`Simulation`] of the player's program and its view, seen without
-/// its state and message types.
+/// A [`Simulation`] of the player's program and its view, seen without its
+/// state and message types.
 pub trait Run {
     /// Advances one frame of `substeps` substeps.
     fn frame(&mut self, substeps: usize) -> Result<(), simulation::Error>;
@@ -91,8 +90,8 @@ pub trait Run {
     fn send(&mut self, input: Input);
 }
 
-/// A message the program's view produced, its type erased so the game's
-/// own messages can carry it back to the program.
+/// A message the program's view produced, its type erased so the game's own
+/// messages can carry it back to the program.
 #[derive(Clone)]
 pub struct Input(Arc<Mutex<Option<Box<dyn Any + Send>>>>);
 
@@ -157,8 +156,7 @@ where
 }
 
 impl Program {
-    /// A program from its four functions, as iced takes an
-    /// application's.
+    /// A program from its four functions, as iced takes an application's.
     pub fn new<P, M, V>(
         new: impl Fn(usize) -> (P, Task<M>) + 'static,
         update: impl Fn(&mut P, M, &Building) -> Task<M> + Clone + 'static,
@@ -192,9 +190,9 @@ impl Program {
     }
 }
 
-/// A playable simulation: the challenge roster and the live [`Run`] of
-/// the player's program for the current attempt. Constructed paused on
-/// challenge 1; [`Playback::tick`] advances it while running.
+/// A playable simulation: the challenge roster and the live [`Run`] of the
+/// player's program for the current attempt. Constructed paused on challenge 1;
+/// [`Playback::tick`] advances it while running.
 pub struct Playback {
     program: Program,
     roster: Vec<Challenge>,
@@ -275,8 +273,8 @@ impl Playback {
         self.error.as_ref()
     }
 
-    /// Whether code changed mid-attempt, so the seed and the program on
-    /// disk no longer reproduce it.
+    /// Whether code changed mid-attempt, so the seed and the program on disk no
+    /// longer reproduce it.
     pub fn edited(&self) -> bool {
         self.edited
     }
@@ -300,9 +298,8 @@ impl Playback {
         }
     }
 
-    /// Starts or pauses playback. Ignored once the attempt has decided
-    /// (restart or pick the next challenge instead) or after the
-    /// program panicked.
+    /// Starts or pauses playback. Ignored once the attempt has decided (restart
+    /// or pick the next challenge instead) or after the program panicked.
     pub fn toggle(&mut self) {
         if self.ended() || self.run.is_none() || self.error.is_some() {
             return;
@@ -310,18 +307,17 @@ impl Playback {
         self.running = !self.running;
     }
 
-    /// Starts the same challenge with the next seed and the current
-    /// program. Playback resumes immediately; the attempt uses one code
-    /// version from the start.
+    /// Starts the same challenge with the next seed and the current program.
+    /// Playback resumes immediately; the attempt uses one code version from the
+    /// start.
     pub fn restart(&mut self) {
         self.seed += 1;
         self.rebuild();
         self.running = self.run.is_some();
     }
 
-    /// Switches to the challenge at `index`, advancing the seed and
-    /// leaving the fresh attempt paused. Out-of-roster indices are
-    /// ignored.
+    /// Switches to the challenge at `index`, advancing the seed and leaving the
+    /// fresh attempt paused. Out-of-roster indices are ignored.
     pub fn select_challenge(&mut self, index: usize) {
         if index >= self.roster.len() {
             return;
@@ -332,16 +328,16 @@ impl Playback {
         self.running = false;
     }
 
-    /// Advances to the next challenge (the success banner's button and
-    /// the Cmd+Page Down hotkey); a no-op on the last one.
+    /// Advances to the next challenge (the success banner's button and the
+    /// Cmd+Page Down hotkey); a no-op on the last one.
     pub fn next_challenge(&mut self) {
         if self.challenge + 1 < self.roster.len() {
             self.select_challenge(self.challenge + 1);
         }
     }
 
-    /// Steps back to the previous challenge (Cmd+Page Up); a no-op on
-    /// the first one.
+    /// Steps back to the previous challenge (Cmd+Page Up); a no-op on the first
+    /// one.
     pub fn previous_challenge(&mut self) {
         if let Some(previous) = self.challenge.checked_sub(1) {
             self.select_challenge(previous);
@@ -363,10 +359,10 @@ impl Playback {
         self.timescale = step(self.timescale, 1.0 / TIMESCALE_RATIO);
     }
 
-    /// Advances one frame of `timescale` substeps, when running. A
-    /// panic in the program pauses playback and is surfaced via
-    /// [`Playback::error`]; a decided challenge pauses playback so the
-    /// driving tick subscription can stop.
+    /// Advances one frame of `timescale` substeps, when running. A panic in the
+    /// program pauses playback and is surfaced via [`Playback::error`]; a
+    /// decided challenge pauses playback so the driving tick subscription can
+    /// stop.
     pub fn tick(&mut self) {
         if !self.running {
             return;
@@ -385,10 +381,9 @@ impl Playback {
         }
     }
 
-    /// Builds the run for the current (challenge, seed) - dropping the
-    /// previous attempt first, so its world is freed before the new one
-    /// exists. A panic in the program's `new` leaves no run and records
-    /// the error.
+    /// Builds the run for the current (challenge, seed) - dropping the previous
+    /// attempt first, so its world is freed before the new one exists. A panic
+    /// in the program's `new` leaves no run and records the error.
     fn rebuild(&mut self) {
         self.error = None;
         self.edited = false;

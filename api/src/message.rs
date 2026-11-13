@@ -2,8 +2,8 @@
 
 use crate::{Elevator, elevator, floor};
 
-/// Messages from car and trip tasks and [`riders()`](crate::riders),
-/// handled by the program's `update`.
+/// Messages from car and trip tasks and [`riders()`](crate::riders), handled by
+/// the program's `update`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
     /// Something about a car: it is idle, a trip is under way, or a rider

@@ -1,7 +1,7 @@
 // rawr
-//! Exercises stop commands, indicators, arrival counts, and a custom view
-//! so the browser runner supports those calls. Cars sweep the building
-//! and serve destination buttons; one spare car has no idle listener.
+//! Exercises stop commands, indicators, arrival counts, and a custom view so
+//! the browser runner supports those calls. Cars sweep the building and serve
+//! destination buttons; one spare car has no idle listener.
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::widget::{column, text};

@@ -1,6 +1,6 @@
-//! A child component's requests to its parent. The parent handles the
-//! optional instruction against state it owns, and maps the [`Task`]'s
-//! messages before returning it to iced.
+//! A child component's requests to its parent. The parent handles the optional
+//! instruction against state it owns, and maps the [`Task`]'s messages before
+//! returning it to iced.
 
 use iced::Task;
 
