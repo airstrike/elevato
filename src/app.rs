@@ -1,9 +1,6 @@
-//! The application: a splash screen that hands off - via a measured
-//! viewport width - to the game screen: challenge toolbar, stats bar,
-//! the program's view of the building, and the editor pane, a thin TEA
-//! shell over
-//! [`crate::playback::Playback`] composed with the [`crate::editor`]
-//! cell.
+//! The application shell around [`crate::playback`] and [`crate::editor`].
+//! The splash measures the viewport before opening the game, so its
+//! toolbar, building view, and editor use the right layout from the start.
 
 use iced::event::{self, Event};
 use iced::keyboard::{self, key::Named};
@@ -239,8 +236,7 @@ where
     #[cfg(target_arch = "wasm32")]
     {
         console_log::init().expect("initialize logger");
-        // The page's own hook (rawr's, which keeps the message for the
-        // page) still runs after the console's.
+        // Preserve rawr's hook so the page receives the panic message too.
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             console_error_panic_hook::hook(info);
@@ -249,9 +245,8 @@ where
     }
 
     let settings = iced::Settings {
-        // Safari now ships WebGPU, so wgpu auto-detects it on iOS - and
-        // renders black. WebGL2 is the proven web path; force it on
-        // wasm (Chrome included: consistency beats novelty here).
+        // Automatic WebGPU selection can render a black canvas on iOS.
+        // Use WebGL2 consistently across browsers.
         #[cfg(target_arch = "wasm32")]
         backend: iced::Backend::Hardware(iced::backend::Api::OpenGL),
         ..iced::Settings::default()
@@ -303,9 +298,8 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
             let _ = open::that(ORIGINAL);
         }
         Message::Measured { target, restarted } => {
-            // The measured viewport picks the layout. A game the web
-            // page restarts gets no measure and lays out wide, as it
-            // does for any viewport it hasn't heard of.
+            // A game the web page restarts gets no measurement and falls
+            // back to the wide layout.
             let width = target
                 .as_ref()
                 .and_then(selector::Target::visible_bounds)
@@ -347,10 +341,11 @@ pub fn update(app: &mut App, message: Message) -> Task<Message> {
     Task::none()
 }
 
-/// rawr's reload outcomes on every screen; on the game, a tick every
-/// 16 ms while playback runs (silent while paused, so a paused app
-/// costs nothing), plus the challenge hotkeys: Cmd+Page Down /
-/// Cmd+Page Up step through the roster.
+/// Watches reloads on every screen. The game adds a 16 ms tick while
+/// playback runs, resizes, and hotkeys: Cmd+Page Down / Page Up step
+/// through the challenges; Ctrl+O / Ctrl+I, Cmd+[ / Cmd+], the browser
+/// back/forward keys and the mouse back/forward buttons walk the docs
+/// history.
 pub fn subscription(app: &App) -> Subscription<Message> {
     let reloads = app.host.outcomes().map(Message::Reloaded);
     let Screen::Game(game) = &app.screen else {
@@ -404,7 +399,6 @@ pub fn subscription(app: &App) -> Subscription<Message> {
     Subscription::batch([reloads, tick, hotkeys, resizes])
 }
 
-/// Renders whichever screen is up.
 pub fn view(app: &App) -> Element<'_, Message> {
     match &app.screen {
         Screen::Splash => splash(),
@@ -504,7 +498,6 @@ impl Game {
         }
     }
 
-    /// Applies a game-screen message.
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => {
@@ -698,9 +691,7 @@ impl Game {
         if self.viewport_width < NARROW {
             return self.narrow_view(mode);
         }
-        // Code on the left, world on the right - the reading order of
-        // the game loop: write, then watch - twin rounded cards around
-        // a draggable hairline divider.
+        // The editor precedes the world in reading order: write, then watch.
         let workspace = container(
             vertical_split(
                 card(self.code_face()),
@@ -913,8 +904,8 @@ impl Game {
         tree.boxed()
     }
 
-    /// The library page being read, with a pointer cursor while command is held
-    /// (the cmd+click affordance).
+    /// The library page, with a pointer cursor while command is held to
+    /// signal that cmd+click opens a definition.
     fn docs_face(&self) -> Element<'_, Message> {
         pointer(
             self.docs.view().map(Message::Docs),
@@ -1168,8 +1159,9 @@ fn card(content: Element<'_, Message>) -> Element<'_, Message> {
         .boxed()
 }
 
-/// The seed readout, marked once code changed under the attempt: the
-/// seed alone no longer reproduces it, and Restart is the clean path.
+/// The seed readout, marked once code changed mid-attempt: the seed and
+/// the program on disk no longer reproduce it, and Restart is the clean
+/// path.
 fn seed(playback: &Playback) -> String {
     if playback.edited() {
         format!("{} (edited)", playback.seed())

@@ -9,9 +9,8 @@
 //! to do; a trip is a task that streams the floors the car passes and
 //! ends when it stops.
 
-/// What happens in the building: news from a car, or a rider calling
-/// one from a floor. Every command's task and `riders()` produce it, and
-/// your `update` handles it.
+/// Messages from car and trip tasks and `riders()`, handled by your
+/// `update`. Stop and indicator tasks produce no messages themselves.
 pub enum Message {
     /// Something about a car: it is idle, a trip is under way, or a rider
     /// inside pressed a button.
@@ -29,20 +28,18 @@ pub enum Message {
 ///     }
 pub fn run(new, update, view, subscription) -> iced::Result;
 
-/// Your program: `main.rs` writes these four, and `main` hands them to
-/// `run`.
+/// Define these four functions in `main.rs` and pass them to `run`.
 impl Program {
-    /// Boots your program on a challenge. It learns how many elevators
-    /// the challenge's bank holds, powers on the ones it uses, and returns
-    /// the first tasks.
+    /// Receives the challenge's bank size. Power on the cars you need and
+    /// return their tasks to receive messages.
     ///
     ///     let (elevator, start) = Elevator::new();
     ///     (Self, start)
     pub fn new(elevators: usize) -> (Program, Task<Message>);
 
-    /// Handles one message, reading the building as it stands, and
-    /// answers with tasks. The elevators move when the tasks you return
-    /// run, in the order you return them.
+    /// Handles one message and reads the building's current state.
+    /// Movement and indicator commands take effect when their tasks run,
+    /// in the order you return them.
     pub fn update(&mut self, message: Message, building: &Building) -> Task<Message>;
 
     /// Draws the building:
@@ -60,10 +57,10 @@ impl Program {
 /// you powered on, and the riders.
 pub fn view<Message>(building: &Building) -> impl Widget<Message>;
 
-/// Every button a rider presses that was not lit: a `Message::Floor`
-/// for a call on a floor (`UpButtonPressed` or `DownButtonPressed`), a
-/// `Message::Elevator` with `FloorButtonPressed` for a destination
-/// pressed inside a car. A lit button stays silent.
+/// Reports presses of unlit buttons: `Message::Floor` for a call on a
+/// floor (`UpButtonPressed` or `DownButtonPressed`), `Message::Elevator`
+/// with `FloorButtonPressed` for a destination inside a car.
+/// A lit button stays silent.
 pub fn riders() -> Subscription<Message>;
 
 /// A direction of travel.

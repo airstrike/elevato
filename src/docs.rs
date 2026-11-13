@@ -26,7 +26,7 @@ pub enum Page {
 }
 
 impl Page {
-    /// Every page, in resolution-preference order for editor clicks.
+    /// The pages indexed for definition lookup.
     pub const ALL: &[Self] = &[Self::Elevator, Self::Floor, Self::Building, Self::Lib];
 
     /// The page's source text.
@@ -66,7 +66,7 @@ pub struct State {
     content: text_editor::Content,
     /// Where cmd+clicks came from, newest last - the back stack.
     history: Vec<(Page, usize)>,
-    /// Where back() came from, newest last - the forward stack.
+    /// Where [`State::back`] came from, newest last - the forward stack.
     future: Vec<(Page, usize)>,
 }
 
@@ -110,8 +110,7 @@ impl State {
         }
     }
 
-    /// The definition the name under the cursor (set by the click just
-    /// performed) names.
+    /// Resolves the name under the cursor within the current page.
     pub fn reference_at_cursor(&self) -> Option<(Page, usize)> {
         let position = self.content.cursor().position;
         resolution::resolve(Scope::Page(self.page), position.line, position.index)
@@ -158,7 +157,7 @@ impl State {
         }
     }
 
-    /// Un-does a [`State::back`].
+    /// Undoes a [`State::back`].
     pub fn forward(&mut self) {
         if let Some((page, line)) = self.future.pop() {
             self.history
@@ -180,8 +179,7 @@ impl State {
         self.content.perform(Action::Select(Motion::End));
     }
 
-    /// The pane: the current file's name over its source, rendered
-    /// under the same highlighter and style as the code editor.
+    /// The reference text, using the code editor's highlighter and style.
     pub fn view(&self) -> Element<'_, Message> {
         text_editor(&self.content)
             .height(Fill)

@@ -1,16 +1,11 @@
-//! Elevator kinematics, destination queue, and door dwell.
+//! Elevator motion, one active trip, and door dwell.
 //!
-//! A faithful transcription of the original's `elevator.js` +
-//! `interfaces.js` pair, merged into one type (the facade split was a JS
-//! artifact). All motion happens in y-down pixel space: moving *up* the
-//! building means *negative* velocity. Constants transcribe verbatim from
-//! research §3 because [`crate::floor::HEIGHT`] is 50.0.
+//! Motion uses y-down pixel coordinates: moving up means negative
+//! velocity. With [`crate::floor::HEIGHT`] at 50.0, the physics constants
+//! match Elevator Saga's pixel units.
 //!
-//! Per-substep order (research §3): clamp velocity → integrate position
-//! (velocity applied *before* the acceleration update - explicit Euler) →
-//! update acceleration (brake / soft-ramp accelerate / recover) → arrival
-//! snap check. The whole update is skipped while the elevator is busy
-//! dwelling at a floor.
+//! Each substep applies velocity before acceleration (explicit Euler),
+//! then checks for arrival. Motion pauses while the doors are open.
 
 use crate::event::{Direction, Event};
 use crate::floor;
@@ -24,8 +19,8 @@ pub const DECELERATION: f64 = floor::HEIGHT * 2.6;
 /// Top speed, px/s (2.6 floors/s).
 pub const MAXSPEED: f64 = floor::HEIGHT * 2.6;
 
-/// Seconds an elevator dwells (doors open, physics skipped, "busy") at
-/// every on-floor arrival before checking its queue again.
+/// Seconds the doors stay open after a trip or reopening. Motion pauses
+/// during the dwell; a pending trip starts after it ends.
 pub const DWELL: f64 = 1.0;
 
 /// Float-compare tolerance used for destination matching and the
@@ -137,8 +132,8 @@ impl Elevator {
         self.move_count
     }
 
-    /// Whether the elevator is in its door dwell (physics skipped, cannot
-    /// be commanded to move).
+    /// Whether the doors are open. Motion pauses, but a command can set
+    /// the trip to take after the dwell.
     pub fn is_busy(&self) -> bool {
         self.dwell_spent.is_some()
     }
@@ -153,7 +148,9 @@ impl Elevator {
         self.going_up_indicator
     }
 
-    /// Sets the going-up indicator (boarding filters use it in Phase 3).
+    /// Decides whether riders going up board at the next arrival, whether
+    /// that floor's up call clears, and whether an up call reopens the car
+    /// while it stands on a floor.
     pub fn set_going_up_indicator(&mut self, on: bool) {
         self.going_up_indicator = on;
     }
@@ -163,7 +160,9 @@ impl Elevator {
         self.going_down_indicator
     }
 
-    /// Sets the going-down indicator.
+    /// Decides whether riders going down board at the next arrival, whether
+    /// that floor's down call clears, and whether a down call reopens the
+    /// car while it stands on a floor.
     pub fn set_going_down_indicator(&mut self, on: bool) {
         self.going_down_indicator = on;
     }
@@ -265,10 +264,9 @@ impl Elevator {
         }
     }
 
-    /// Lights the in-elevator destination button for `floor`, emitting
+    /// Lights the destination button for `floor`, emitting
     /// [`Event::FloorButtonPressed`] only on the unlit → lit transition.
-    /// Passengers press these in Phase 3; the arrival path already clears
-    /// them.
+    /// Arrival clears the button.
     pub(crate) fn press_floor_button(&mut self, floor: usize, events: &mut Vec<Event>) {
         let lit = self
             .pressed_floors
@@ -324,9 +322,9 @@ impl Elevator {
         }
     }
 
-    /// One physics substep (research §3 order). Skipped entirely while
-    /// busy. `arrivals` collects this elevator's id when the step lands it
-    /// exactly on a floor, for staged processing by the driver.
+    /// One physics substep, skipped during dwell. An arrival on a floor
+    /// is staged in `arrivals` so the driver can dispatch events before
+    /// processing riders.
     pub(crate) fn update_movement(
         &mut self,
         dt: f64,
@@ -345,13 +343,11 @@ impl Elevator {
         let velocity_sign = sign(self.velocity_y);
 
         if velocity_sign == direction_sign {
-            // Moving toward the destination (or standing at it).
             let stopping = distance_to_achieve_speed(self.velocity_y, 0.0, DECELERATION);
             if stopping * 1.05 < -destination_diff.abs() {
-                // 105% of braking distance covers the remaining distance:
-                // brake with exactly the deceleration needed to stop at the
-                // destination, capped at DECELERATION * 1.1 for
-                // overshoot-recovery headroom.
+                // Braking distance (+5%) covers the rest: brake at exactly
+                // the needed deceleration, capped at DECELERATION * 1.1 for
+                // overshoot recovery.
                 let required =
                     acceleration_to_achieve_change_distance(self.velocity_y, 0.0, destination_diff);
                 let deceleration = (DECELERATION * 1.1).min(required.abs());
@@ -362,7 +358,6 @@ impl Elevator {
                 self.velocity_y += direction_sign * acceleration * dt;
             }
         } else if velocity_sign == 0.0 {
-            // Standing still away from the destination: accelerate toward it.
             let acceleration = (destination_diff * 5.0).abs().min(ACCELERATION);
             self.velocity_y += direction_sign * acceleration * dt;
         } else {
@@ -390,8 +385,8 @@ impl Elevator {
         self.handle_new_state(events);
     }
 
-    /// Bookkeeping after every position change: cached floor + move count,
-    /// and passing-floor detection from the braking-distance projection.
+    /// Counts rounded floor changes as moves. Passing-floor events use
+    /// the braking projection so handlers can still command a stop there.
     fn handle_new_state(&mut self, events: &mut Vec<Event>) {
         let rounded = self.exact_floor().round() as i64;
         if rounded != self.current_floor {
@@ -427,12 +422,10 @@ impl Elevator {
         self.previous_trunc_future_floor = trunc_future;
     }
 
-    /// Snaps onto the destination and runs the arrival sequence: ending
-    /// the trip and starting the dwell happen *here*, synchronously -
-    /// before the driver ever sees [`Event::StoppedAtFloor`] - matching
-    /// the original's `stopped` reaction firing ahead of
-    /// `stopped_at_floor`. Exit/boarding stay staged for
-    /// [`crate::World::process_arrivals`].
+    /// Ends a completed trip and starts its dwell synchronously, before
+    /// [`Event::StoppedAtFloor`], as the original's `stopped` fires ahead
+    /// of `stopped_at_floor`. Riders wait for
+    /// [`crate::World::process_arrivals`] so handlers can set indicators.
     fn snap_and_arrive(&mut self, events: &mut Vec<Event>, arrivals: &mut Vec<usize>) {
         let delta = self.destination_y - self.y;
         self.move_by(delta, events);

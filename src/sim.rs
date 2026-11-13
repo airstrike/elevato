@@ -1,9 +1,7 @@
-//! The building canvas: floor strips, elevators, and passengers drawn
-//! in the original's layout geometry (research §3) - floors are 50 px
-//! strips, elevators start at x = 200 spaced `20 + width` apart with
-//! `width = 10 px × capacity` - uniformly scaled down to fit the canvas
-//! when the building outgrows it. Solid colors only - gradients no-op on
-//! wasm.
+//! The building canvas uses Elevator Saga's geometry: 50 px floors,
+//! cars starting at x = 200 with 20 px gaps, and 10 px of car width per
+//! passenger slot. The drawing shrinks uniformly to fit the canvas.
+//! Solid colors only: gradients silently no-op on wasm.
 
 use iced::widget::{canvas, text};
 use iced::{Color, Point, Rectangle, Renderer, Size, Theme, alignment, mouse};
@@ -25,14 +23,12 @@ const SLOT_WIDTH: f64 = 10.0;
 /// Screen padding around the drawn building, px.
 const MARGIN: f32 = 16.0;
 
-/// The canvas program: a copy of the world as it stood when the view was
-/// built, drawn afresh every frame.
+/// A world snapshot drawn on demand without cached canvas geometry.
 pub struct View {
     world: World,
 }
 
 impl View {
-    /// Draws `world` as it stands.
     pub fn new(world: World) -> Self {
         Self { world }
     }
@@ -291,8 +287,7 @@ fn triangle(
     frame.fill(&path, color);
 }
 
-/// A simple standing figure - head over body - with its feet at
-/// world-space `(x, y)`. No icon art; shapes are enough.
+/// A standing figure with its feet at world-space `(x, y)`.
 fn person(frame: &mut canvas::Frame, camera: &Camera, x: f64, y: f64, color: Color) {
     let feet = camera.point(x, y);
     frame.fill_rectangle(

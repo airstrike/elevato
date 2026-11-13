@@ -1,7 +1,5 @@
-//! Persistence of the player's program, timescale and challenge,
-//! iced-free. The public surface is [`load`] and [`save`]; each
-//! platform arm supplies its own implementation behind the `platform`
-//! module seam.
+//! Persistence of the player's program, timescale, and challenge through
+//! [`load`] and [`save`], with separate native and web storage.
 //!
 //! Natively the program is the marked file itself, `program/src/main.rs`:
 //! saving writes the file `rawr run` watches and `cargo build` compiles,
@@ -9,9 +7,8 @@
 //! dir (`~/.config/elevato` or the OS equivalent). The wasm arm stores
 //! them in localStorage, mirroring the original game's persistence.
 //!
-//! Saving happens on explicit Save - a documented
-//! simplification of the original's debounced autosave. A game rawr
-//! restarts for an edit resumes on the saved challenge.
+//! Save and Cmd+Enter write the program. A game rawr restarts for an edit
+//! resumes on the saved challenge.
 
 /// A persisted snapshot: the program's text (which need not compile -
 /// Save stores whatever the player wrote) and, when readable, the
@@ -33,16 +30,16 @@ pub fn load() -> Option<Saved> {
     platform::load()
 }
 
-/// Persists `code`, `timescale` and `challenge`. A failure means
-/// nothing was saved this time, never anything fatal.
+/// Writes `code`, `timescale`, then `challenge`. A write error stops the
+/// save without undoing earlier writes.
 pub fn save(code: &str, timescale: usize, challenge: usize) -> std::io::Result<()> {
     platform::save(code, timescale, challenge)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 mod platform {
-    //! The native arm: the program at `program/src/main.rs`, the timescale
-    //! in a file under the platform config dir.
+    //! The program lives at `program/src/main.rs`; timescale and challenge
+    //! each have a file under the platform config directory.
 
     use std::fs;
     use std::io;
@@ -96,8 +93,8 @@ mod platform {
         challenge: usize,
     ) -> io::Result<()> {
         fs::write(program, code)?;
-        // No resolvable config dir means nowhere to keep the timescale;
-        // the program itself is saved either way.
+        // The program saves even when there is no config directory for
+        // the timescale and challenge.
         let Some(directory) = directory else {
             return Ok(());
         };
@@ -161,17 +158,16 @@ mod platform {
 
 #[cfg(target_arch = "wasm32")]
 mod platform {
-    //! The wasm arm: the `elevato_program_v3` and `elevato_timescale`
-    //! localStorage entries. Untestable natively, so it stays a thin
-    //! transliteration of the same (code, timescale) contract the
-    //! native tests pin down.
+    //! Web storage uses separate localStorage entries for the program,
+    //! timescale, and challenge. Untestable natively, so it mirrors the
+    //! contract the native tests pin down.
 
     use std::io;
 
     use super::Saved;
 
-    // `v3`: iced programs. `v2` held programs of the prelude API and
-    // `v1` Rhai, neither of which compiles now; both are left unread.
+    // `v3` holds iced programs. `v2` (the prelude API) and `v1` (Rhai)
+    // no longer compile, so they are left unread, not deleted.
     const CODE_KEY: &str = "elevato_program_v3";
     const TIMESCALE_KEY: &str = "elevato_timescale";
     const CHALLENGE_KEY: &str = "elevato_challenge";

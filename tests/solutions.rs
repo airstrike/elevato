@@ -1,7 +1,5 @@
-//! Ported community solutions, compiled as ordinary Rust against the API
-//! and run headlessly through a [`Simulation`], asserting known failures
-//! as well as known passes - plus the parity pins: each solution's final
-//! stats on a fixed challenge and seed, freezing the simulation's
+//! Community solutions run through [`Simulation`] with fixed challenges
+//! and seeds. Expected outcomes and final statistics check the simulation's
 //! delivery order and the solutions' behaviour together.
 //!
 //! The behaviour tests at the end drive the API with small programs
@@ -70,8 +68,8 @@ fn pin(stats: Stats) -> (usize, usize, u64, u64, u64) {
 #[test]
 fn the_starter_runs_challenge_one_to_its_time_limit() {
     let run = run!(starter, 0, SEED, 3700);
-    // Shuttling floors 0 and 1 cannot clear a 3-floor challenge; the
-    // point is a clean run to the time limit, moving somebody.
+    // A 0↔1 shuttle can never clear a 3-floor challenge, on any seed; the
+    // point is a clean run to the time limit that moves riders.
     assert_eq!(run.outcome(), Outcome::Failed);
     assert_eq!(pin(run.stats()), (3, 26, 60017, 56683, 3372));
 }
@@ -92,10 +90,9 @@ fn the_naive_port_fails_challenge_five() {
 
 #[test]
 fn the_indicator_port_passes_challenge_four_where_the_naive_fails() {
-    // Challenge 4 (8 floors, 2 elevators) is where routing calls and
-    // steering boarding with the lamps first beat blind dispatch. Over
-    // seeds 1 to 10 the indicator port passes 7 and the naive 1; seed
-    // 1 is decisive both ways.
+    // With 8 floors and 2 cars, steering boarding with the indicators
+    // beats blind dispatch: over seeds 1 to 10 the indicator port passes
+    // 7 and the naive 1. Seed 1 is decisive: indicator passes, naive fails.
     const CHALLENGE_FOUR: usize = 3;
     const DECISIVE_SEED: u64 = 1;
 

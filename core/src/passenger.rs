@@ -1,5 +1,5 @@
-//! Passengers: the spawn-to-removal lifecycle with the original's
-//! load-bearing walk timers.
+//! Passengers from spawn to removal. Walk timers affect button presses,
+//! boarding eligibility, and wait statistics.
 //!
 //! A passenger spawns waiting on a floor, boards by walking to an elevator
 //! slot over exactly 1.0 s (only then pressing the in-elevator destination
@@ -13,9 +13,8 @@
 /// in-elevator destination button.
 const BOARD_WALK: f64 = 1.0;
 
-/// Cosmetic passenger appearance, drawn at spawn. The draw itself is
-/// load-bearing - it keeps the RNG stream aligned - even though nothing in
-/// the simulation reads the result.
+/// Cosmetic appearance drawn at spawn. The draw affects the random
+/// sequence even though the simulation does not use the result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Appearance {
     /// 1-in-41 chance per spawn.
@@ -155,9 +154,8 @@ impl Passenger {
         };
     }
 
-    /// Exits at `floor` (the destination), starting a `walk` -second
-    /// walk-off. The elevator slot is already freed on the elevator's
-    /// side; stats record the exit at this moment.
+    /// Exits at `floor` and walks off for `walk` seconds. The slot must
+    /// already be free; stats record the exit before the walk completes.
     pub(crate) fn exit(&mut self, floor: usize, walk: f64) {
         self.current_floor = floor;
         self.state = State::Exiting {
@@ -165,9 +163,8 @@ impl Passenger {
         };
     }
 
-    /// Advances walk timers by one substep, reporting a timer that ran
-    /// out. Completion is strictly-past, mirroring the dwell timer: a walk
-    /// completes on the first substep that pushes it *below* zero.
+    /// Advances walk timers and reports completion only when a timer
+    /// falls below zero, matching the dwell timer's strict boundary.
     pub(crate) fn tick(&mut self, dt: f64) -> Option<Completion> {
         match &mut self.state {
             State::Waiting | State::Riding { .. } => None,

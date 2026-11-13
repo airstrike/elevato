@@ -1,21 +1,16 @@
-//! The playback state machine: owns the [`Simulation`] running the
-//! player's program, the run/pause flag, the integer timescale, and the
-//! seed policy. The app screen is a thin TEA shell over this type, so
-//! live playback can be tested headlessly (`tests/playback.rs` is the
-//! fixed-timestep determinism gate).
+//! Playback owns the [`Simulation`], pause state, timescale, and seed
+//! policy. It runs without the app screen so tests can compare playback
+//! with a simulation driven directly.
 //!
 //! # Seed policy
 //!
-//! The original game is unseeded - every run is different and none is
-//! reproducible. Elevato instead seeds each run from an **attempt
-//! counter** starting at 1 and incremented on every restart and
-//! challenge switch: consecutive attempts vary like the original's, yet
-//! any single run is reproducible from (challenge, seed, program). The
-//! app displays the seed in its stats bar so a run can be referenced.
+//! Each attempt uses a counter starting at 1, incremented on restart or
+//! challenge switch. Runs vary but remain reproducible from the challenge,
+//! seed, and program. The stats bar displays the seed.
 //!
-//! An edit that reaches the program mid-run breaks that: the run is
-//! then [`Playback::edited`], and the app marks its seed so. A restart
-//! is the clean path back, booting the program as it now stands.
+//! Code that changes mid-attempt breaks that: the seed and the program
+//! on disk no longer reproduce it. [`Playback::edited`] marks its seed;
+//! Restart, booting the current program, is the clean path.
 //!
 //! # Timescale
 //!
@@ -23,9 +18,8 @@
 //! rounded golden-ratio ladder: `round(timescale × 1.618)` up,
 //! `round(timescale / 1.618)` down, clamped ("capped below 40"). One
 //! [`Playback::tick`] advances the simulation by exactly `timescale`
-//! substeps of [`DT_MAX`](crate::core::world::DT_MAX) - the
-//! fixed-timestep deviation that makes a live run replay a headless run
-//! byte for byte.
+//! substeps of [`DT_MAX`](crate::core::world::DT_MAX), so live and headless
+//! runs of the same program produce identical statistics.
 
 use std::any::Any;
 use std::fmt;
@@ -215,9 +209,8 @@ pub struct Playback {
 }
 
 impl Playback {
-    /// Builds the first attempt of `program` (challenge 1, seed 1,
-    /// timescale 2),
-    /// paused until [`Playback::toggle`].
+    /// Starts on challenge 1, seed 1, timescale 2, paused until
+    /// [`Playback::toggle`].
     pub fn new(program: Program) -> Self {
         let mut playback = Self {
             program,
@@ -282,8 +275,8 @@ impl Playback {
         self.error.as_ref()
     }
 
-    /// Whether the program's code changed while this attempt ran, so
-    /// the seed and the program on disk no longer reproduce it.
+    /// Whether code changed mid-attempt, so the seed and the program on
+    /// disk no longer reproduce it.
     pub fn edited(&self) -> bool {
         self.edited
     }
@@ -317,10 +310,9 @@ impl Playback {
         self.running = !self.running;
     }
 
-    /// Tears the attempt down and starts a fresh one on the same
-    /// challenge with the next seed, auto-started like the original's
-    /// restart flow. The program boots as it now stands, so the fresh
-    /// attempt is reproducible again.
+    /// Starts the same challenge with the next seed and the current
+    /// program. Playback resumes immediately; the attempt uses one code
+    /// version from the start.
     pub fn restart(&mut self) {
         self.seed += 1;
         self.rebuild();

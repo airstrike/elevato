@@ -1,13 +1,9 @@
 //! The host's side of the API: a program running against a challenge's
 //! world, one frame at a time.
 //!
-//! A [`Simulation`] holds the program's state and the [`Building`], and
-//! calls the program's `update` and `subscription` the way an iced
-//! runtime does, but it runs the
-//! program's tasks itself, on its own thread, at fixed points of each
-//! physics substep. That keeps a run deterministic - the same seed and
-//! program replay the same run - and it delivers every message at the
-//! moment the original game called its handlers:
+//! A [`Simulation`] holds the program and [`Building`]. It runs tasks on
+//! the calling thread at fixed points in each physics substep, so the
+//! same challenge, seed, and program reproduce the run. Delivery order:
 //!
 //! 1. physics steps the world;
 //! 2. riders' presses, passing floors and idle cars are delivered, and
@@ -48,10 +44,9 @@ const DISPATCH_ROUNDS: usize = 128;
 
 /// A program running against a challenge's world.
 ///
-/// Minted from a challenge, a seed and the program's `new`, `update` and
-/// `subscription` (`transformation-method`): construction builds the
-/// building, tells the program how many cars its bank holds, and runs the
-/// tasks `new` returns, so a simulation that exists is under way.
+/// Construction runs the program's `new` and polls its tasks until they
+/// rest. The program receives the challenge's bank size before any physics
+/// steps run.
 pub struct Simulation<P, M> {
     hub: Hub,
     run: Run<P, M>,
@@ -60,7 +55,7 @@ pub struct Simulation<P, M> {
 /// Why a program stopped running.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
-    /// The program panicked; the run it was in is over.
+    /// A panic in the player's program ends the attempt.
     #[error("your program panicked: {0}")]
     Panicked(String),
 }
@@ -161,10 +156,10 @@ impl<P, M> Simulation<P, M>
 where
     M: MaybeSend + 'static,
 {
-    /// Builds the building for `challenge` and boots the program on it:
-    /// `new` learns how many cars the bank holds and powers on the ones it
-    /// wants, and its tasks run (each powered car reporting
-    /// [`Idle`](elevator::Message::Idle)), all before this returns.
+    /// Boots the program with the challenge's bank size. Its tasks and
+    /// subscriptions run until they rest, including initial
+    /// [`Idle`](elevator::Message::Idle) messages for cars with listeners.
+    /// Returns [`Error::Panicked`] if the player's code panics.
     pub fn new(
         challenge: &Challenge,
         seed: u64,
@@ -272,8 +267,8 @@ where
         guard(|| f(self)).inspect_err(|error| self.failure = Some(error.clone()))
     }
 
-    /// Delivers the world's events and runs the program until it rests,
-    /// round after round while its commands raise more.
+    /// Delivers events and polls tasks until they rest or event delivery
+    /// reaches [`DISPATCH_ROUNDS`]. Commands can raise fresh events.
     fn dispatch(&mut self) {
         self.settle();
         for _ in 0..DISPATCH_ROUNDS {
@@ -288,7 +283,6 @@ where
         }
     }
 
-    /// Sends one world event where it belongs.
     fn route(&mut self, event: Event) {
         match event {
             Event::Idle { elevator } => {
@@ -340,8 +334,8 @@ where
         }
     }
 
-    /// Ends the trips of the cars that arrived, now that riders have got
-    /// off and on.
+    /// Completes trip tasks after boarding, so their last messages carry
+    /// the arrival's rider counts and load.
     fn arrive(&mut self) {
         for arrival in std::mem::take(&mut self.arrivals) {
             let index = arrival.elevator.index();
@@ -453,8 +447,7 @@ where
         }
     }
 
-    /// Starts the subscriptions the program now asks for and stops the
-    /// ones it no longer does.
+    /// Keeps subscriptions in sync with the program's current state.
     fn subscribe(&mut self) {
         let recipes = subscription::into_recipes((self.subscription)(&self.program));
         let started = self
@@ -486,7 +479,6 @@ where
                 } => {
                     let index = elevator.index();
                     let world = self.building.world_mut();
-                    // A floor past the top is the top floor, as in the original.
                     let floor = floor.min(world.floors().len().saturating_sub(1));
                     world.go_to_floor(index, floor as f64);
                     let trip = Trip {
@@ -521,7 +513,8 @@ where
     }
 }
 
-/// Runs `f`, turning a panic into an [`Error`].
+/// Contains panics from the player's code so the game can report them
+/// and keep running.
 fn guard<T>(f: impl FnOnce() -> T) -> Result<T, Error> {
     panic::catch_unwind(AssertUnwindSafe(f)).map_err(|payload| {
         let message = payload

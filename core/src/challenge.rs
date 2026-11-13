@@ -1,16 +1,14 @@
 //! Challenge configurations, success conditions, and outcomes.
 //!
-//! A [`Challenge`] is the validated proof bundle a [`crate::World`] is
-//! minted from (`proof-bundle` + `smart-constructor-newtype`): floor and
-//! elevator counts, per-elevator capacities (cycling `capacities[i % len]`
-//! like the original's `elevatorCapacities`), the spawn rate, and the
-//! success [`Condition`]. The 19 playable configs and the three hidden
-//! fitness configs are data here, verbatim from the original
-//! `challenges.js` / `fitness.js`.
+//! A [`Challenge`] validates floor and elevator counts, the capacity
+//! cycle, and the spawn rate before [`crate::World`] uses them. The 19
+//! playable challenges and three hidden fitness scenarios match Elevator
+//! Saga's `challenges.js` and `fitness.js`.
 //!
-//! Boundary semantics (research §4): a condition *triggers* at `>=` its
-//! limits and *succeeds* at `<=` them, so hitting a limit exactly still
-//! passes.
+//! A condition triggers when a value reaches (`>=`) a limit or the
+//! target, and succeeds if the target is met and every wait or move limit
+//! is respected (`<=`), so hitting a limit exactly passes. A time limit
+//! only triggers: the target met on that substep still passes.
 
 use crate::stats::Stats;
 
@@ -42,8 +40,9 @@ pub enum Error {
 pub enum Condition {
     /// "Transport N people in T seconds or less."
     UserCountWithinTime { user_count: usize, time_limit: f64 },
-    /// "Transport N people and let no one wait more than W seconds" - no
-    /// time limit; fails the instant anyone's wait reaches W.
+    /// "Transport N people and let no one wait more than W seconds."
+    /// Reaching W ends the run; it passes only if N is also reached and
+    /// the maximum wait does not exceed W.
     UserCountWithMaxWaitTime {
         user_count: usize,
         max_wait_time: f64,
@@ -112,8 +111,7 @@ pub enum Outcome {
     Failed,
 }
 
-/// A validated challenge configuration - the only thing a
-/// [`crate::World`] can be minted from.
+/// A validated configuration from which [`crate::World`] is built.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Challenge {
     floor_count: usize,
@@ -124,9 +122,9 @@ pub struct Challenge {
 }
 
 impl Challenge {
-    /// Validates a configuration into a challenge. A `spawn_rate` of zero
-    /// is allowed and disables spawning entirely (useful for kinematics
-    /// tests and sandboxes); the original never uses it.
+    /// Requires at least two floors, one elevator, a nonempty cycle of
+    /// positive capacities, and a finite, non-negative spawn rate.
+    /// Returns an [`Error`] for invalid values. A zero rate disables spawning.
     pub fn new(
         floor_count: usize,
         elevator_count: usize,
@@ -158,12 +156,10 @@ impl Challenge {
         })
     }
 
-    /// Number of floors in the building.
     pub fn floor_count(&self) -> usize {
         self.floor_count
     }
 
-    /// Number of elevators.
     pub fn elevator_count(&self) -> usize {
         self.elevator_count
     }
@@ -185,7 +181,7 @@ impl Challenge {
         self.spawn_rate
     }
 
-    /// The success condition the minted world evaluates.
+    /// The condition evaluated after each substep's arrival processing.
     pub fn condition(&self) -> Condition {
         self.condition
     }

@@ -25,8 +25,8 @@ impl Building {
         self.world.floors().len()
     }
 
-    /// The floor the car is at, or nearest to while it travels. A car
-    /// past the challenge's bank never left the lobby.
+    /// The car's nearest floor, rounded while it travels. Returns 0 for
+    /// a car beyond the challenge's bank.
     pub fn floor_of(&self, elevator: Elevator) -> usize {
         self.world
             .elevators()

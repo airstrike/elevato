@@ -1,18 +1,11 @@
-//! Seeded, deterministic randomness: a hand-rolled PCG32.
+//! Seeded randomness using PCG-XSH-RR 64/32 with a fixed stream,
+//! hand-rolled per the conservative-deps rule. The original's
+//! `Math.random` is unseeded, so its runs never reproduce.
 //!
-//! The original game uses unseeded `Math.random` via lodash `_.random`
-//! (inclusive on both ends), making runs irreproducible. elevato seeds
-//! explicitly instead. The generator is PCG-XSH-RR 64/32 transcribed from
-//! the reference C implementation - hand-rolled rather than a crate
-//! dependency, per the conservative-deps rule.
-//!
-//! RNG call order per spawn (research §6), load-bearing for replay
-//! stability - the world consumes randomness in exactly this order:
-//! weight → display type → spawn floor → destination → slot offset
-//! (`userEntering`, drawn per suitable boarding attempt even when the
-//! elevator turns out to be full) → rotation offset
-//! (`handleButtonRepressing`, drawn once per call-button event fire) →
-//! exit walk duration ([`Pcg32::random_f64`]).
+//! Replay depends on the order of draws in [`crate::world`]. Each spawn
+//! draws weight, appearance, spawn floor, then destination. Call-button
+//! events draw a scan offset; suitable boarding attempts draw a slot
+//! offset, even for a full car; exits draw a walk duration.
 
 /// A PCG-XSH-RR 64/32 generator on a fixed stream, minted from a seed.
 #[derive(Debug, Clone)]

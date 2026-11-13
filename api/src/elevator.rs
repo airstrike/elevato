@@ -11,18 +11,18 @@ use crate::{Direction, message};
 /// What a car tells the program.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
-    /// The car has nothing to do: when it is powered on, and whenever it
-    /// finishes a trip or a [`Elevator::stop`] halts it. It arrives through
+    /// The car has nothing to do: on power-on, after its doors close with
+    /// no trip waiting, or when [`Elevator::stop`] halts it. Arrives through
     /// the task [`Elevator::new`] returns.
     Idle,
-    /// A rider inside pressed the button for this floor, and it was not
-    /// lit. It arrives through [`riders()`](crate::riders).
+    /// A rider presses an unlit destination button for this floor.
+    /// Arrives through [`riders()`](crate::riders) after the boarding walk.
     FloorButtonPressed(usize),
     /// The car is about to pass this floor without stopping, heading in
     /// this direction. A trip's task streams one per floor it passes.
     PassingFloor(usize, Direction),
-    /// The car stopped at the floor its trip was going to: the last
-    /// message of that trip's task, sent once riders have got off and on.
+    /// The trip's last message, sent at its destination after riders get
+    /// off and on.
     StoppedAtFloor {
         /// Where the car stopped.
         floor: usize,
@@ -30,8 +30,8 @@ pub enum Message {
         exited: usize,
         /// How many riders got on here.
         boarded: usize,
-        /// The riders' weight over the car's capacity: 0 when empty,
-        /// about 1 when full.
+        /// Total rider weight over capacity × 100: 0 empty, about 1 full.
+        /// Riders weigh 55 to 100, so `full` is the exact test.
         load_factor: f64,
         /// Whether every place in the car is taken.
         full: bool,
@@ -40,10 +40,10 @@ pub enum Message {
 
 /// A car of the challenge's bank.
 ///
-/// [`Elevator::new`] powers on the bank's next car. Each command returns
-/// a [`Task`], and nothing happens before the program hands that task
-/// back from `new` or `update`. A trip's task and the car's news carry
-/// [`Message`](message::Message)s; the other commands' tasks carry none.
+/// [`Elevator::new`] powers on the bank's next car. Movement and indicator
+/// commands run only when the program returns their [`Task`]s from `new`
+/// or `update`. Car and trip tasks carry [`Message`](message::Message)s;
+/// other command tasks carry none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Elevator(usize);
 
@@ -52,9 +52,8 @@ impl Elevator {
     /// it with the task that streams its news: [`Message::Idle`] at once,
     /// and again whenever it has nothing left to do.
     ///
-    /// The challenge's bank holds as many cars as `new` was told. A car
-    /// asked for past that never enters the building: it says nothing,
-    /// and its commands do nothing.
+    /// The bank size is the argument to the program's `new`. Cars beyond
+    /// that limit never enter the building, send messages, or act on commands.
     pub fn new() -> (Self, Task<message::Message>) {
         let (sender, receiver) = mpsc::unbounded();
         let elevator = hub::power_on(Some(sender));
@@ -66,7 +65,6 @@ impl Elevator {
         Self(index)
     }
 
-    /// Its index in the bank.
     pub(crate) fn index(self) -> usize {
         self.0
     }
@@ -76,9 +74,9 @@ impl Elevator {
         task.map(move |message| message::Message::Elevator(self, message))
     }
 
-    /// A trip to `floor`, replacing the car's current trip, whose task
-    /// then ends with no further message. A floor past the top is the top
-    /// floor, as in the original.
+    /// Starts a trip to `floor`, replacing the current trip and ending
+    /// its task without further messages. Floors above the top are clamped
+    /// to the top floor.
     ///
     /// The task streams [`Message::PassingFloor`] while the car travels
     /// and ends with [`Message::StoppedAtFloor`] when it gets there.

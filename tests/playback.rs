@@ -1,7 +1,5 @@
-//! The fixed-timestep determinism gate: a live playback of N ticks
-//! produces byte-identical stats to the same frames driven directly
-//! through a [`Simulation`] of the same program, including across the
-//! challenge's mid-run decision.
+//! Live playback and a directly driven [`Simulation`] of the same program
+//! produce identical statistics, including when a challenge ends mid-frame.
 
 #[path = "solutions/starter.rs"]
 #[allow(dead_code)]

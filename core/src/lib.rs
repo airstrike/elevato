@@ -2,11 +2,10 @@
 //! stats, and challenges. No iced, no rawr - headless and testable on its
 //! own.
 //!
-//! A [`World`] is minted from a [`challenge::Challenge`] and a seed, and
-//! driven by anything implementing [`controller::Controller`] through the
-//! fixed-step runner in [`headless`] - the sole owner of the substep and
-//! event-dispatch loop (see [`world`] for the contract). The `script`
-//! crate's rawr runtime replays that same contract for player programs.
+//! A [`World`] starts from a [`challenge::Challenge`] and a seed. Native
+//! strategies implement [`controller::Controller`] and run through
+//! [`headless`]. Player programs run through `elevato_api::simulation`.
+//! Both drivers follow the substep and event-dispatch contract in [`world`].
 
 pub mod challenge;
 pub mod controller;

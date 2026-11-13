@@ -1,7 +1,7 @@
-//! Semantic colors and widget styles. Every `.style()` call site in the
-//! app passes a named fn from this module - no inline style closures -
-//! and the sim canvas reads its colors from [`palette`]. Solid colors
-//! only: gradients silently no-op on the wasm build.
+//! Shared colors and widget styles for the app and simulation canvas.
+//! Every `.style()` call passes a named fn from this module, never an
+//! inline closure, and the canvas reads its colors from [`palette`].
+//! Solid colors only: gradients silently no-op on wasm.
 
 use iced::theme::palette::Seed;
 use iced::{Color, Font, Theme, color};
@@ -35,7 +35,6 @@ impl Mode {
         Self::default()
     }
 
-    /// The other mode.
     pub fn toggle(self) -> Self {
         match self {
             Self::Dark => Self::Light,
@@ -43,10 +42,8 @@ impl Mode {
         }
     }
 
-    /// Builds the iced theme from elevato's seed colors, so stock
-    /// widget defaults (pick_list, sliders, text ladders) inherit the
-    /// design instead of iced's stock palette. Surface colors beyond
-    /// the seed are hand-picked in [`palette`].
+    /// Gives stock widgets elevato's seed colors. [`palette`] supplies
+    /// the additional surface colors.
     pub fn to_theme(self) -> Theme {
         let (name, seed) = match self {
             Self::Light => (
@@ -76,11 +73,10 @@ impl Mode {
     }
 }
 
-/// The one bundled face - Geist Mono (OFL, `assets/fonts/OFL.txt`) -
-/// voicing the editor, chrome, and canvas labels alike. Embedded so
-/// both targets render identically; the browser gives fontdb no system
-/// fonts, so wasm has nothing to fall back on. The cosmic-text fork
-/// instances the variable `wght` axis at the requested weight.
+/// Geist Mono for the editor, controls, and canvas labels (OFL,
+/// `assets/fonts/OFL.txt`). Bundled because fontdb has no system fonts in
+/// the browser. The cosmic-text fork selects the variable `wght` axis
+/// at the requested weight.
 pub const MONO_BYTES: &[u8] = include_bytes!("../assets/fonts/GeistMono-Variable.ttf");
 
 /// The bundled face by family name.
@@ -191,7 +187,7 @@ pub mod text {
         }
     }
 
-    /// Script-error text.
+    /// Compiler errors and program panics.
     pub fn failure(theme: &Theme) -> Style {
         Style {
             color: Some(palette(theme).failure),
@@ -235,8 +231,7 @@ pub mod container {
         }
     }
 
-    /// A workspace card - the editor and the world get the *same*
-    /// rounded surface, so the two halves of the split are twins.
+    /// The shared card surface for the editor and world.
     pub fn pane(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {
@@ -264,7 +259,7 @@ pub mod container {
         }
     }
 
-    /// The panic strip under the editor, and a refused edit's.
+    /// The error strip for program panics, compiler errors, and failed saves.
     pub fn error_panel(theme: &Theme) -> Style {
         let palette = palette(theme);
         Style {
@@ -283,9 +278,8 @@ pub mod text_editor {
 
     use super::palette;
 
-    /// The Rust code editor: chromeless - its card (the workspace pane
-    /// it sits in) provides the surface and border, so the editor and
-    /// the world canvas dress identically.
+    /// A transparent editor so its workspace card supplies the surface
+    /// and border, matching the world canvas.
     pub fn code(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
         let _ = status;
@@ -303,9 +297,8 @@ pub mod text_editor {
 }
 
 pub mod button {
-    //! Button styles for `.style()` on `button` widgets: a deliberate
-    //! hierarchy - one filled `primary` per surface, `outline` for
-    //! secondary actions (shadcn-style), `ghost` for tertiary ones.
+    //! Button emphasis: filled `primary` for the main action, `outline`
+    //! for secondary actions, and `ghost` for quieter controls.
 
     use iced::widget::button::{Status, Style};
     use iced::{Border, Theme, border};
@@ -331,7 +324,7 @@ pub mod button {
         }
     }
 
-    /// Outlined, quiet - secondary actions (Restart, Save).
+    /// Outlined secondary actions, such as Restart.
     pub fn outline(theme: &Theme, status: Status) -> Style {
         let palette = palette(theme);
         let base = Style {

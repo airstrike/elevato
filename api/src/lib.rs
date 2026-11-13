@@ -2,23 +2,20 @@
 //! elevators. The game re-exports it at its root, so programs name it
 //! `elevato`.
 //!
-//! A program is an iced program over this crate's [`Message`]. Its `new`
-//! learns how many cars the challenge's bank holds and powers on the
-//! ones it wants with [`Elevator::new`]; its `update` folds each
-//! [`Message`] into its own state, reading the [`Building`] as it
-//! stands, and answers with [`Task`]s; its `view` draws the building;
-//! its `subscription` listens to [`riders()`].
+//! An iced program controls the cars through [`Task`]s and [`Message`]s.
+//! Its `new` receives the bank size and powers on cars with [`Elevator::new`].
+//! Its `update` reads the [`Building`] and returns tasks; `view` draws the
+//! building, and `subscription` listens to [`riders()`].
 //!
 //! - A car's own task, from [`Elevator::new`], says
 //!   [`elevator::Message::Idle`] whenever the car has nothing to do.
 //! - A car moves when the program runs the [`Task`] that
 //!   [`Elevator::go_to_floor`] returns: one trip at a time. The task
 //!   streams [`elevator::Message::PassingFloor`] while the car travels and
-//!   ends with [`elevator::Message::StoppedAtFloor`], which says who got
-//!   off and who got on.
-//! - Riders are the other source of messages: a rider calling a car from
-//!   a floor arrives as a [`Message::Floor`], a rider pressing a button
-//!   inside a car as a [`Message::Elevator`], both through [`riders()`].
+//!   ends with [`elevator::Message::StoppedAtFloor`], which reports how
+//!   many riders get off and on.
+//! - [`riders()`] reports call-button presses as [`Message::Floor`] and
+//!   destination-button presses inside a car as [`Message::Elevator`].
 //!
 //! [`Simulation`] is the host's side: it runs a program against a
 //! challenge's world, deterministically, one frame at a time. The

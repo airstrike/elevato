@@ -1,10 +1,7 @@
-//! The Rust editor pane: a self-contained TEA cell owning the text
-//! buffer, the dirty flag, the Reset backup, and the strip that shows
-//! a saved edit's error. The parent owns the writes (it is told via
-//! [`Instruction`] and answers through [`State::saved`]) and passes
-//! rawr's verdicts down through [`State::reloaded`]; the program's
-//! panic, when it stopped the run, is a read-only prop passed into
-//! [`State::view`].
+//! The Rust editor owns its text, undo history, Reset backup, and error
+//! strip. The parent writes saves requested through [`Instruction`] and
+//! reports them through [`State::saved`] and [`State::reloaded`].
+//! [`State::view`] borrows any panic that ends the player's run.
 //!
 //! Save (the button, or Cmd+S) writes the program; under `rawr run`
 //! that write is what applies the edit. Cmd+Enter saves too, and starts
@@ -35,11 +32,10 @@ pub struct State {
     /// The text Reset replaced, kept for Undo reset. `Content` is not
     /// `Clone`, so backups travel as text snapshots.
     backup: Option<String>,
-    /// Undo history: text snapshots taken *before* each edit burst
-    /// (consecutive typing coalesces into one entry). Restoring puts
-    /// the cursor at the buffer start - a v1 simplification.
+    /// Text snapshots from before each edit burst. Consecutive typing
+    /// shares one entry; restoring places the cursor at the buffer start.
     undo: Vec<String>,
-    /// Redone-able snapshots; cleared by any fresh edit.
+    /// Snapshots available for redo; cleared by any fresh edit.
     redo: Vec<String>,
     /// The kind of the previous edit, for coalescing.
     last_edit: Option<Edit>,
@@ -130,10 +126,9 @@ impl State {
         self.content.text()
     }
 
-    /// The parent's answer to [`Instruction::Save`]: whether the text
-    /// was written.
-    /// A write clears only a write error: rawr's own outcomes clear the
-    /// rest, and a save rawr sees no change in brings none.
+    /// Reports the write requested by [`Instruction::Save`]. Success
+    /// clears write errors only; reload outcomes clear compiler errors.
+    /// Saving unchanged text produces no reload outcome.
     pub fn saved(&mut self, written: io::Result<()>) {
         match written {
             Ok(()) => {
@@ -158,8 +153,7 @@ impl State {
         };
     }
 
-    /// The library definition the name under the cursor (just set by a
-    /// click) names, for the parent's cmd+click jumps.
+    /// Resolves the name under the cursor for the parent's cmd+click jump.
     pub fn reference_at_cursor(&self) -> Option<(docs::Page, usize)> {
         let position = self.content.cursor().position;
         resolution::resolve(
@@ -177,7 +171,6 @@ impl State {
         Some((name, page, line))
     }
 
-    /// Applies an editor message.
     pub fn update(&mut self, message: Message) -> Action<Instruction, Message> {
         match message {
             Message::Edited(action) => {
@@ -231,9 +224,8 @@ impl State {
         }
     }
 
-    /// Books the pre-edit text into the undo history. Consecutive
-    /// typing coalesces into the burst's first snapshot; anything else
-    /// snapshots individually. Any fresh edit invalidates redo.
+    /// Records the text before an edit. Consecutive typing shares the
+    /// burst's first snapshot; other edits each get one. Any edit clears redo.
     fn record(&mut self, kind: Edit) {
         self.redo.clear();
         if kind == Edit::Other || self.last_edit != Some(Edit::Typing) {

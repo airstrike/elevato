@@ -3,10 +3,9 @@
 //! the challenges.
 //!
 //! A program uses the API re-exported here - [`Message`], [`Elevator`],
-//! [`Building`], the [`elevator`] and [`floor`] messages, [`riders()`]
-//! and [`view()`] -
-//! and hands its functions to [`run`], which opens the game with the
-//! program running the elevators.
+//! [`Building`], the [`elevator`] and [`floor`] messages, [`riders()`],
+//! and [`view()`]. It passes its functions to [`run`], which opens the
+//! game with the program controlling the elevators.
 
 pub mod action;
 pub mod app;

@@ -1,5 +1,6 @@
-//! Cmd+click's name resolution: the path under a click, resolved the way
-//! Rust resolves it, to its definition on a page of the library.
+//! Cmd+click lookup for documented API names. Imports and qualified paths
+//! lead to definitions on the library's pages; method calls require a
+//! unique documented name because this lookup does not infer types.
 //!
 //! A click takes the path that ends at the clicked name - `Message`,
 //! `elevator::Message::Idle`, `Elevator::new` - and resolves its first
@@ -512,9 +513,8 @@ mod tests {
         assert_eq!((site.0, line_of(site)), (Page::Lib, "pub enum Message {"));
     }
 
-    /// The API contract: every path a program can name, from the
-    /// starter's imports, and the page its definition is on. A rename or
-    /// addition in `api/` that the pages miss fails here.
+    /// Expected reference pages for these API paths. Missing or renamed
+    /// declarations fail lookup; new API items need an entry here.
     const CONTRACT: &[(&str, Page)] = &[
         ("elevato::run", Page::Lib),
         ("elevato::view", Page::Lib),

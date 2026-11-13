@@ -1,8 +1,6 @@
-//! A wrapper that balances the lines of wrapped text, as CSS's
-//! `text-wrap: balance` does: it lays its content out in the narrowest
-//! width that still takes as few lines as the full width does, so a
-//! wrapped sentence breaks into lines of about one length instead of a
-//! long line and a stray last word.
+//! Balances wrapped text like CSS `text-wrap: balance`. Uses the narrowest
+//! width that preserves the full-width line count, avoiding a short final
+//! line without adding another line.
 
 use iced::advanced::layout::Limits;
 use iced::advanced::widget::{Meta, Tree};

@@ -4,10 +4,9 @@
 /// What riders on a floor do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Message {
-    /// A rider who wants to go up pressed the up button, and it was not
-    /// lit. A rider left behind by a full car presses it again.
+    /// A rider going up presses an unlit call button. Riders left behind
+    /// by a full car press it again after the arrival clears it.
     UpButtonPressed,
-    /// A rider who wants to go down pressed the down button, and it was
-    /// not lit.
+    /// A rider going down presses an unlit call button.
     DownButtonPressed,
 }

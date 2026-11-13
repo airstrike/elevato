@@ -4,9 +4,10 @@
 //!
 //! # Driver contract
 //!
-//! The substep loop is **not** in core - [`crate::headless::run`] owns it
-//! (and is the only driver), so handlers dispatch per-substep exactly as
-//! the original's synchronous events did:
+//! Drivers dispatch events before and after each substep's arrival
+//! processing, so handlers run when the original's synchronous events
+//! fired. Both [`crate::headless::run`] and `elevato_api::simulation`
+//! follow this contract:
 //!
 //! ```text
 //! while remaining > 0.0 && !world.ended() {
@@ -31,23 +32,18 @@
 //!
 //! # Step order
 //!
-//! [`World::step`] mirrors the original `world.update`: advance elapsed →
-//! spawn due passengers → elevator task + movement updates (arrivals are
-//! staged) → passenger walk timers + the every-step `max_wait_time`
-//! refresh → removals → move-count refresh. Challenge conditions are
-//! evaluated at the end of [`World::process_arrivals`] - after this
-//! substep's exits landed - matching the original's `stats_changed`
-//! evaluation running after its (inline) arrival processing.
+//! [`World::step`] advances time, spawns passengers, moves elevators, and
+//! advances passenger walk timers. Wait times include passengers whose
+//! exit walk completes in this step. Challenge conditions are evaluated
+//! at the end of [`World::process_arrivals`], so this substep's exits count.
 //!
 //! # Staged arrivals
 //!
-//! When a step lands an elevator exactly on a floor, the trip's end and
-//! the 1 s dwell start happen synchronously inside the step (the
-//! original's `stopped` reaction runs *before* `stopped_at_floor` fires),
-//! so `StoppedAtFloor` handlers observe a busy elevator with no trip -
-//! but the arrival stays staged until [`World::process_arrivals`], which
-//! clears matching floor call buttons, lets riders exit, and boards
-//! waiting passengers, strictly after `StoppedAtFloor` handlers ran.
+//! Reaching a trip's destination ends the trip and starts the 1 s dwell
+//! inside the step, as the original's `stopped` fires before
+//! `stopped_at_floor`. Core `StoppedAtFloor` handlers therefore see a busy
+//! elevator with no trip. Boarding waits for [`World::process_arrivals`],
+//! so handlers can set the indicators before riders get on.
 //!
 //! # Passing-floor dispatch latency
 //!
@@ -70,9 +66,8 @@ use crate::stats::Stats;
 /// drivers wanting more simulated time call it repeatedly.
 pub const DT_MAX: f64 = 1.0 / 60.0;
 
-/// A deterministic, headless elevator world, minted from a validated
-/// [`Challenge`] and a seed (`transformation-method`: the challenge is
-/// the proof bundle, so construction cannot fail).
+/// A deterministic world built from a validated [`Challenge`] and a seed.
+/// The challenge supplies valid floor counts, capacities, and spawn rate.
 #[derive(Debug, Clone)]
 pub struct World {
     floors: Vec<Floor>,
@@ -85,9 +80,8 @@ pub struct World {
     pending_arrivals: Vec<usize>,
     rng: Pcg32,
     spawn_rate: f64,
-    /// Game-seconds accumulated toward the next spawn. Starts at
-    /// `1.001 / spawn_rate` so one passenger spawns on the very first
-    /// step (research §3).
+    /// Simulated seconds toward the next spawn. For a positive spawn
+    /// rate, starts at `1.001 / spawn_rate` so the first step spawns a rider.
     elapsed_since_spawn: f64,
     condition: Condition,
     outcome: Outcome,
@@ -95,10 +89,9 @@ pub struct World {
 }
 
 impl World {
-    /// Mints a world from a challenge: floors, the bank of cars
-    /// [`World::add_elevator`] adds from (capacities cycling
-    /// `capacities[i % len]`), the seeded spawn stream, and the
-    /// challenge's condition ready to evaluate. No car stands in it yet.
+    /// Starts with empty floors and a seeded spawn stream.
+    /// [`World::add_elevator`] draws cars from the challenge's capacity
+    /// cycle; no cars are present until it is called.
     pub fn new(challenge: &Challenge, seed: u64) -> Self {
         let floor_count = challenge.floor_count();
         let spawn_rate = challenge.spawn_rate();
@@ -136,8 +129,9 @@ impl World {
         &self.elevators
     }
 
-    /// Mutable access to one elevator, for the command-free mutations
-    /// (indicator setters). Event-raising commands live on the world.
+    /// Mutable access for indicator changes. Commands that raise events
+    /// go through the world. Panics if `elevator` is outside this world's
+    /// elevator list.
     pub fn elevator_mut(&mut self, elevator: usize) -> &mut Elevator {
         self.elevators
             .get_mut(elevator)
@@ -171,9 +165,9 @@ impl World {
         self.outcome != Outcome::Running
     }
 
-    /// Advances the simulation by `dt` seconds, clamped to `[0,`
-    /// [`DT_MAX`]`]`, in the original's update order (see the module
-    /// docs). Does nothing once the challenge has ended.
+    /// Advances by `dt` seconds, clamped between zero and [`DT_MAX`].
+    /// Does nothing once the challenge ends. See the module docs for the
+    /// update order and the driver's arrival-processing contract.
     pub fn step(&mut self, dt: f64) {
         if self.ended() {
             return;
@@ -195,13 +189,12 @@ impl World {
         std::mem::take(&mut self.events)
     }
 
-    /// Processes arrivals staged by [`World::step`], after the driver has
-    /// dispatched their `StoppedAtFloor` events. Per arrived elevator, in
-    /// research §3 order: clear the floor call button(s) matching the
-    /// elevator's lit indicator(s) - first, deliberately, so overflow
-    /// passengers re-press - then exits (freeing slots), then boarding in
-    /// spawn order. Ends by evaluating the challenge condition, so a
-    /// decision lands the same substep as the exit that caused it.
+    /// Processes staged arrivals after the driver dispatches core
+    /// `StoppedAtFloor` events. The call buttons matching the car's lit
+    /// indicators clear before boarding, so riders left behind can press
+    /// again. Exits free slots before riders board in spawn order. The
+    /// challenge condition is evaluated last, so a deciding exit ends the
+    /// challenge in this substep.
     pub fn process_arrivals(&mut self) {
         if self.ended() {
             self.pending_arrivals.clear();
@@ -240,8 +233,8 @@ impl World {
         Some(id)
     }
 
-    /// Starts a trip for an elevator, replacing its current one; see
-    /// [`Elevator::destination`].
+    /// Starts a trip, replacing the current one; see [`Elevator::destination`].
+    /// Panics if `elevator` is outside this world's elevator list.
     pub fn go_to_floor(&mut self, elevator: usize, floor: f64) {
         let elevator = self
             .elevators
@@ -250,9 +243,9 @@ impl World {
         elevator.go_to_floor(floor, &mut self.events);
     }
 
-    /// Ends an elevator's trip and, unless it is dwelling, halts it at
-    /// the projected stop point (generally between floors - no arrival
-    /// events, no dwell).
+    /// Ends a trip and, unless the car is dwelling, halts it at the
+    /// projected stop point. A halt between floors emits no arrival and
+    /// starts no dwell. Panics if `elevator` is outside the elevator list.
     pub fn stop(&mut self, elevator: usize) {
         let elevator = self
             .elevators
@@ -261,8 +254,9 @@ impl World {
         elevator.stop();
     }
 
-    /// Asks a standing car for a re-arrival at its floor, ahead of its
-    /// trip, so a rider who re-pressed the call beside it can board.
+    /// Reopens a standing car ahead of its trip so a rider who presses
+    /// the call beside it can board. Panics if `elevator` is outside this
+    /// world's elevator list.
     pub fn reopen(&mut self, elevator: usize) {
         let elevator = self
             .elevators
@@ -271,10 +265,9 @@ impl World {
         elevator.reopen(&mut self.events);
     }
 
-    /// Presses an in-elevator destination button (passengers do this
-    /// 1.0 s after boarding, when their walk to the slot completes),
-    /// emitting [`Event::FloorButtonPressed`] on the unlit → lit
-    /// transition.
+    /// Presses a destination button, emitting [`Event::FloorButtonPressed`]
+    /// only when it is unlit. Passengers press after their 1 s boarding walk.
+    /// Panics if `elevator` or `floor` is outside this world's lists.
     pub fn press_floor_button(&mut self, elevator: usize, floor: usize) {
         let elevator = self
             .elevators
@@ -299,9 +292,8 @@ impl World {
         }
     }
 
-    /// One spawn, consuming randomness in the documented order: weight →
-    /// display type → spawn floor → destination (research §3/§6). The
-    /// newcomer immediately presses the floor's call button.
+    /// Draws weight, appearance, spawn floor, then destination in a fixed
+    /// order for replay. The passenger immediately presses a call button.
     fn spawn_passenger(&mut self) {
         let weight = self.rng.random_inclusive(55, 100);
         let appearance = if self.rng.random_inclusive(0, 40) == 0 {
@@ -357,11 +349,10 @@ impl World {
         self.dispatch_standing_elevator(level, direction);
     }
 
-    /// The re-arrival rule (original `handleButtonRepressing`): scan the
-    /// elevators in a random-rotation order for one standing still on
-    /// this exact floor, not full, with the matching direction indicator
-    /// on - and reopen it, causing a re-arrival the
-    /// presser can board. The rotation offset is drawn once per scan.
+    /// The original's `handleButtonRepressing`: scans from a random
+    /// rotation for a car standing still exactly on this floor, not full,
+    /// with the matching indicator lit, and reopens it so the caller can
+    /// board. One offset is drawn per scan.
     fn dispatch_standing_elevator(&mut self, level: usize, direction: Direction) {
         let count = self.elevators.len();
         let offset = self.rng.random_inclusive(0, (count - 1) as u32) as usize;
@@ -408,14 +399,12 @@ impl World {
         }
     }
 
-    /// One arrived elevator's button-clear → exits → boarding sequence
-    /// (research §3, in exactly that order).
+    /// Clears calls and frees exiting riders' slots before boarding.
     fn process_arrival(&mut self, elevator: usize) {
         let level = self.elevators[elevator].current_floor();
 
-        // 1. Clear the call button(s) whose direction matches a lit
-        //    indicator - before boarding, so overflow passengers re-press
-        //    and the press event re-fires.
+        // Clear the calls matching a lit indicator before boarding, so
+        // riders left behind can press again and raise a fresh event.
         if self.elevators[elevator].going_up_indicator() {
             self.floors[level].clear(Direction::Up);
         }
@@ -423,9 +412,8 @@ impl World {
             self.floors[level].clear(Direction::Down);
         }
 
-        // 2. Exits: every rider bound here leaves, freeing its slot ahead
-        //    of boarding. Wait time is recorded into the stats now; the
-        //    walk-off keeps feeding max_wait_time until removal.
+        // Exits free slots before boarding. The exit records wait time,
+        // but the walk-off still counts toward max_wait_time until removal.
         for index in 0..self.passengers.len() {
             let passenger = &self.passengers[index];
             if passenger.aboard() != Some(elevator) || passenger.destination_floor() != level {
@@ -441,11 +429,8 @@ impl World {
             self.passengers[index].exit(level, walk);
         }
 
-        // 3. Boarding: every waiting passenger on this floor, in spawn
-        //    order. Suitability checks the indicators; capacity is slot
-        //    count only. The slot offset is drawn per suitable attempt -
-        //    even when the elevator turns out to be full - to keep the
-        //    RNG stream aligned with the original's `userEntering`.
+        // Every suitable boarding attempt draws a slot offset, even for
+        // a full car, to keep the random stream stable across replays.
         for index in 0..self.passengers.len() {
             let passenger = &self.passengers[index];
             if !passenger.is_waiting() || passenger.current_floor() != level {

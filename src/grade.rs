@@ -1,21 +1,7 @@
-//! elevato's color grade: the filter that turns a borrowed palette into
-//! one that belongs on elevato's warm graphite and paper, with its
-//! verdigris lamps. It works in OKLCH, so lightness - and with it a
-//! color's contrast against the page - stays as the source palette set
-//! it, and only the hue and colorfulness move:
-//!
-//! - the cool hues, teal through blue to violet, become elevato's
-//!   greens ([`HUES`]): each of Tokyo City's hue families lands on its
-//!   own green, in their original order and about their original
-//!   spacing, while warm hues keep theirs,
-//! - every color leans a little toward verdigris ([`TINT`]),
-//! - takes the theme's share of colorfulness (the `chroma` argument),
-//! - and warms by a touch of yellow ([`WARMTH`]), so cool slate greys
-//!   sit on warm neutrals instead of fighting them.
-//!
-//! The curve was tuned against a swatch library of every syntax kind,
-//! scored by two judges for clarity, likeness to Tokyo City's own
-//! spacing, fit with elevato, and looks.
+//! Adapts syntax colors to elevato's graphite, paper, and verdigris palette.
+//! The grade keeps OKLab lightness before gamut clipping. [`HUES`] maps
+//! cool hues to distinct greens; [`TINT`] adds verdigris, `chroma` scales
+//! colorfulness, and [`WARMTH`] adds yellow to warm the greys.
 
 use iced::Color;
 

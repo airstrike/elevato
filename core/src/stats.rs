@@ -1,11 +1,11 @@
 //! Live simulation statistics, exactly as the original computes them.
 //!
-//! Wait time is *time since spawn* - it includes riding and the post-exit
-//! walk-off until removal. `max_wait_time` therefore climbs every step
-//! while anyone is present; `avg_wait_time` is an incremental mean taken
-//! at each exit; `transported_per_sec` updates only at exits (it does not
-//! decay between them). Challenge conditions read this snapshot after
-//! every substep's arrival processing.
+//! Wait time starts at spawn and includes riding and the walk after exit.
+//! `max_wait_time` tracks the longest wait across exits and everyone still
+//! present, including riders walking off. `avg_wait_time` is a mean taken
+//! at each exit. `transported_per_sec` updates only at exits; it does not
+//! decay between them. Challenge conditions read this snapshot after each
+//! substep's arrival processing.
 
 /// A snapshot of the world's running statistics. Plain data - comparing
 /// two runs' final stats with `==` is the determinism check.
@@ -51,14 +51,12 @@ impl Stats {
         self.move_count
     }
 
-    /// Advances simulated time by one substep.
     pub(crate) fn advance(&mut self, dt: f64) {
         self.elapsed += dt;
     }
 
-    /// Folds one present passenger's current wait into the maximum - the
-    /// every-step refresh that keeps `max_wait_time` climbing while
-    /// anyone waits, rides, or walks off.
+    /// Includes a present passenger's wait in the maximum, whether they
+    /// are waiting, riding, or walking off.
     pub(crate) fn observe_wait(&mut self, wait: f64) {
         self.max_wait_time = self.max_wait_time.max(wait);
     }
@@ -74,7 +72,6 @@ impl Stats {
         self.avg_wait_time = (self.avg_wait_time * (n - 1.0) + wait) / n;
     }
 
-    /// Refreshes the elevator move-count sum after a physics step.
     pub(crate) fn set_move_count(&mut self, move_count: usize) {
         self.move_count = move_count;
     }

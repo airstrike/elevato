@@ -1,7 +1,6 @@
-//! Research §5.1, the wiki's "easy solution": every car serves its own
-//! riders' buttons, goes back to the lobby once it has nothing to do,
-//! and every floor's call goes to the first car. No direction or load
-//! awareness: it clears the first few challenges only.
+//! The wiki's "easy solution": every car serves its own riders' buttons
+//! and returns to the lobby when idle. Every floor call goes to the first
+//! car. It ignores direction and load, clearing only the first challenges.
 //!
 //! Each car is its own small iced component: [`Car`] owns the floors it
 //! has to visit, its `update` takes an [`elevator::Message`], and the

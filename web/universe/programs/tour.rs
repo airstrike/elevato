@@ -1,8 +1,7 @@
 // rawr
-//! The rest of the API, so the runner covers it: each car sweeps up and
-//! down the whole building, stopping where it is when a car is full,
-//! steering boarding with its indicators, and the view says how many
-//! riders it moved above the building.
+//! Exercises stop commands, indicators, arrival counts, and a custom view
+//! so the browser runner supports those calls. Cars sweep the building
+//! and serve destination buttons; one spare car has no idle listener.
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::widget::{column, text};

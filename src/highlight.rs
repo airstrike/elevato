@@ -36,8 +36,7 @@ const GRAMMAR: &str = include_str!("../assets/rust.sublime-syntax");
 /// the previous multiple of this, not from the top.
 const LINES_PER_SNAPSHOT: usize = 50;
 
-/// The syntax set, built exactly once - syntax-set construction is far
-/// too expensive for anything per-frame or per-keystroke.
+/// Built once so edits and redraws do not rebuild the syntax set.
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     let mut builder = SyntaxSetBuilder::new();
     builder.add_plain_text_syntax();
@@ -304,8 +303,7 @@ impl text::Parser for Parser {
     }
 }
 
-/// The embedded Rust syntax, degrading to plain text if the grammar
-/// ever failed to load.
+/// Uses plain text if the embedded Rust grammar fails to load.
 fn syntax() -> &'static SyntaxReference {
     SYNTAXES
         .find_syntax_by_name("Rust")

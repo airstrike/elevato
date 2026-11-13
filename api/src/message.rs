@@ -2,9 +2,8 @@
 
 use crate::{Elevator, elevator, floor};
 
-/// What happens in the building: news from a car, or a rider calling
-/// one from a floor. Every command's task and [`riders()`](crate::riders)
-/// produce it, and a program's `update` handles it.
+/// Messages from car and trip tasks and [`riders()`](crate::riders),
+/// handled by the program's `update`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Message {
     /// Something about a car: it is idle, a trip is under way, or a rider

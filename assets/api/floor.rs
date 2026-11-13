@@ -1,10 +1,10 @@
-/// What riders on a floor do. Arrives through `riders()` as an
-/// `elevato::Message::Floor`, with the floor, a number: the lobby is 0.
+/// Call-button presses, delivered through `riders()` as an
+/// `elevato::Message::Floor`. Floor numbers start at 0 for the lobby.
 pub enum Message {
-    /// A rider going up pressed the up button, and it was not lit. A
-    /// rider a full car left behind presses it again.
+    /// A rider going up presses an unlit call button. Riders left behind
+    /// by a full car press it again after the arrival clears it.
     UpButtonPressed,
 
-    /// A rider going down pressed the down button, and it was not lit.
+    /// A rider going down presses an unlit call button.
     DownButtonPressed,
 }

@@ -1,13 +1,11 @@
-//! The fixed-step headless runner - the one and only driver of the
-//! substep/dispatch loop from the [`crate::world`] contract. The script
-//! runtime (Phase 4), tests, and benchmarks all run worlds through here.
+//! The fixed-step runner for native [`Controller`] implementations.
+//! It follows the dispatch contract in [`crate::world`].
 //!
-//! Each simulated frame is a whole number of [`DT_MAX`] substeps (the
-//! deliberate fixed-timestep deviation from the original's wall-clock
-//! partial substeps): the controller's `update` runs once per frame with
-//! the whole frame dt, then every substep steps physics, dispatches
-//! drained events, processes staged arrivals, and dispatches again. The
-//! loop breaks the moment the challenge decides, mid-frame included.
+//! Each frame contains a whole number of [`DT_MAX`] substeps, so runs do
+//! not depend on wall-clock timing. The controller's `update` runs once
+//! per frame with the full frame dt. Events are dispatched before and
+//! after each substep's arrival processing. A decided challenge ends the
+//! run immediately, even within a frame.
 
 use crate::World;
 use crate::challenge::Outcome;
@@ -43,8 +41,8 @@ pub fn run(
     frames: usize,
     substeps_per_frame: usize,
 ) -> Report {
-    // Every car of the bank stands in the world from the start, each
-    // reporting it is idle, as the original's initial idle round did.
+    // Controllers start with the whole bank available and receive each
+    // car's initial Idle after init returns.
     while world.add_elevator().is_some() {}
     controller.init(world);
     dispatch(world, controller);

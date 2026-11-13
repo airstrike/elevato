@@ -1,14 +1,9 @@
-//! Research §5.2-style, "two sorted lists for up and down": the floors'
-//! calls gather in two sorted lists, an idle car claims a whole list as
-//! one sweep, riders' destinations join the car's stops in travel
-//! order, and the indicators say where the car goes next, so only
-//! riders headed that way get on.
+//! Two sorted lists separate up and down calls. An idle car claims a
+//! whole list as one sweep; riders' destinations join its stops in travel
+//! order. Indicators admit riders headed in the car's next direction.
 //!
-//! Each car is its own small iced component: [`Car`] owns its stops and
-//! its `update` takes an [`elevator::Message`]; the program routes each
-//! car's messages to it and maps its tasks back. A car makes one trip at
-//! a time, to its first stop; a stop it should make on the way replaces
-//! that trip.
+//! Each [`Car`] owns its stops and handles its [`elevator::Message`]s.
+//! A destination on the way to the current stop replaces that trip.
 
 use elevato::{Building, Direction, Elevator, Message, elevator, floor};
 use iced::{Subscription, Task, Widget};
@@ -142,7 +137,6 @@ impl Car {
         let between = |a: usize, b: usize| (a <= floor && floor <= b) || (b <= floor && floor <= a);
         match self.heading {
             Some(next) if between(self.at, next) => {
-                // On the way to the stop it was sent to: stop here first.
                 self.stops.insert(0, floor);
                 self.heading = Some(floor);
                 Task::batch([self.indicate(), self.elevator.go_to_floor(floor)])

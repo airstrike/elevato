@@ -1,7 +1,6 @@
-//! What a TEA cell's `update` hands back to its parent: an optional
-//! `Instruction` the parent must act on (state it owns - playback,
-//! storage, navigation) and a [`Task`] the parent must return to the
-//! iced runtime, suitably `.map`ped.
+//! A child component's requests to its parent. The parent handles the
+//! optional instruction against state it owns, and maps the [`Task`]'s
+//! messages before returning it to iced.
 
 use iced::Task;
 
@@ -59,8 +58,7 @@ impl<I, Message> Action<I, Message> {
         }
     }
 
-    /// Maps the instruction into another type - for re-bubbling a
-    /// child's instruction through an intermediate layer unchanged.
+    /// Wraps a child's instruction for an intermediate parent to pass on.
     pub fn map_instruction<N>(self, f: impl Fn(I) -> N + Send + 'static) -> Action<N, Message>
     where
         I: Send + 'static,
@@ -72,13 +70,11 @@ impl<I, Message> Action<I, Message> {
         }
     }
 
-    /// Sets the instruction.
     pub fn with_instruction(mut self, instruction: I) -> Self {
         self.instruction = Some(instruction);
         self
     }
 
-    /// Sets the task.
     pub fn with_task(mut self, task: Task<Message>) -> Self {
         self.task = task;
         self

@@ -1,6 +1,5 @@
-//! The boundary anything driving a world implements - native Rust
-//! strategies in tests and benchmarks. (The rawr runtime in `script`
-//! replays the same driver contract itself; see its module docs.)
+//! Native Rust strategies for tests and benchmarks. Player programs use
+//! the separate driver in `elevato_api::simulation`.
 //!
 //! A controller receives `&mut World` everywhere so it can issue commands
 //! ([`crate::World::go_to_floor`] and friends) directly; the driver

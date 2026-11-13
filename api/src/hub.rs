@@ -1,10 +1,8 @@
 //! Where a program's tasks meet the simulation running them.
 //!
-//! A [`Simulation`](crate::Simulation) enters its hub around everything
-//! it runs of the program, on the thread that runs it. A command's task
-//! submits the command here when the simulation first polls it, a new
-//! car is handed out here, and [`riders`] streams subscribe here when the
-//! simulation starts them.
+//! [`Simulation`](crate::Simulation) makes its hub current on the thread
+//! while running player code. Tasks submit commands on their first poll;
+//! car allocation and [`riders`] subscriptions use the same hub.
 
 use std::cell::RefCell;
 
@@ -49,7 +47,6 @@ pub(crate) enum Command {
 }
 
 impl Command {
-    /// The car it is for.
     pub(crate) fn elevator(&self) -> Elevator {
         match self {
             Self::PowerOn { elevator, .. }
@@ -65,8 +62,7 @@ thread_local! {
     static CURRENT: RefCell<Option<Hub>> = const { RefCell::new(None) };
 }
 
-/// Runs `f` with `hub` as the current one, and takes it back after,
-/// whether `f` returns or panics.
+/// Makes `hub` current for `f` and recovers it on return or panic.
 pub(crate) fn enter<T>(hub: &mut Hub, f: impl FnOnce() -> T) -> T {
     struct Restore<'a>(&'a mut Hub);
 

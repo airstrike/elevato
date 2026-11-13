@@ -1,11 +1,11 @@
-//! Research §5.3-style ("Twentyliner"): every message re-plans every
-//! car from scratch. Calls are the floors' lit buttons, kept as signed
-//! levels the way the original kept them (down calls negative, so a
-//! lobby up call, +0, has sign 0 and only a car with no direction takes
-//! it - a faithful quirk). A car under half load considers the calls
-//! along its direction; the nearest useful floor wins, the call is
-//! claimed, and the car is sent there with its lamps set to match: its
-//! one trip, replacing whatever trip it was on.
+//! Twentyliner-style routing: every message replans every car. Signed
+//! floor numbers encode call direction, with down calls negative. The
+//! lobby's up call has sign 0, so only a car with no direction takes it,
+//! a deliberate copy of the original's quirk. Cars under half load
+//! consider calls along their direction; the nearest useful floor wins.
+//! Claiming a call keeps other cars from taking it in the same planning
+//! pass. The chosen car gets matching indicators and one trip, replacing
+//! its current one.
 
 use elevato::{Building, Elevator, Message, elevator, floor};
 use iced::{Subscription, Task, Widget};
@@ -23,7 +23,7 @@ struct Car {
     /// Lit destination buttons inside.
     pressed: Vec<i64>,
     load_factor: f64,
-    /// Where it was last sent, while it is on its way.
+    /// The active destination; repeated plans leave the same trip running.
     target: Option<i64>,
     /// Its lamps: (up, down).
     lamps: (bool, bool),
