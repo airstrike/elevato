@@ -117,18 +117,6 @@ pub struct Palette {
     pub success: Color,
     /// Failure red (banner text, the program's panic).
     pub failure: Color,
-    /// Editor tokens: comments.
-    pub syntax_comment: Color,
-    /// Editor tokens: string literals.
-    pub syntax_string: Color,
-    /// Editor tokens: numeric literals.
-    pub syntax_number: Color,
-    /// Editor tokens: `true`/`false`.
-    pub syntax_constant: Color,
-    /// Editor tokens: operators and closure pipes.
-    pub syntax_operator: Color,
-    /// Editor tokens: keywords.
-    pub syntax_keyword: Color,
 }
 
 /// Resolves the semantic palette for the current theme's brightness.
@@ -151,12 +139,6 @@ pub fn palette(theme: &Theme) -> Palette {
             passenger: color!(0xd4cfc2),
             success: color!(0x5fbf77),
             failure: color!(0xd95f4e),
-            syntax_comment: color!(0x8a867c),
-            syntax_string: color!(0x9ec978),
-            syntax_number: color!(0xc9a45c),
-            syntax_constant: color!(0x62c1c9),
-            syntax_operator: color!(0xaaa69b),
-            syntax_keyword: color!(0x50b481),
         }
     } else {
         // Daylight lobby: warm paper, ink text, the same lamp-green.
@@ -175,17 +157,12 @@ pub fn palette(theme: &Theme) -> Palette {
             passenger: color!(0x3f3d37),
             success: color!(0x2e7d43),
             failure: color!(0xc0473a),
-            syntax_comment: color!(0x928d80),
-            syntax_string: color!(0x4e8d3e),
-            syntax_number: color!(0xa07617),
-            syntax_constant: color!(0x137e8a),
-            syntax_operator: color!(0x6f6c64),
-            syntax_keyword: color!(0x2e8c5f),
         }
     }
 }
 
-fn is_dark(theme: &Theme) -> bool {
+/// Whether `theme` is a dark one: its background is darker than mid-grey.
+pub fn is_dark(theme: &Theme) -> bool {
     let background = theme.palette().background.base.color;
     0.299 * background.r + 0.587 * background.g + 0.114 * background.b < 0.5
 }

@@ -12,6 +12,7 @@ pub mod action;
 pub mod app;
 pub mod docs;
 pub mod editor;
+pub mod grade;
 pub mod highlight;
 pub mod icon;
 pub mod playback;

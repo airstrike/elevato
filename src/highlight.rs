@@ -1,10 +1,13 @@
 //! Rust syntax highlighting for the editor: iced's [`text::Parser`]
-//! implemented over syntect's parser, loading the embedded
-//! `assets/rust.sublime-syntax` grammar. Instead of syntect's theme
+//! implemented over syntect's parser, loading Sublime Text's Rust
+//! grammar (`assets/rust.sublime-syntax`). Instead of syntect's theme
 //! machinery, each parsed scope is classified into a [`Kind`], which
-//! [`Kind::style`] colors from [`crate::theme`]'s palette as the editor
-//! draws, so tokens follow the app's light/dark theme without the parser
-//! knowing which theme is active.
+//! [`Kind::style`] colors as the editor draws, so tokens follow the
+//! app's light/dark theme without the parser knowing which is active.
+//!
+//! The colors are the Tokyo City themes' - its dark theme for elevato's
+//! dark one, Tokyo City Lighter for the light - through
+//! [`grade`](crate::grade::grade), elevato's color grade.
 //!
 //! The incremental caching (snapshots every [`LINES_PER_SNAPSHOT`]
 //! lines, `current_line` tracking) mirrors `iced_highlighter`'s own
@@ -13,17 +16,19 @@
 use std::ops::Range;
 use std::sync::LazyLock;
 
-use iced::Theme;
 use iced::advanced::text::{self, highlighter};
+use iced::{Color, Theme};
 use syntect::parsing::{
     ParseState, Scope, ScopeStack, ScopeStackOp, SyntaxDefinition, SyntaxReference, SyntaxSet,
     SyntaxSetBuilder,
 };
 
+use crate::grade::grade;
 use crate::theme;
 
-/// The embedded Rust grammar, compiled into the binary so the wasm
-/// build needs no asset fetching.
+/// Sublime Text's Rust grammar (sublimehq/Packages, under the license in
+/// `assets/rust.sublime-syntax.LICENSE`), compiled into the binary so the
+/// wasm build needs no asset fetching.
 const GRAMMAR: &str = include_str!("../assets/rust.sublime-syntax");
 
 /// Lines per incremental parse snapshot (same rhythm as
@@ -46,57 +51,152 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
 });
 
 /// Scope-prefix → [`Kind`], checked in order; first match wins. Walked
-/// per stack scope from the innermost scope outwards.
-static KINDS: LazyLock<[(Scope, Kind); 7]> = LazyLock::new(|| {
+/// per stack scope from the innermost scope outwards, so a string's
+/// quotes and an attribute's `#` take their construct's kind before the
+/// general `punctuation` entry can claim them.
+static KINDS: LazyLock<Vec<(Scope, Kind)>> = LazyLock::new(|| {
     let scope = |name: &str| Scope::new(name).expect("invariant: the scope literal parses");
     [
-        (scope("comment"), Kind::Comment),
-        (scope("string"), Kind::String),
-        (scope("constant.numeric"), Kind::Number),
-        (scope("constant.language"), Kind::Constant),
-        (scope("constant.character"), Kind::String),
-        (scope("keyword.operator"), Kind::Operator),
-        (scope("keyword"), Kind::Keyword),
+        ("comment", Kind::Comment),
+        ("punctuation.definition.comment", Kind::Comment),
+        ("constant.character.escape", Kind::Escape),
+        ("constant.other.placeholder", Kind::Escape),
+        ("string", Kind::String),
+        ("punctuation.definition.string", Kind::String),
+        ("constant", Kind::Constant),
+        ("entity.name.constant", Kind::Constant),
+        ("keyword.declaration.import", Kind::Import),
+        ("keyword.operator", Kind::Operator),
+        ("keyword", Kind::Keyword),
+        ("storage.modifier", Kind::Modifier),
+        ("storage.type", Kind::Type),
+        ("support.type", Kind::Type),
+        ("entity.name.struct", Kind::Type),
+        ("entity.name.enum", Kind::Type),
+        ("entity.name.union", Kind::Type),
+        ("entity.name.trait", Kind::Type),
+        ("entity.name.type", Kind::Type),
+        ("entity.name.impl", Kind::Type),
+        ("support.macro", Kind::Macro),
+        ("variable.annotation", Kind::Attribute),
+        ("punctuation.definition.annotation", Kind::Attribute),
+        ("entity.name.function", Kind::Function),
+        ("variable.function", Kind::Function),
+        ("variable.language", Kind::SelfValue),
+        ("variable.parameter", Kind::Parameter),
+        ("variable.other.member", Kind::Field),
+        ("punctuation", Kind::Punctuation),
     ]
+    .into_iter()
+    .map(|(name, kind)| (scope(name), kind))
+    .collect()
 });
 
-/// What a highlighted token is. [`Kind::style`] colors each kind from
-/// the current theme's palette.
+/// What a highlighted token is. [`Kind::style`] colors each kind; plain
+/// identifiers stay the editor's text color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     /// Line and block comments.
     Comment,
-    /// String literals, including escapes.
+    /// String and character literals.
     String,
-    /// Numeric literals.
-    Number,
-    /// `true` and `false`.
+    /// Escapes and format placeholders inside a string.
+    Escape,
+    /// Numbers, `true` and `false`, and named constants.
     Constant,
-    /// Operators and punctuation, including closure pipes.
-    Operator,
-    /// Declaration and control keywords.
+    /// Control and declaration keywords.
     Keyword,
+    /// `use`.
+    Import,
+    /// `pub`, `mut` and lifetimes.
+    Modifier,
+    /// Types: primitives, standard and declared ones, and traits.
+    Type,
+    /// Function and method names, declared or called.
+    Function,
+    /// Macro invocations.
+    Macro,
+    /// Attributes: `#[derive(...)]` and kin.
+    Attribute,
+    /// Function and closure parameters.
+    Parameter,
+    /// Struct fields.
+    Field,
+    /// `self`.
+    SelfValue,
+    /// Operators, `as` and `?`.
+    Operator,
+    /// Brackets, separators and path accessors.
+    Punctuation,
 }
 
 impl Kind {
     /// The style of this kind under `theme`: a foreground color only;
     /// the font stays the editor's monospace.
     pub fn style(self, theme: &Theme) -> highlighter::Style {
-        let palette = theme::palette(theme);
-        let color = match self {
-            Kind::Comment => palette.syntax_comment,
-            Kind::String => palette.syntax_string,
-            Kind::Number => palette.syntax_number,
-            Kind::Constant => palette.syntax_constant,
-            Kind::Operator => palette.syntax_operator,
-            Kind::Keyword => palette.syntax_keyword,
+        let colors = if theme::is_dark(theme) {
+            &*DARK
+        } else {
+            &*LIGHT
         };
         highlighter::Style {
-            color: Some(color),
+            color: Some(colors[self as usize]),
             style: None,
         }
     }
 }
+
+/// The colors of every [`Kind`], in declaration order.
+type Colors = [Color; 16];
+
+/// Tokyo City's colors for `kinds`, through elevato's grade.
+fn graded(kinds: [u32; 16]) -> Colors {
+    kinds.map(|hex| grade(Color::from_packed_rgb8(hex)))
+}
+
+/// Tokyo City's dark theme, graded.
+static DARK: LazyLock<Colors> = LazyLock::new(|| {
+    graded([
+        0x526270, // Comment
+        0x9ece6a, // String
+        0x89ddff, // Escape
+        0xff9e64, // Constant
+        0xbb9af7, // Keyword
+        0x7dcfff, // Import
+        0x9d7cd8, // Modifier
+        0x0db9d7, // Type: support.type
+        0x7aa2f7, // Function
+        0x73daca, // Macro: meta.preprocessor
+        0x73daca, // Attribute: meta.preprocessor
+        0xe0af68, // Parameter
+        0x7dcfff, // Field: variable.other.property
+        0xf7768e, // SelfValue: variable.language
+        0x89ddff, // Operator
+        0x9abdf5, // Punctuation: meta.brace
+    ])
+});
+
+/// Tokyo City Lighter, graded.
+static LIGHT: LazyLock<Colors> = LazyLock::new(|| {
+    graded([
+        0x9699a3, // Comment
+        0x485e30, // String
+        0x4c505e, // Escape
+        0x965027, // Constant
+        0x5a4a78, // Keyword
+        0x0f4b6e, // Import
+        0x565f89, // Modifier
+        0x166775, // Type: support.type
+        0x34548a, // Function
+        0x33635c, // Macro: meta.preprocessor
+        0x33635c, // Attribute: meta.preprocessor
+        0x8f5e15, // Parameter
+        0x0f4b6e, // Field: variable.other.property
+        0x8c4351, // SelfValue: variable.language
+        0x4c505e, // Operator
+        0x484c61, // Punctuation: meta.brace
+    ])
+});
 
 /// The Rust parser the text editor highlights with, through
 /// `.highlight_with::<highlight::Parser>((), Kind::style)`.
@@ -241,8 +341,8 @@ impl Iterator for Ranges {
 mod tests {
     use super::*;
 
-    /// Feeds `lines` in order through a fresh highlighter, returning
-    /// each line's classified tokens as (text, kind) pairs.
+    /// Feeds `lines` in order through a fresh parser, returning each
+    /// line's classified tokens as (text, kind) pairs.
     fn tokens(lines: &[&str]) -> Vec<Vec<(String, Kind)>> {
         let mut state = <Parser as text::Parser>::new(&());
         lines
@@ -255,10 +355,17 @@ mod tests {
             .collect()
     }
 
-    fn has(tokens: &[(String, Kind)], text: &str, kind: Kind) -> bool {
+    /// The kind of the token that is exactly `text`, if one is.
+    fn kind(tokens: &[(String, Kind)], text: &str) -> Option<Kind> {
         tokens
             .iter()
-            .any(|(token, k)| token.contains(text) && *k == kind)
+            .find(|(token, _)| token == text)
+            .map(|&(_, kind)| kind)
+    }
+
+    /// The single line `line`, classified.
+    fn line(line: &str) -> Vec<(String, Kind)> {
+        tokens(&[line]).remove(0)
     }
 
     #[test]
@@ -267,80 +374,136 @@ mod tests {
     }
 
     #[test]
-    fn keywords_types_numbers_and_arrows_in_the_starter_are_classified() {
+    fn the_starter_reads_as_rust() {
         let lines: Vec<&str> = crate::playback::STARTER.lines().collect();
-        let classified = tokens(&lines);
+        let all: Vec<(String, Kind)> = tokens(&lines).into_iter().flatten().collect();
+        assert_eq!(kind(&all, "use"), Some(Kind::Import));
+        assert_eq!(kind(&all, "fn"), Some(Kind::Keyword));
+        assert_eq!(kind(&all, "match"), Some(Kind::Keyword));
+        assert_eq!(kind(&all, "pub"), Some(Kind::Modifier));
+        assert_eq!(kind(&all, "Message"), Some(Kind::Type));
+        assert_eq!(kind(&all, "go_to_floor"), Some(Kind::Function));
+        assert_eq!(kind(&all, "self"), Some(Kind::Parameter));
+        assert_eq!(kind(&all, "0"), Some(Kind::Constant));
+        assert_eq!(kind(&all, "=>"), Some(Kind::Operator));
+        assert_eq!(kind(&all, "::"), Some(Kind::Punctuation));
+    }
 
-        let all: Vec<(String, Kind)> = classified.into_iter().flatten().collect();
-        assert!(has(&all, "fn", Kind::Keyword));
-        assert!(has(&all, "match", Kind::Keyword));
-        assert!(has(&all, "struct", Kind::Keyword));
-        // CamelCase reads as a type; the grammar files it under the
-        // constant scope.
-        assert!(has(&all, "Message", Kind::Constant));
-        assert!(has(&all, "0", Kind::Number));
-        assert!(has(&all, "=>", Kind::Operator));
-        assert!(has(&all, "did we forget one?", Kind::Comment));
+    #[test]
+    fn types_primitives_and_suffixes_are_types() {
+        let tokens = line("let x: Vec<usize> = 1_000u32 as usize;");
+        assert_eq!(kind(&tokens, "Vec"), Some(Kind::Type));
+        assert_eq!(kind(&tokens, "usize"), Some(Kind::Type));
+        assert_eq!(kind(&tokens, "1_000"), Some(Kind::Constant));
+        assert_eq!(kind(&tokens, "u32"), Some(Kind::Type));
+        assert_eq!(kind(&tokens, "as"), Some(Kind::Operator));
+    }
+
+    #[test]
+    fn declarations_and_calls_name_functions() {
+        let tokens = line("pub fn go(&mut self, n: u8) { self.stops.first(); }");
+        assert_eq!(kind(&tokens, "go"), Some(Kind::Function));
+        assert_eq!(kind(&tokens, "first"), Some(Kind::Function));
+        assert_eq!(kind(&tokens, "n"), Some(Kind::Parameter));
+        assert_eq!(kind(&tokens, "mut"), Some(Kind::Modifier));
+    }
+
+    #[test]
+    fn macros_and_attributes_are_their_own_kinds() {
+        let tokens = line(r#"println!("{x}");"#);
+        assert_eq!(kind(&tokens, "println!"), Some(Kind::Macro));
+        assert_eq!(kind(&tokens, "{x}"), Some(Kind::Escape));
+        let tokens = line("#[derive(Debug, Clone)]");
+        assert_eq!(kind(&tokens, "#"), Some(Kind::Attribute));
+        assert_eq!(kind(&tokens, "derive"), Some(Kind::Attribute));
     }
 
     #[test]
     fn a_line_comment_swallows_the_rest_of_the_line() {
-        let classified = tokens(&["go_to_floor(e, 2); // let \"x\" = 5"]);
-        let line = &classified[0];
-        assert!(has(line, "2", Kind::Number));
-        // Everything after `//` is one comment token - keywords,
-        // quotes, and digits inside it stay comment-colored.
-        assert!(has(line, "// let \"x\" = 5", Kind::Comment));
+        let tokens = line(r#"go_to_floor(e, 2); // let "x" = 5"#);
+        assert_eq!(kind(&tokens, "2"), Some(Kind::Constant));
+        let comment = tokens
+            .iter()
+            .filter(|&&(_, kind)| kind == Kind::Comment)
+            .map(|(token, _)| token.as_str())
+            .collect::<String>();
+        assert_eq!(comment, r#"// let "x" = 5"#);
     }
 
     #[test]
     fn booleans_are_constants_not_keywords() {
-        let classified = tokens(&["let armed = true;"]);
-        assert!(has(&classified[0], "true", Kind::Constant));
+        assert_eq!(
+            kind(&line("let armed = true;"), "true"),
+            Some(Kind::Constant)
+        );
     }
 
     #[test]
     fn block_comment_state_carries_across_lines() {
         let classified = tokens(&["/* opening", "still inside", "*/ let x = 1;"]);
+        assert!(!classified[1].is_empty());
         assert!(
-            classified[1].iter().all(|(_, kind)| *kind == Kind::Comment),
-            "the middle line must be entirely comment: {:?}",
+            classified[1].iter().all(|&(_, kind)| kind == Kind::Comment),
+            "the middle line is all comment: {:?}",
             classified[1]
         );
-        assert!(!classified[1].is_empty());
-        assert!(has(&classified[2], "1", Kind::Number));
+        assert_eq!(kind(&classified[2], "1"), Some(Kind::Constant));
     }
 
     #[test]
-    fn string_escapes_stay_string_colored() {
-        let classified = tokens(&[r#"let s = "up\ndown";"#]);
-        let line = &classified[0];
-        assert!(has(line, "up", Kind::String));
-        assert!(has(line, r"\n", Kind::String));
+    fn nested_block_comments_close_at_their_own_end() {
+        let tokens = line("/* outer /* inner */ still */ let x = 1;");
+        assert_eq!(kind(&tokens, "let"), Some(Kind::Keyword));
+        assert!(
+            !tokens
+                .iter()
+                .any(|(token, kind)| token.contains("still") && *kind != Kind::Comment),
+            "the outer comment runs past the inner one's end: {tokens:?}"
+        );
+    }
+
+    #[test]
+    fn escapes_stand_out_inside_strings() {
+        let tokens = line(r#"let s = "up\ndown";"#);
+        assert_eq!(kind(&tokens, r"\n"), Some(Kind::Escape));
+        assert!(
+            tokens
+                .iter()
+                .any(|(token, kind)| token.contains("up") && *kind == Kind::String)
+        );
     }
 
     #[test]
     fn raw_strings_run_to_their_matching_hashes() {
-        let classified = tokens(&[r###"let s = r#"say "hi""#; let n = 3;"###]);
-        let line = &classified[0];
-        assert!(has(line, "say", Kind::String));
-        // The inner quote does not close the raw string...
-        assert!(has(line, "hi", Kind::String));
-        // ...and the closing `"#` does: what follows is code again.
-        assert!(has(line, "3", Kind::Number));
+        let tokens = line(r###"let s = r#"say "hi""#; let n = 3;"###);
+        assert!(
+            tokens
+                .iter()
+                .any(|(token, kind)| token.contains("hi") && *kind == Kind::String)
+        );
+        // The inner quote does not close the raw string; the `"#` does.
+        assert_eq!(kind(&tokens, "3"), Some(Kind::Constant));
     }
 
     #[test]
-    fn suffixed_numbers_are_numbers_and_lifetimes_are_not_chars() {
-        let classified = tokens(&["fn f<'a>(x: &'a str) -> char { let n = 2usize; 'z' }"]);
-        let line = &classified[0];
-        assert!(has(line, "2usize", Kind::Number));
-        assert!(has(line, "'z'", Kind::String));
-        assert!(
-            !line
-                .iter()
-                .any(|(token, kind)| token.contains("'a") && *kind == Kind::String),
-            "a lifetime is not a char literal: {line:?}"
-        );
+    fn lifetimes_are_modifiers_and_chars_are_strings() {
+        let tokens = line("fn f<'a>(x: &'a str) -> char { 'z' }");
+        assert_eq!(kind(&tokens, "'a"), Some(Kind::Modifier));
+        assert_eq!(kind(&tokens, "z"), Some(Kind::String));
+    }
+
+    #[test]
+    fn self_in_a_body_is_self() {
+        let tokens = line("let n = self.count;");
+        assert_eq!(kind(&tokens, "self"), Some(Kind::SelfValue));
+    }
+
+    #[test]
+    fn every_kind_has_a_color_in_both_themes() {
+        for kind in [Kind::Comment, Kind::Punctuation] {
+            for theme in [Theme::Light, Theme::Dark] {
+                assert!(kind.style(&theme).color.is_some());
+            }
+        }
     }
 }
