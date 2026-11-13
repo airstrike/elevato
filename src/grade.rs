@@ -5,12 +5,17 @@
 //! it, and only the hue and colorfulness move:
 //!
 //! - the cool hues, teal through blue to violet, become elevato's
-//!   greens ([`HUES`]): blues land on verdigris, violets on sea-teal,
-//!   in their original order, while warm hues keep theirs,
+//!   greens ([`HUES`]): each of Tokyo City's hue families lands on its
+//!   own green, in their original order and about their original
+//!   spacing, while warm hues keep theirs,
 //! - every color leans a little toward verdigris ([`TINT`]),
-//! - loses some colorfulness ([`CHROMA`]), so nothing reads as neon,
+//! - takes the theme's share of colorfulness (the `chroma` argument),
 //! - and warms by a touch of yellow ([`WARMTH`]), so cool slate greys
 //!   sit on warm neutrals instead of fighting them.
+//!
+//! The curve was tuned against a swatch library of every syntax kind,
+//! scored by two judges for clarity, likeness to Tokyo City's own
+//! spacing, fit with elevato, and looks.
 
 use iced::Color;
 
@@ -19,36 +24,56 @@ use iced::Color;
 const VERDIGRIS: Color = Color::from_packed_rgb8(0x50b481);
 
 /// The hue curve, as `(from, to)` degrees of OKLCH hue, linear between
-/// points: the band from teal (175°) to violet (305°) folds into green
-/// to sea-teal (140° to 190°; verdigris is 159°), and yellow-greens
-/// make room for it.
-const HUES: [(f32, f32); 5] = [
+/// points. Its anchors are Tokyo City's hue families: strings (130°),
+/// macros (183°), types (215°), imports and fields (236°), functions
+/// (264°) and keywords (299°) land on yellow-green, herb, lichen, mint,
+/// verdigris and patina (104° to 192°; verdigris is 159°), keeping
+/// their order and close to their spacing. The ambers below make room.
+const HUES: [(f32, f32); 11] = [
     (0.0, 0.0),
-    (100.0, 100.0),
-    (175.0, 140.0),
-    (305.0, 190.0),
+    (60.0, 60.0),
+    (100.0, 94.0),
+    (130.0, 104.0),
+    (183.0, 134.0),
+    (215.0, 152.0),
+    (236.0, 162.0),
+    (264.0, 168.0),
+    (299.0, 192.0),
+    (330.0, 215.0),
     (360.0, 360.0),
 ];
 
 /// How far each color's hue and chroma move toward [`VERDIGRIS`].
-const TINT: f32 = 0.05;
-
-/// The share of colorfulness a graded color keeps.
-const CHROMA: f32 = 0.85;
+const TINT: f32 = 0.04;
 
 /// The yellow added to every color, in OKLab's `b`.
 const WARMTH: f32 = 0.008;
 
-/// `color` through elevato's grade.
-pub fn grade(color: Color) -> Color {
+/// `color` through elevato's grade, keeping `chroma` of its colorfulness.
+pub fn grade(color: Color, chroma: f32) -> Color {
     let (_, toward_a, toward_b) = oklab(VERDIGRIS);
     let (l, a, b) = oklab(color);
     let (a, b) = rehue(a, b);
-    let a = (a + (toward_a - a) * TINT) * CHROMA;
-    let b = (b + (toward_b - b) * TINT) * CHROMA + WARMTH;
+    let a = (a + (toward_a - a) * TINT) * chroma;
+    let b = (b + (toward_b - b) * TINT) * chroma + WARMTH;
     let mut graded = srgb(l, a, b);
     graded.a = color.a;
     graded
+}
+
+/// `color` lightened by `lightness` (OKLab L, negative darkens), its
+/// colorfulness scaled by `chroma` and its hue turned by `hue` degrees.
+pub fn adjust(color: Color, lightness: f32, chroma: f32, hue: f32) -> Color {
+    let (l, a, b) = oklab(color);
+    let colorfulness = a.hypot(b) * chroma;
+    let angle = (b.atan2(a).to_degrees() + hue).to_radians();
+    let mut adjusted = srgb(
+        l + lightness,
+        colorfulness * angle.cos(),
+        colorfulness * angle.sin(),
+    );
+    adjusted.a = color.a;
+    adjusted
 }
 
 /// `(a, b)` with its hue moved along [`HUES`], its chroma kept.
@@ -132,11 +157,11 @@ mod tests {
     fn blues_and_violets_become_elevato_greens() {
         // Tokyo City's function blue, type cyan and keyword violet.
         for hex in [0x7aa2f7, 0x0db9d7, 0xbb9af7] {
-            let graded = hue(grade(Color::from_packed_rgb8(hex)));
+            let graded = hue(grade(Color::from_packed_rgb8(hex), 0.95));
             assert!((135.0..=195.0).contains(&graded), "{hex:06x} -> {graded}°");
         }
         // The warm hues stay warm: an orange is still an orange.
-        let orange = hue(grade(Color::from_packed_rgb8(0xff9e64)));
+        let orange = hue(grade(Color::from_packed_rgb8(0xff9e64), 0.95));
         assert!((40.0..=70.0).contains(&orange), "orange -> {orange}°");
     }
 
@@ -145,7 +170,7 @@ mod tests {
         for hex in [0x7aa2f7, 0xbb9af7, 0xff9e64, 0x9ece6a, 0x526270, 0x34548a] {
             let color = Color::from_packed_rgb8(hex);
             let (before, ..) = oklab(color);
-            let (after, ..) = oklab(grade(color));
+            let (after, ..) = oklab(grade(color, 0.95));
             assert!(
                 (before - after).abs() < 0.02,
                 "{hex:06x}: {before} -> {after}"

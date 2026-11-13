@@ -23,7 +23,7 @@ use syntect::parsing::{
     SyntaxSetBuilder,
 };
 
-use crate::grade::grade;
+use crate::grade::{adjust, grade};
 use crate::theme;
 
 /// Sublime Text's Rust grammar (sublimehq/Packages, under the license in
@@ -149,53 +149,94 @@ impl Kind {
 /// The colors of every [`Kind`], in declaration order.
 type Colors = [Color; 16];
 
-/// Tokyo City's colors for `kinds`, through elevato's grade.
-fn graded(kinds: [u32; 16]) -> Colors {
-    kinds.map(|hex| grade(Color::from_packed_rgb8(hex)))
+/// A kind's step off the graded palette: OKLab lightness added, a chroma
+/// multiplier, and degrees of hue turned.
+type Step = (Kind, f32, f32, f32);
+
+/// Tokyo City's colors for every kind, graded with `chroma` and stepped.
+fn graded(kinds: [u32; 16], chroma: f32, steps: &[Step]) -> Colors {
+    let mut colors = kinds.map(|hex| grade(Color::from_packed_rgb8(hex), chroma));
+    for &(kind, lightness, chroma, hue) in steps {
+        colors[kind as usize] = adjust(colors[kind as usize], lightness, chroma, hue);
+    }
+    colors
 }
 
-/// Tokyo City's dark theme, graded.
+/// Tokyo City's dark theme, graded. elevato's graphite is near-neutral
+/// where Tokyo City's slate carries its blue, so the palette takes less
+/// chroma, and its pale symbols, keywords and warm accents step quieter
+/// still.
 static DARK: LazyLock<Colors> = LazyLock::new(|| {
-    graded([
-        0x526270, // Comment
-        0x9ece6a, // String
-        0x89ddff, // Escape
-        0xff9e64, // Constant
-        0xbb9af7, // Keyword
-        0x7dcfff, // Import
-        0x9d7cd8, // Modifier
-        0x0db9d7, // Type: support.type
-        0x7aa2f7, // Function
-        0x73daca, // Macro: meta.preprocessor
-        0x73daca, // Attribute: meta.preprocessor
-        0xe0af68, // Parameter
-        0x7dcfff, // Field: variable.other.property
-        0xf7768e, // SelfValue: variable.language
-        0x89ddff, // Operator
-        0x9abdf5, // Punctuation: meta.brace
-    ])
+    graded(
+        [
+            0x526270, // Comment
+            0x9ece6a, // String
+            0x89ddff, // Escape
+            0xff9e64, // Constant
+            0xbb9af7, // Keyword
+            0x7dcfff, // Import
+            0x9d7cd8, // Modifier
+            0x0db9d7, // Type: support.type
+            0x7aa2f7, // Function
+            0x73daca, // Macro: meta.preprocessor
+            0x73daca, // Attribute: meta.preprocessor
+            0xe0af68, // Parameter
+            0x7dcfff, // Field: variable.other.property
+            0xf7768e, // SelfValue: variable.language
+            0x89ddff, // Operator
+            0x9abdf5, // Punctuation: meta.brace
+        ],
+        0.84,
+        &[
+            (Kind::Comment, 0.0, 0.55, -50.0),
+            (Kind::Macro, 0.0, 0.8, 6.0),
+            (Kind::Attribute, 0.0, 0.8, 6.0),
+            (Kind::Keyword, 0.0, 0.74, 0.0),
+            (Kind::Modifier, 0.0, 0.74, 0.0),
+            (Kind::Import, 0.0, 0.75, 0.0),
+            (Kind::Field, 0.0, 0.75, 0.0),
+            (Kind::Operator, 0.0, 0.75, 0.0),
+            (Kind::Escape, 0.0, 0.75, 0.0),
+            (Kind::Punctuation, 0.0, 0.75, 0.0),
+            (Kind::String, 0.0, 0.86, 0.0),
+            (Kind::Constant, 0.0, 0.86, 0.0),
+            (Kind::SelfValue, 0.0, 0.82, 8.0),
+        ],
+    )
 });
 
-/// Tokyo City Lighter, graded.
+/// Tokyo City Lighter, graded. Functions step lighter than the fields
+/// they would otherwise match, as Tokyo City Lighter's blue does, and
+/// comments warm to the paper and step darker to stay legible on it.
 static LIGHT: LazyLock<Colors> = LazyLock::new(|| {
-    graded([
-        0x9699a3, // Comment
-        0x485e30, // String
-        0x4c505e, // Escape
-        0x965027, // Constant
-        0x5a4a78, // Keyword
-        0x0f4b6e, // Import
-        0x565f89, // Modifier
-        0x166775, // Type: support.type
-        0x34548a, // Function
-        0x33635c, // Macro: meta.preprocessor
-        0x33635c, // Attribute: meta.preprocessor
-        0x8f5e15, // Parameter
-        0x0f4b6e, // Field: variable.other.property
-        0x8c4351, // SelfValue: variable.language
-        0x4c505e, // Operator
-        0x484c61, // Punctuation: meta.brace
-    ])
+    graded(
+        [
+            0x9699a3, // Comment
+            0x485e30, // String
+            0x4c505e, // Escape
+            0x965027, // Constant
+            0x5a4a78, // Keyword
+            0x0f4b6e, // Import
+            0x565f89, // Modifier
+            0x166775, // Type: support.type
+            0x34548a, // Function
+            0x33635c, // Macro: meta.preprocessor
+            0x33635c, // Attribute: meta.preprocessor
+            0x8f5e15, // Parameter
+            0x0f4b6e, // Field: variable.other.property
+            0x8c4351, // SelfValue: variable.language
+            0x4c505e, // Operator
+            0x484c61, // Punctuation: meta.brace
+        ],
+        0.98,
+        &[
+            (Kind::Comment, 0.0, 0.55, -50.0),
+            (Kind::Macro, 0.0, 0.8, 6.0),
+            (Kind::Attribute, 0.0, 0.8, 6.0),
+            (Kind::Function, 0.02, 0.95, 0.0),
+            (Kind::Comment, -0.04, 1.0, 0.0),
+        ],
+    )
 });
 
 /// The Rust parser the text editor highlights with, through
